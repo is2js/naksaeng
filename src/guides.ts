@@ -39,7 +39,7 @@ try {
   get<HTMLElement>('#markdownSource').textContent = active.raw;
   if (operator) {
     const fileName = active.sourcePath.split('/').pop() || `${active.id}.md`;
-    get<HTMLAnchorElement>('#guideEditLink').href = `https://github.com/is2js/bunfirvil/edit/main/src/guides/content/${encodeURIComponent(fileName)}`;
+    get<HTMLAnchorElement>('#guideEditLink').href = `https://github.com/is2js/naksaeng/edit/main/src/guides/content/${encodeURIComponent(fileName)}`;
   }
 } catch (error) {
   const region = get<HTMLElement>('#guideError');

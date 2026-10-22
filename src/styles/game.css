@@ -1560,7 +1560,7 @@ input:focus-visible {
   inset: 5px;
   width: 44px;
   height: 44px;
-  background: url("/bunfirvil/assets/showcase-characters/dolls/n021/idle-s.png") left top / 88px 44px no-repeat;
+  background: url("/naksaeng/bunfirvil/assets/showcase-characters/dolls/n021/idle-s.png") left top / 88px 44px no-repeat;
   image-rendering: pixelated;
 }
 
@@ -1632,7 +1632,7 @@ input:focus-visible {
   bottom: -1px;
   z-index: 1;
   border-radius: 3px;
-  background-image: url("/bunfirvil/assets/transformations/pigmy/sheets/walk/normal.png");
+  background-image: url("/naksaeng/bunfirvil/assets/transformations/pigmy/sheets/walk/normal.png");
   background-repeat: no-repeat;
   background-position: 50% 57.142%;
   background-size: 300% 800%;

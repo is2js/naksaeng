@@ -1,3 +1,5 @@
+import { clearSaleCalculatorPreferences, readSaleCalculatorPreferences, writeSaleCalculatorPreferences } from './sale-calculator-preferences';
+
 export const SALE_CALCULATOR_CONTEXT_SESSION_KEY = 'bunfirvil:sale-calculator:v1';
 
 export type SaleCalculatorPriceFloorBand = '1' | '2' | '3' | '4' | '5+';
@@ -63,11 +65,14 @@ function sameOriginReturnUrl(value: unknown): string | null {
     const url = new URL(value, origin);
     if (url.origin !== origin) return null;
     const basePath = new URL(import.meta.env.BASE_URL, origin).pathname;
-    if (url.pathname !== basePath) return null;
+    // Existing sessions survive the same-origin Pages move. Only the old app
+    // root is migrated; arbitrary project/subpage paths remain disallowed.
+    if (url.pathname !== basePath && url.pathname !== '/bunfirvil/') return null;
     const safeQuery = new URLSearchParams();
     const map = url.searchParams.get('map');
     const actor = url.searchParams.get('actor');
     const variant = url.searchParams.get('variant');
+    if (map !== null && !SALE_CALCULATOR_RETURN_MAP_IDS.has(map)) return null;
     if (map && SALE_CALCULATOR_RETURN_MAP_IDS.has(map)) safeQuery.set('map', map);
     if (actor === '100' || actor === '200') safeQuery.set('actor', actor);
     if (variant === 'A' || variant === 'B'
@@ -88,6 +93,9 @@ export function writeSaleCalculatorHouseholdContext(
     unitType,
     priceFloorBand: saleCalculatorPriceFloorBand(Math.trunc(floor)),
   };
+  // Drop a previous household's scenario, but retain choices within the same
+  // type/price band (including changes to the selected option snapshot).
+  readSaleCalculatorPreferences({ unitType: context.unitType, floorBand: context.priceFloorBand }, storage);
   storage.setItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY, JSON.stringify(context));
   return context;
 }
@@ -141,6 +149,12 @@ export function writeSaleCalculatorLaunchContext(
     returnUrl,
   };
   storage.setItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY, JSON.stringify(context));
+  // A new launch is an explicit choice in the playground modal. Honor it
+  // without discarding any other saved scenario controls; reloads do not run
+  // this writer and therefore still restore the last calculator plan.
+  const scope = { unitType: context.unitType, floorBand: context.priceFloorBand };
+  const preferences = readSaleCalculatorPreferences(scope, storage);
+  if (preferences) writeSaleCalculatorPreferences(scope, { ...preferences, plan: value.applicantRoute }, storage);
   return context;
 }
 
@@ -152,5 +166,6 @@ export function readSaleCalculatorLaunchContext(
 }
 
 export function clearSaleCalculatorContext(storage: SessionStoragePort | null = browserSessionStorage()): void {
-  storage?.removeItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY);
+  clearSaleCalculatorPreferences(storage);
+  try { storage?.removeItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY); } catch { /* Storage can be disabled. */ }
 }

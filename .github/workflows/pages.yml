@@ -29,7 +29,7 @@ jobs:
         run: npm ci
       - name: Run focused unit tests
         run: npm run test:unit
-      - name: Build project-site bundle
+      - name: Build district portal and A1 app
         run: npm run build
       - name: Verify static output
         run: npm run verify:dist
@@ -38,7 +38,7 @@ jobs:
       - name: Run focused Chromium smoke suite
         run: npm run test:smoke:ci
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173/bunfirvil/
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173/naksaeng/bunfirvil/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

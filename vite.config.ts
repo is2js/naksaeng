@@ -1,11 +1,13 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
-const pagesBase = "/bunfirvil/";
+const pagesBase = "/naksaeng/bunfirvil/";
 
 export default defineConfig({
   base: pagesBase,
   build: {
+    outDir: "dist/bunfirvil",
+    emptyOutDir: true,
     target: "es2022",
     sourcemap: false,
     rollupOptions: {

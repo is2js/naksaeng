@@ -14,6 +14,12 @@
 .mortgage-controls{grid-template-columns:1fr 1fr}
 
 @media print{
+  .quote-layout{display:block!important}.calculator-side{margin-top:8mm}
+  .schedule-table{table-layout:fixed;font-size:9px}
+  .schedule-table th,.schedule-table td{padding:7px 4px;white-space:normal;overflow-wrap:anywhere}
+  .schedule-table th:first-child{width:13%}.schedule-table th:nth-child(2){width:17%}.schedule-table th:last-child{width:23%}
+  .schedule-table tbody th,.schedule-table .schedule-date{min-width:0}
+  .schedule-table tbody th strong{font-size:10px}.schedule-countdown b{font-size:9px}.schedule-countdown small{font-size:8px}
   .calculator-side .source-card{display:none!important}
 }
 .calculator-hero>div>p.source-stamp{margin:8px 0 0!important;color:#788f8a!important;font-size:10px!important}
@@ -154,8 +160,56 @@ input:focus-visible{outline:2px solid var(--mint-bright);outline-offset:3px}
 .schedule-countdown[data-state="active"] b,.schedule-countdown[data-state="today"] b{border-color:rgba(225,185,99,.4);color:#f2d58e;background:rgba(225,185,99,.12)}
 .deadline-note{margin:11px 0;color:#9db2a8;font-size:11px;line-height:1.7}
 .deadline-note b{color:#c7dcd2}
+.schedule-cards{display:none}
+.print-validation{display:none}
+.schedule-scroll-hint{margin:13px 0 7px;color:#94aaa2;font-size:11px;line-height:1.6}
+.schedule-scroll:focus-visible{outline:2px solid var(--mint-bright);outline-offset:4px}
+.schedule-table th:first-child{position:sticky;left:0;z-index:1;background-color:#102126}
+.option-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px}
+.option-list b{overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere;line-height:1.65}
+.option-list strong{padding-top:2px;line-height:1.65}
+.disclosure-action{display:inline-flex!important;align-items:center;gap:7px;flex-shrink:0;color:#a2beb2!important;font-size:11px!important;white-space:nowrap}
+.disclosure-action:after{content:"";display:block;width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+details[open]>summary .disclosure-action:after{transform:rotate(225deg) translate(-1px,-1px)}
+.payment-explainer>summary{display:flex;justify-content:space-between;align-items:center;gap:12px;list-style:none}
+.input-error{margin:7px 0 12px!important;padding:8px 10px;border-left:2px solid #e79296;color:#ffd0d2!important;background:rgba(194,66,75,.12);font-size:12px!important;line-height:1.65!important}
+input[aria-invalid="true"]{outline:2px solid #e79296!important;outline-offset:2px}
+@media(max-width:760px){
+  .schedule-scroll,.schedule-scroll-hint{display:none}
+  .schedule-cards{display:grid;gap:11px;margin-top:13px}
+  .installment-card{min-width:0;overflow:hidden;border:1px solid var(--line);border-left:3px solid var(--mint);border-radius:10px;background:linear-gradient(125deg,rgba(92,211,189,.065),rgba(7,20,24,.7))}
+  .installment-card[data-phase="contract"]{border-left-color:#e0878d;background:linear-gradient(125deg,rgba(176,52,62,.17),rgba(7,20,24,.7))}
+  .installment-card[data-phase="balance"]{border-left-color:var(--gold);background:linear-gradient(125deg,rgba(225,185,99,.1),rgba(7,20,24,.7))}
+  .installment-card>summary{padding:15px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:9px 12px;cursor:pointer;list-style:none}
+  .installment-card>summary::-webkit-details-marker{display:none}
+  .installment-heading{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .installment-heading>b{color:#edf9f3;font-size:15px;line-height:1.5}
+  .installment-card[data-phase="contract"] .installment-heading>b{color:#ffd1d5}
+  .installment-card[data-phase="balance"] .installment-heading>b{color:#f0d18b}
+  .installment-heading>span{display:grid;gap:4px;color:#a4b9ae;font-size:10px;text-align:right}
+  .installment-heading strong{color:var(--mint-bright);font-size:17px;white-space:nowrap;letter-spacing:-.025em}
+  .installment-date{grid-column:1/-1;color:#eef5ef;font-size:12px;line-height:1.6}
+  .installment-card .schedule-countdown{margin:0;max-width:none}
+  .installment-card .schedule-countdown small{font-size:11px}
+  .installment-card .disclosure-action{align-self:end;padding:5px 0}
+  .installment-breakdown{padding:0 15px 15px;border-top:1px solid var(--line)}
+  .installment-breakdown dl{margin:8px 0 0}
+  .installment-breakdown dl>div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;color:#a6beb1;font-size:12px}
+  .installment-breakdown dd{margin:0;color:#e4f1e8;white-space:nowrap}
+  .installment-breakdown .installment-contract-total{border-top:1px solid var(--line);font-weight:750}
+  .installment-breakdown .financing-line,.installment-breakdown .financing-line b{font-size:11px}
+  .installment-breakdown .financing-cash{font-size:12px}
+  .installment-breakdown .financing-cash b{font-size:16px}
+  .installment-breakdown .stage-note{font-size:11px;line-height:1.6;color:#a7b6a7}
+}
 @media(max-width:600px){.funding-metrics{grid-template-columns:1fr}.funding-metrics>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.funding-metrics b{margin:0}.settlement-table .settlement-total{flex-wrap:wrap}.move-in-block .subhead{align-items:flex-start;flex-wrap:wrap;gap:8px}.calculator-side .disclosure-body dl{font-size:11px}}
 @media print{
+  html #calculatorApp[data-invalid-inputs="true"] .calculator-shell>:not(.print-validation){display:none!important}
+  html #calculatorApp[data-invalid-inputs="true"] .print-validation{display:block!important;color:#541c24}
+  .schedule-scroll{display:block!important}.schedule-cards,.schedule-scroll-hint,.disclosure-action,.input-error{display:none!important}
+  .schedule-table th:first-child{position:static}
+  .option-list b{overflow:visible!important;white-space:normal!important;text-overflow:clip!important;overflow-wrap:anywhere}
+  .calculator-side #calculator-option-details .option-list li{display:grid!important;grid-template-columns:minmax(0,1fr) auto;break-inside:avoid}
   .contract-due,.contract-due>b,.financing-line,.financing-line b,.financing-cash,.financing-cash b,.financing-note,.financing-note b,.separate-contract-date{color:#254534!important}
   .financing-lines{border-color:#bdd0c3}.schedule-table .financing-cell{min-width:0}
   .settlement-choice-row button small{display:none}.settlement-choice-row button{color:#344c43!important}.settlement-choice-row button::after{display:none}
@@ -174,4 +228,53 @@ input:focus-visible{outline:2px solid var(--mint-bright);outline-offset:3px}
   .cost-controls,.date-field,#calculator-sale-price{display:none!important}.cost-print-summary{display:grid!important}
   .calculator-side .disclosure-body>dl{color:#243c31!important}.calculator-side .disclosure-body>dl dd{color:#172e24!important}
   .payment-explainer{break-inside:avoid}.payment-explainer summary{color:#20372e!important}
+}
+
+.tax-relief-print{display:none}
+/* A4 is a document, not a screenshot of the dark application canvas. */
+@media print{
+  :root{color-scheme:light;--ink:#173329;--muted:#4d665c;--line:#c3d2cb;--mint:#176b52;--mint-bright:#176b52;--gold:#79551e}
+  html,body{min-width:0!important;min-height:0!important;height:auto!important;background:#fff!important;color:#20372e!important}
+  html #calculatorApp,.calculator-shell,.calculator-main{min-height:0!important;height:auto!important;background:#fff!important}
+  .calculator-shell{display:block!important}.calculator-main{display:block!important;flex:none!important}
+  .calculator-shell *{box-shadow:none!important;text-shadow:none!important}
+  .skip-link{display:none!important}
+  .quote-layout,.calculator-card,.disclosure-body{background:transparent!important}
+  .calculator-hero{margin-bottom:5mm;padding-bottom:4mm}
+  .contract-breakdown{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+  .contract-breakdown>div{min-height:60px;padding:9px}
+  .contract-breakdown dt,.hero-total>span{color:#456354!important}
+  .contract-breakdown dd{font-size:12px}
+  .contract-breakdown .discount dd{color:#875127!important}
+  .hero-total{padding:15px}.hero-total strong{font-size:30px}
+  .payment-block,.schedule-scroll,.settlement-stage,.mortgage-overview,.payment-explainer{break-inside:auto!important}
+  .payment-block>.subhead,.settlement-stage h4,.payment-explainer summary{break-after:avoid}
+  .schedule-scroll{overflow:visible!important}
+  .schedule-table thead{display:table-header-group}
+  .schedule-table th:first-child{position:static;background:#eff7f4!important;color:#315149!important}
+  .schedule-table .financing-line{display:grid;grid-template-columns:1fr;gap:3px;font-size:8px;white-space:normal}
+  .schedule-table .financing-line b{text-align:right;font-size:9px;white-space:nowrap}
+  .schedule-table tr,.schedule-countdown,.mortgage-keyfigures{break-inside:avoid}
+  .schedule-table tbody th strong,.schedule-table tr[data-phase="contract"] th strong{color:#203d30!important}
+  .schedule-table tr[data-phase="contract"] th strong{color:#86313d!important}
+  .schedule-table tr[data-phase="balance"] th strong{color:#79551e!important}
+  .calculator-side{display:block!important;margin-top:6mm}
+  .calculator-side .disclosure{overflow:visible!important}
+  .funding-switch{display:none!important}
+  .calculator-side .disclosure[open],.calculator-side .option-card{margin:6mm 0 0;break-inside:auto!important}
+  .calculator-side .disclosure>summary{padding:0 0 9px;color:#203d30!important;border-bottom:1px solid #c3d2cb;break-after:avoid}
+  .calculator-side .disclosure-body{padding:10px 0 0}
+  .calculator-side .disclosure-body p,.calculator-side .disclosure-body .legal-copy,.calculator-side .disclosure-body .legal-copy b,
+  .option-minus h3,.option-minus p,.option-group h3,.option-list b,.option-list small,.option-subtotal,.option-subtotal b,
+  .loan-scope small,.loan-scope b,.tranche-list span,.tranche-list b,.tranche-list small{color:#304e3d!important}
+  .calculator-side .disclosure-body a{color:#17644a!important}
+  .calculator-side .disclosure-body dl dt,.option-minus dl>div{color:#425f50!important}
+  .calculator-side .disclosure-body dl .calculation-total-label{color:#79551e!important}
+  .calculator-side .disclosure-body dl .calculation-total{color:#203d30!important}
+  .calculator-side .relief-options{display:none!important}
+  .tax-relief-print{display:block!important;margin:5px 0 9px!important;font-weight:750}
+  .loan-scope>span,.tranche-list li{background:#fff!important;border-color:#c3d2cb!important;break-inside:avoid}
+  .tranche-list li{font-size:11px}
+  .tranche-list small{font-size:10px}
+  .option-list li{break-inside:avoid}
 }

@@ -37,10 +37,11 @@ try {
     & npm run verify:dist
     if ($LASTEXITCODE -ne 0) { throw '배포 산출물 검증에 실패했습니다.' }
 
-    $previewUrl = "http://127.0.0.1:$Port/bunfirvil/"
+    $previewUrl = "http://127.0.0.1:$Port/naksaeng/"
     Write-Host "커밋 미리보기: $previewUrl" -ForegroundColor Cyan
+    Write-Host "A1 놀이터: http://127.0.0.1:$Port/naksaeng/bunfirvil/" -ForegroundColor Cyan
     if (-not $NoBrowser) { Start-Process $previewUrl }
-    & npm exec vite -- preview --host 127.0.0.1 --port $Port
+    & npm run preview -- --host 127.0.0.1 --port $Port
     if ($LASTEXITCODE -ne 0) { throw 'Vite preview 실행에 실패했습니다.' }
   } finally {
     Pop-Location

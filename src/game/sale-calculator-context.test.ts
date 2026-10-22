@@ -8,6 +8,9 @@ import {
   writeSaleCalculatorHouseholdContext,
   writeSaleCalculatorLaunchContext,
 } from './sale-calculator-context';
+import { SALE_CALCULATOR_PREFERENCES_SESSION_KEY, readSaleCalculatorPreferences, writeSaleCalculatorPreferences } from './sale-calculator-preferences';
+
+const appBase = import.meta.env.BASE_URL;
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -22,8 +25,9 @@ describe('분양가 계산기 세션 컨텍스트', () => {
       const storage = new MemoryStorage();
       writeSaleCalculatorHouseholdContext(type.toUpperCase(), 5, storage);
       const returnUrl = `/bunfirvil/?map=bundang-first-village-${type}-prototype&actor=200&variant=${variant}`;
-      expect(writeSaleCalculatorLaunchContext({ schemaVersion: 1, applicantRoute: 'main-subscription', optionIds: ['design-wall'], returnUrl }, storage)?.returnUrl).toBe(returnUrl);
-      expect(readSaleCalculatorLaunchContext(storage)?.returnUrl).toBe(returnUrl);
+      const canonicalReturnUrl = returnUrl.replace('/bunfirvil/', appBase);
+      expect(writeSaleCalculatorLaunchContext({ schemaVersion: 1, applicantRoute: 'main-subscription', optionIds: ['design-wall'], returnUrl }, storage)?.returnUrl).toBe(canonicalReturnUrl);
+      expect(readSaleCalculatorLaunchContext(storage)?.returnUrl).toBe(canonicalReturnUrl);
     }
   });
   it.each([
@@ -57,14 +61,14 @@ describe('분양가 계산기 세션 컨텍스트', () => {
       schemaVersion: 1,
       applicantRoute: 'pre-subscription',
       optionIds: ['design-wall', 'design-wall', 'minus-option'],
-      returnUrl: '/bunfirvil/?map=bundang-first-village-55b-prototype&variant=B',
+      returnUrl: `${appBase}?map=bundang-first-village-55b-prototype&variant=B`,
     }, storage)).toEqual({
       schemaVersion: 1,
       unitType: '55B',
       priceFloorBand: '5+',
       applicantRoute: 'pre-subscription',
       optionIds: ['design-wall', 'minus-option'],
-      returnUrl: '/bunfirvil/?map=bundang-first-village-55b-prototype&variant=B',
+      returnUrl: `${appBase}?map=bundang-first-village-55b-prototype&variant=B`,
     });
     expect(readSaleCalculatorLaunchContext(storage)?.optionIds).toEqual(['design-wall', 'minus-option']);
     expect(storage.getItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY)).not.toMatch(/105|1903|피치/);
@@ -91,8 +95,41 @@ describe('분양가 계산기 세션 컨텍스트', () => {
       optionIds: ['floor-wide'],
       returnUrl: '/bunfirvil/',
     }, storage);
+    storage.setItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY, 'previous-scenario');
+    storage.setItem('unrelated:session', 'keep');
     clearSaleCalculatorContext(storage);
     expect(storage.getItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY)).toBeNull();
+    expect(storage.getItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY)).toBeNull();
+    expect(storage.getItem('unrelated:session')).toBe('keep');
+  });
+
+  it('preserves scenario settings for the same price band and clears them for another type or band', () => {
+    const storage = new MemoryStorage();
+    const scope = { unitType: '55A', floorBand: '5+' as const };
+    const preferences = {
+      plan: 'main-subscription' as const, taxEnabled: false, taxReliefMode: 'none' as const, interimRatePercent: 4.8,
+      mortgageEnabled: false, ltv: 70 as const, term: 30 as const, childCount: 0 as const, holdingYears: 24,
+      interimFunding: 'cash' as const, assumedMoveInDate: '2029-02-01', costsEnabled: false,
+      costs: { stamp: 0, bond: 0, registration: 0, guarantee: 0, management: 0, moving: 0 }, salePriceWon: null,
+    };
+    writeSaleCalculatorHouseholdContext('55A', 5, storage);
+    writeSaleCalculatorPreferences(scope, preferences, storage);
+    writeSaleCalculatorHouseholdContext('55A', 25, storage);
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(preferences);
+    writeSaleCalculatorLaunchContext({ schemaVersion: 1, applicantRoute: 'main-subscription', optionIds: ['design-wall'], returnUrl: appBase }, storage);
+    writeSaleCalculatorLaunchContext({ schemaVersion: 1, applicantRoute: 'main-subscription', optionIds: ['floor-wide'], returnUrl: appBase }, storage);
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(preferences);
+    writeSaleCalculatorLaunchContext({ schemaVersion: 1, applicantRoute: 'pre-subscription', optionIds: ['floor-wide'], returnUrl: appBase }, storage);
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual({ ...preferences, plan: 'pre-subscription' });
+    // Reading/reloading the launch context must not reapply an old modal choice.
+    writeSaleCalculatorPreferences(scope, preferences, storage);
+    expect(readSaleCalculatorLaunchContext(storage)?.applicantRoute).toBe('pre-subscription');
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(preferences);
+    writeSaleCalculatorHouseholdContext('55A', 4, storage);
+    expect(storage.getItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY)).toBeNull();
+    writeSaleCalculatorPreferences(scope, preferences, storage);
+    writeSaleCalculatorHouseholdContext('55B', 5, storage);
+    expect(storage.getItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY)).toBeNull();
   });
 
   it('지원하지 않는 타입과 개인정보가 섞인 컨텍스트를 거부한다', () => {
@@ -113,7 +150,7 @@ describe('분양가 계산기 세션 컨텍스트', () => {
       applicantRoute: 'main-subscription',
       optionIds: ['design-wall'],
       returnUrl: '/bunfirvil/?map=bundang-first-village-55a-prototype&actor=200&variant=A&nickname=피치#105-1903',
-    }, storage)?.returnUrl).toBe('/bunfirvil/?map=bundang-first-village-55a-prototype&actor=200&variant=A');
+    }, storage)?.returnUrl).toBe(`${appBase}?map=bundang-first-village-55a-prototype&actor=200&variant=A`);
     expect(storage.getItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY)).not.toMatch(/피치|105|1903/u);
   });
 
@@ -129,5 +166,16 @@ describe('분양가 계산기 세션 컨텍스트', () => {
     }));
     expect(readSaleCalculatorLaunchContext(storage)).toBeNull();
     expect(storage.getItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY)).toBeNull();
+  });
+
+  it('normalizes stored legacy launch paths but refuses arbitrary subpages or external returns', () => {
+    const storage = new MemoryStorage();
+    const context = { schemaVersion: 1, unitType: '51A', priceFloorBand: '5+', applicantRoute: 'main-subscription', optionIds: ['design-wall'] };
+    storage.setItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY, JSON.stringify({ ...context, returnUrl: '/bunfirvil/?map=bundang-first-village-51a-prototype&variant=D&nickname=private#share=ignored' }));
+    expect(readSaleCalculatorLaunchContext(storage)?.returnUrl).toBe(`${appBase}?map=bundang-first-village-51a-prototype&variant=D`);
+    for (const returnUrl of ['/bunfirvil/calculator/', '/naksaeng/', '/other-project/', 'https://evil.example/bunfirvil/', '//evil.example/bunfirvil/', 'javascript:alert(1)', '/bunfirvil/%2f', '/bunfirvil/?map=unknown-map']) {
+      storage.setItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY, JSON.stringify({ ...context, returnUrl }));
+      expect(readSaleCalculatorLaunchContext(storage)).toBeNull();
+    }
   });
 });

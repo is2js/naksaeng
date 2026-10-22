@@ -2,7 +2,7 @@
 param(
   [ValidateSet('Dev', 'Validate', 'PreviewCommit')]
   [string]$Mode = 'Dev',
-  [ValidateRange(1024, 65535)]
+  [ValidateRange(1024, 65534)]
   [int]$Port = 5174,
   [switch]$NoBrowser,
   [switch]$WithUnitTests
@@ -29,8 +29,9 @@ Push-Location $repoRoot
 try {
   switch ($Mode) {
     'Dev' {
-      $devUrl = "http://127.0.0.1:$Port/bunfirvil/"
+      $devUrl = "http://127.0.0.1:$Port/naksaeng/"
       Write-Host "작업 트리 개발 서버: $devUrl" -ForegroundColor Cyan
+      Write-Host "A1 놀이터: http://127.0.0.1:$Port/naksaeng/bunfirvil/" -ForegroundColor Cyan
       if (-not $NoBrowser) {
         Start-Process $devUrl
       }

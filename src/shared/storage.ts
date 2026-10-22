@@ -6,6 +6,7 @@ import {
   type MapId,
   type ReviewStatus,
 } from "./contracts";
+import { clearSaleCalculatorPreferences } from "../game/sale-calculator-preferences";
 
 export const REVIEW_KEY_PREFIX = "bunfirvil:review:v1:";
 export const LAYOUT_KEY_PREFIX = "bunfirvil:layout:v1:";
@@ -85,13 +86,14 @@ export function isBunfirvilStorageKey(key: string): boolean {
     || key.startsWith(BUILDING_ADMIN_KEY_PREFIX);
 }
 
-export function resetAllBunfirvilLocalData(storage: Storage = localStorage): StorageResetResult {
+export function resetAllBunfirvilLocalData(storage: Storage = localStorage, session?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null): StorageResetResult {
   const targets: string[] = [];
   for (let index = 0; index < storage.length; index += 1) {
     const key = storage.key(index);
     if (key && isBunfirvilStorageKey(key)) targets.push(key);
   }
   targets.forEach((key) => storage.removeItem(key));
+  clearSaleCalculatorPreferences(session);
   return { removedKeys: targets, updatedKeys: [] };
 }
 

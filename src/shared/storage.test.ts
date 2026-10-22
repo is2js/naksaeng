@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BOptionEntryV1 } from "./contracts";
+import { SALE_CALCULATOR_PREFERENCES_SESSION_KEY } from "../game/sale-calculator-preferences";
 import {
   BUILDING_ADMIN_KEY_PREFIX,
   HOTBAR_KEY,
@@ -114,10 +115,18 @@ describe("Bunfirvil local storage reset", () => {
       "another-pages-project:state": "keep",
     });
 
-    const result = resetAllBunfirvilLocalData(storage);
+    const session = memoryStorage({
+      [SALE_CALCULATOR_PREFERENCES_SESSION_KEY]: "scenario",
+      "bunfirvil:household-verification:v1": "authentication",
+      "another-pages-project:session": "keep-session",
+    });
+    const result = resetAllBunfirvilLocalData(storage, session);
 
     expect(result.removedKeys).toHaveLength(4);
     expect(storage.getItem("another-pages-project:state")).toBe("keep");
     expect(storage.length).toBe(1);
+    expect(session.getItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY)).toBeNull();
+    expect(session.getItem("bunfirvil:household-verification:v1")).toBe("authentication");
+    expect(session.getItem("another-pages-project:session")).toBe("keep-session");
   });
 });

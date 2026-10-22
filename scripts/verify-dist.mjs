@@ -579,8 +579,21 @@ async function main() {
   if (totalBytes > MAX_DIST_BYTES) {
     failures.push(`dist 크기 ${(totalBytes / 1024 / 1024).toFixed(2)} MiB가 50 MiB 제한을 초과했습니다.`);
   }
-  await verifyCatalog(distRoot, failures);
-  await verifyHouseholdVerificationConfig(distRoot, failures);
+  // The portal owns the root; the existing, single-copy app export stays nested.
+  const appRoot = path.join(distRoot, "bunfirvil");
+  await requireFile(path.join(distRoot, "index.html"), "district portal", failures);
+  for (const page of ["", "calculator", "guides", "households", "manage", "building-admin", "interior-admin"]) {
+    await requireFile(path.join(appRoot, page, "index.html"), `A1 ${page || "showcase"}`, failures);
+  }
+  await verifyCatalog(appRoot, failures);
+  await verifyHouseholdVerificationConfig(appRoot, failures);
+  const portalHtml = await readFile(path.join(distRoot, "index.html"), "utf8").catch(() => "");
+  if (!portalHtml.includes("https://is2js.github.io/naksaeng/")) failures.push("district portal: canonical 낙생지구 URL이 없습니다.");
+  const appHtml = await readFile(path.join(appRoot, "index.html"), "utf8").catch(() => "");
+  if (!appHtml.includes("https://is2js.github.io/naksaeng/bunfirvil/")) failures.push("A1 showcase: canonical 중첩 URL이 없습니다.");
+  if (files.some((file) => slash(path.relative(distRoot, file)).startsWith("generated/"))) {
+    failures.push("district portal: generated 자산은 bunfirvil 하위에 한 벌만 배포해야 합니다.");
+  }
 
   const summary = {
     files: files.length,

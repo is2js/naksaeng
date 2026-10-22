@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const CALCULATOR_CONTEXT_KEY = 'bunfirvil:sale-calculator:v1';
 const VERIFICATION_KEY = 'bunfirvil:household-verification:v1';
-const RETURN_URL = '/bunfirvil/?map=bundang-first-village-55a-prototype&actor=200&variant=A';
+const RETURN_URL = '/naksaeng/bunfirvil/?map=bundang-first-village-55a-prototype&actor=200&variant=A';
 
 type CalculatorContext = {
   schemaVersion: 1;
@@ -61,7 +61,7 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('.schedule-table thead')).toContainText('기타 옵션');
   await expect(page.locator('.schedule-table thead')).toContainText('납부일');
   await expect(page.locator('.schedule-table tr[data-phase="contract"] .schedule-date')).toContainText('2026.11.04~11.13');
-  const countdown = (due: string) => page.locator(`[data-payment-due="${due}"] b`);
+  const countdown = (due: string) => page.locator(`.schedule-table [data-payment-due="${due}"] b`);
   await expect(countdown('계약 시')).toHaveText('시작 D-13');
   await expect(countdown('2027-04-12')).toHaveText('D-172');
   await expect(countdown('2028-02-14')).toHaveText('D-480');
@@ -90,7 +90,7 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('.schedule-table tbody')).toContainText('31,825,500원');
   await expect(page.locator('.schedule-table tbody')).toContainText('중도금');
   await expect(page.locator('.schedule-table tbody')).not.toContainText('중도금 2차');
-  await expect(page.locator('[data-payment-due="2027-04-12"]')).toHaveCount(0);
+  await expect(page.locator('.schedule-table [data-payment-due="2027-04-12"]')).toHaveCount(0);
   await expect(countdown('2028-02-14')).toHaveText('D-479');
   await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="loan-draw"]')).toContainText('127,302,000원');
   await expect(page.locator('[data-finance-due="입주 시"] [data-flow="deferred-interest"]')).toContainText('4,924,669원');

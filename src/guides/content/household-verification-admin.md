@@ -26,7 +26,7 @@ operatorOnly: true
 프런트엔드 개정 2는 구형 서버의 닉네임 단독 운영자 인증을 거부합니다. **Google 웹앱부터 새 버전으로 배포한 후 GitHub Pages를 갱신하세요.** 순서가 바뀌면 운영자·공유 인증에 서비스 업데이트 안내가 나옵니다.
 
 1. 기존 스프레드시트를 복사해 별도 백업합니다. 편집 권한은 신뢰하는 운영자에게만 줍니다.
-2. Sheet의 **확장 프로그램 → Apps Script**에서 [Code.gs 전체 보기](https://github.com/is2js/bunfirvil/blob/main/backend/apps-script/Code.gs) 전체를 교체하고 저장합니다.
+2. Sheet의 **확장 프로그램 → Apps Script**에서 [Code.gs 전체 보기](https://github.com/is2js/naksaeng/blob/main/backend/apps-script/Code.gs) 전체를 교체하고 저장합니다.
 3. 함수 선택에서 **setupVerificationSheet**를 한 번 실행하고 권한을 승인합니다.
    - 기존 인증명단 A:D와 회원 데이터를 유지합니다.
    - 가입요청 탭, 심사 드롭다운, 설치형 편집 트리거를 준비합니다.

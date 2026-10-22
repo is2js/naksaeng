@@ -9,6 +9,8 @@ import { calculateBundangMortgageSettlement } from '../game/bundang-mortgage-set
 import { BUNDANG_PAYMENT_SCHEDULE_SOURCE, countdownForDeadline, paymentDeadlineForDue, seoulDateKey } from '../game/bundang-payment-timeline';
 import { clearSaleCalculatorContext, readSaleCalculatorLaunchContext, type SaleCalculatorContextV1 } from '../game/sale-calculator-context';
 import { resolveSaleCalculatorOptionLines, type SaleCalculatorOptionLineV1 } from '../game/sale-calculator-options';
+import { hasOperatorAccess } from '../shared/operator-access';
+import { readSaleCalculatorPreferences, writeSaleCalculatorPreferences } from '../game/sale-calculator-preferences';
 
 type ScheduleRow = { label: string; due: string; dueKey: string; supply: number; balcony: number; systemAc: number; other: number };
 type FundedScheduleRow = ScheduleRow & { financing: BundangFinancingTimelineRowV1 };
@@ -41,6 +43,47 @@ const money = (value: number) => `${moneyFormat.format(value)}원`;
 const escape = (value: string) => value.replace(/[&<>'"]/g, (key) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[key] ?? key));
 const floorLabel = (floor: BundangSaleFloorBand) => floor === 5 ? '5층 이상' : `${floor}층`;
 const toFloor = (band: SaleCalculatorContextV1['priceFloorBand']): BundangSaleFloorBand => band === '5+' ? 5 : Number(band) as BundangSaleFloorBand;
+
+// Reconcile result text without replacing controls. In particular, a blur/change
+// must not detach the button between pointerdown and click or reset Tab focus.
+function reconcileChildren(current: Node, desired: Node): void {
+  const key = (node: Node): string => {
+    if (!(node instanceof Element)) return '';
+    return node.id || (node instanceof HTMLInputElement && node.name ? `${node.name}:${node.value}` : '')
+      || node.getAttribute('data-finance-due') || '';
+  };
+  const compatible = (left: Node, right: Node) => left.nodeType === right.nodeType
+    && (!(left instanceof Element) || (right instanceof Element && left.tagName === right.tagName && key(left) === key(right)));
+  const desiredChildren = [...desired.childNodes];
+  desiredChildren.forEach((next, index) => {
+    let node = current.childNodes[index];
+    if (!node || !compatible(node, next)) {
+      const matching = key(next) ? [...current.childNodes].slice(index + 1).find(candidate => compatible(candidate, next)) : undefined;
+      if (matching) { current.insertBefore(matching, node ?? null); node = matching; }
+      else { current.insertBefore(next.cloneNode(true), node ?? null); return; }
+    }
+    if (node instanceof Element && next instanceof Element) {
+      const preservedValue = node instanceof HTMLInputElement
+        && (document.activeElement === node || node.getAttribute('aria-invalid') === 'true') ? node.value : undefined;
+      for (const attribute of [...node.attributes]) {
+        if (attribute.name === 'open' && node instanceof HTMLDetailsElement) continue;
+        if (!next.hasAttribute(attribute.name)) node.removeAttribute(attribute.name);
+      }
+      for (const attribute of [...next.attributes]) {
+        if (attribute.name === 'open' && node instanceof HTMLDetailsElement) continue;
+        if (node.getAttribute(attribute.name) !== attribute.value) node.setAttribute(attribute.name, attribute.value);
+      }
+      if (node instanceof HTMLInputElement && next instanceof HTMLInputElement) {
+        node.checked = next.checked;
+        if (preservedValue !== undefined) node.value = preservedValue;
+        else if (node.value !== next.value) node.value = next.value;
+      }
+      reconcileChildren(node, next);
+      if (node instanceof HTMLSelectElement && next instanceof HTMLSelectElement) node.value = next.value;
+    } else if (node.nodeValue !== next.nodeValue) node.nodeValue = next.nodeValue;
+  });
+  while (current.childNodes.length > desiredChildren.length) current.lastChild!.remove();
+}
 
 function mergeSchedules(schedules: ReturnType<typeof calculateBundangSaleFinance>['paymentSchedules'], plan: BundangPaymentPlanKind): ScheduleRow[] {
   const merged = new Map<string, ScheduleRow>();
@@ -87,9 +130,13 @@ class CalculatorApp {
   private restorePrintState: (() => void) | null = null;
   private scheduleRows: ScheduleRow[] = [];
   private countdownTimer: number | undefined;
+  private bound = false;
+  private readonly pendingInputs = new Set<string>();
+  private readonly inputErrors = new Map<string, string>();
 
   constructor(private readonly mount: HTMLElement) {
     this.plan = this.context?.applicantRoute ?? 'main-subscription';
+    if (this.context) Object.assign(this, readSaleCalculatorPreferences({ unitType: this.context.unitType, floorBand: this.context.priceFloorBand }) ?? {});
     window.addEventListener('beforeprint', () => this.preparePrint());
     window.addEventListener('afterprint', () => { this.restorePrintState?.(); this.restorePrintState = null; });
     document.addEventListener('visibilitychange', this.scheduleCountdownRefresh);
@@ -181,40 +228,61 @@ class CalculatorApp {
   }
 
   private render(): void {
+    this.mount.querySelectorAll('.input-error').forEach(node => node.remove());
     const disclosureState = new Map([...this.mount.querySelectorAll<HTMLDetailsElement>('details[id]')].map((node) => [node.id, node.open]));
-    const active = this.mount.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-    const focusId = active?.id;
     const quote = this.calculate();
     this.scheduleRows = quote.schedule;
     const planName = this.plan === 'main-subscription' ? '본청약 기준' : '사전청약 당첨자 기준';
-    this.mount.innerHTML = `<div class="calculator-shell">
+    const returnUrl = escape(this.context!.returnUrl!);
+    const markup = `<div class="calculator-shell">
       <a class="skip-link" href="#calculator-main">계산기 본문으로 건너뛰기</a>
-      <header class="topbar"><a class="brand" href="../" aria-label="놀이터로 돌아가기"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><b>e편한세상 분당퍼스트빌리지</b><small>돌아온범생의 놀이터 개발 연구실</small></span></a><nav class="topnav" aria-label="주 메뉴"><a href="../">놀이터</a><a class="is-active" href="./">자금 계획</a><a href="../guides/">가이드</a><a href="../households/">동·호 현황</a></nav><div id="calculator-context-header" class="build-chip" data-payment-plan="${this.plan}"><i class="status-dot"></i><span><small>${this.unitType} · ${floorLabel(this.floor)} · ${FINANCE_REVIEWED_AT} 검토</small><b>${planName}</b></span></div></header>
+      <section class="print-validation" role="alert"><h1>입력값을 먼저 확인해 주세요.</h1><p>금리·날짜·금액 입력에 오류가 있어 계산 결과를 출력하지 않았습니다. 화면의 오류를 수정한 뒤 다시 인쇄해 주세요.</p></section>
+      <header class="topbar"><a class="brand" href="${returnUrl}" aria-label="놀이터로 돌아가기"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><b>e편한세상 분당퍼스트빌리지</b><small>돌아온범생의 놀이터 개발 연구실</small></span></a><nav class="topnav" aria-label="주 메뉴"><a href="${returnUrl}">놀이터</a><a class="is-active" href="./">자금 계획</a><a href="../guides/">가이드</a>${hasOperatorAccess() ? '<a href="../households/">동·호 현황</a>' : ''}</nav><div id="calculator-context-header" class="build-chip" data-payment-plan="${this.plan}"><i class="status-dot"></i><span><small>${this.unitType} · ${floorLabel(this.floor)} · ${FINANCE_REVIEWED_AT} 검토</small><b>${planName}</b></span></div></header>
       <div class="serverless-banner"><span class="banner-pulse"></span><b>브라우저 계산 도구</b><i></i><span>계산 결과는 참고용이며 공식 공고·계약서가 우선합니다.</span></div>
       <main id="calculator-main" class="calculator-main">
         <section class="calculator-hero"><div><p class="eyebrow">BUNFIRVIL / SALE FINANCE</p><h1>내 자금 계획</h1><p><b class="context-highlight">${this.unitType} · ${floorLabel(this.floor)} · ${planName}</b> 쇼케이스 선택을 기준으로 계산합니다. 세대 정보는 이 화면에 남기지 않습니다.</p><fieldset class="plan-switch hero-plan-switch" aria-label="청약 구분"><legend>청약 구분</legend><label><input id="calculator-plan-main" name="payment-plan" value="main-subscription" type="radio" ${this.plan === 'main-subscription' ? 'checked' : ''}><span>본청약(신규신청자)</span></label><label><input id="calculator-plan-pre" name="payment-plan" value="pre-subscription" type="radio" ${this.plan === 'pre-subscription' ? 'checked' : ''}><span>사전청약 당첨자</span></label></fieldset><p class="source-stamp">기준: 입주자모집공고 2026.05.29 · 자금 정보 검토 ${FINANCE_REVIEWED_AT} · 예정 일정은 변경될 수 있습니다.</p></div><aside class="restore-card"><span>선택 옵션 상태</span><strong>${(this.context!.optionIds ?? []).length}개 불러옴</strong><p>평형·층은 인증된 선택값으로 고정됩니다.</p><button id="calculator-return-options" data-action="return-to-showcase" type="button">옵션 다시 선택</button></aside></section>
-        <section class="quote-layout"><article class="calculator-card result-card"><div class="section-head result-head"><div><p class="eyebrow">CONTRACT</p><h2>최종 계약 예상 총액</h2></div><button id="calculator-print" data-action="print" class="print-button" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3M7 13h10v8H7z" /></svg><span>인쇄 · PDF 저장</span></button></div><div class="hero-total"><span>공급가 + 발코니 + 선택 옵션 − 마이너스 감액</span><strong>${money(quote.contractTotal)}</strong><p>세금·대출은 오른쪽 항목을 펼쳐 선택할 때만 별도로 계산합니다.</p></div><dl class="contract-breakdown"><div><dt>조정 전 공급가</dt><dd>${money(quote.baseSupply)}</dd></div><div><dt>발코니 확장</dt><dd>${money(quote.baseBalcony)}</dd></div><div><dt>선택 옵션 합계</dt><dd>${money(quote.selectedOptions)}</dd></div><div class="discount"><dt>마이너스 감액</dt><dd>−${money(quote.minusDiscount)}</dd></div></dl><p class="fund-note">공고표의 주택도시기금 55,000,000원은 실제 수령액으로 차감하지 않았습니다.</p><div class="payment-block" id="calculator-payments"><div class="subhead"><h3>납부 일정</h3><span>동일 회차·일자 기준 합산</span></div>${this.scheduleTable(quote.schedule)}<p class="schedule-note">추가선택품목 Ⅲ 중도금은 공고문상 납부일이 <b>별도 안내</b>로 명시되어 공급대금 중도금 1·2차에 합산하지 않습니다.</p></div>${this.moveInMarkup(quote)}${this.paymentGuideMarkup()}</article><aside class="calculator-side"><details id="calculator-option-details" class="calculator-card disclosure option-card"><summary><span class="summary-title">선택 옵션 <b>${this.minus ? 1 : quote.optionLines.length}개</b></span><span>펼치기</span></summary><div class="disclosure-body">${this.optionMarkup(quote)}</div></details>${this.taxDetails(quote)}${this.interimLoanDetails(quote)}${this.mortgageDetails(quote)}${this.costDetails(quote)}${this.resaleDetails(quote)}<article class="calculator-card source-card"><p class="eyebrow">NOTICE</p><h2>계산 전 확인</h2><p>금액·일정·감면·대출 실행은 공고문, 계약서, 관계기관 심사 결과가 우선합니다.</p><a href="../guides/?guide=sale-finance" class="text-link">입주·자금 계산 가이드 보기 →</a></article></aside></section>
+        <section class="quote-layout"><article class="calculator-card result-card"><div class="section-head result-head"><div><p class="eyebrow">CONTRACT</p><h2>최종 계약 예상 총액</h2></div><button id="calculator-print" data-action="print" class="print-button" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3M7 13h10v8H7z" /></svg><span>인쇄 · PDF 저장</span></button></div><div class="hero-total"><span>공급가 + 발코니 + 선택 옵션 − 마이너스 감액</span><strong>${money(quote.contractTotal)}</strong><p>세금·대출 추정을 펼쳐 선택하면 입주 예산에 별도로 반영됩니다.</p></div><dl class="contract-breakdown"><div><dt>조정 전 공급가</dt><dd>${money(quote.baseSupply)}</dd></div><div><dt>발코니 확장</dt><dd>${money(quote.baseBalcony)}</dd></div><div><dt>선택 옵션 합계</dt><dd>${money(quote.selectedOptions)}</dd></div><div class="discount"><dt>마이너스 감액</dt><dd>−${money(quote.minusDiscount)}</dd></div></dl><p class="fund-note">공고표의 주택도시기금 55,000,000원은 실제 수령액으로 차감하지 않았습니다.</p><div class="payment-block" id="calculator-payments"><div class="subhead"><h3>납부 일정</h3><span>동일 회차·일자 기준 합산</span></div>${this.scheduleTable(quote.schedule)}<p class="schedule-note">추가선택품목 Ⅲ 중도금은 공고문상 납부일이 <b>별도 안내</b>로 명시되어 공급대금 중도금 1·2차에 합산하지 않습니다.</p></div>${this.moveInMarkup(quote)}${this.paymentGuideMarkup()}</article><aside class="calculator-side"><details id="calculator-option-details" class="calculator-card disclosure option-card"><summary><span class="summary-title">선택 옵션 <b>${this.minus ? 1 : quote.optionLines.length}개</b></span><span>펼치기</span></summary><div class="disclosure-body">${this.optionMarkup(quote)}</div></details>${this.taxDetails(quote)}${this.interimLoanDetails(quote)}${this.mortgageDetails(quote)}${this.costDetails(quote)}${this.resaleDetails(quote)}<article class="calculator-card source-card"><p class="eyebrow">NOTICE</p><h2>계산 전 확인</h2><p>금액·일정·감면·대출 실행은 공고문, 계약서, 관계기관 심사 결과가 우선합니다.</p><a href="../guides/?guide=sale-finance" class="text-link">입주·자금 계산 가이드 보기 →</a></article></aside></section>
       </main><footer class="calculator-footer"><span>BUNFIRVIL · STATIC FRONTEND</span><span>개인정보·인증값은 인쇄물과 계산 URL에 포함하지 않습니다.</span></footer></div>`;
+    const template = document.createElement('template');
+    template.innerHTML = markup;
+    reconcileChildren(this.mount, template.content);
     for (const node of this.mount.querySelectorAll<HTMLDetailsElement>('details[id]')) {
       if (disclosureState.has(node.id)) node.open = disclosureState.get(node.id)!;
     }
     this.refreshCountdowns();
     this.bind();
-    if (focusId) {
-      const restored = this.mount.querySelector<HTMLElement>(`#${CSS.escape(focusId)}`);
-      if (restored && !restored.matches(':disabled')) restored.focus({ preventScroll: true });
-    }
+    this.syncDisclosureLabels();
+    this.syncInputErrors();
+    if (!this.inputErrors.size) this.persistPreferences();
+  }
+
+  private persistPreferences(): void {
+    writeSaleCalculatorPreferences({ unitType: this.context!.unitType, floorBand: this.context!.priceFloorBand }, {
+      plan: this.plan, taxEnabled: this.taxEnabled, taxReliefMode: this.taxReliefMode,
+      interimRatePercent: this.interimRatePercent, mortgageEnabled: this.mortgageEnabled,
+      ltv: this.ltv, term: this.term, childCount: this.childCount, holdingYears: this.holdingYears,
+      interimFunding: this.interimFunding, assumedMoveInDate: this.assumedMoveInDate,
+      costsEnabled: this.costsEnabled, costs: { ...this.costs }, salePriceWon: this.salePriceWon,
+    });
   }
 
   private scheduleTable(rows: FundedScheduleRow[]): string {
     if (!rows.length) return '<div class="empty-state">납부 일정 데이터를 불러오지 못했습니다.</div>';
     const cell = (value: number) => value ? money(value) : '—';
-    return `<div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니</th><th>시스템<br>에어컨</th><th>기타 옵션</th><th>회차 합계<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
+    return `<p id="calculator-schedule-scroll-hint" class="schedule-scroll-hint">납부표는 좌우로 스크롤할 수 있습니다. 키보드에서는 표를 선택한 뒤 방향키를 사용하세요.</p><div class="schedule-scroll" role="region" aria-label="회차별 납부 일정과 자금 흐름" aria-describedby="calculator-schedule-scroll-hint" tabindex="0"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니</th><th>시스템<br>에어컨</th><th>기타 옵션</th><th>회차 합계<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
       const total = row.supply + row.balcony + row.systemAc + row.other;
       const phase = row.label === '계약금' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
       const separateDate = (amount: number) => cell(amount) + (phase === 'contract' && amount > 0 ? '<small class="separate-contract-date">계약일 별도 안내</small>' : '');
       return `<tr data-phase="${phase}" data-finance-due="${escape(row.dueKey)}"><th><strong>${escape(row.label)}</strong></th><td class="schedule-date"><span>${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span></td><td>${cell(row.supply)}</td><td>${separateDate(row.balcony)}</td><td>${separateDate(row.systemAc)}</td><td>${separateDate(row.other)}</td><td class="total financing-cell"><span class="contract-due">계약 납부액 <b>${money(total)}</b></span>${this.financingMarkup(row.financing)}</td></tr>`;
-    }).join('')}</tbody></table></div><p class="financing-note">집단대출 가정은 <b>중도금 납부일에 대출 실행</b>, <b>잔금·입주 시 원금과 후불이자 상환</b>으로 표시합니다. 대출 유입은 현금 부담에서 차감하며 계약 금액 자체를 줄이지 않습니다. 세금·부대비용은 아래 입주 정산에 별도로 포함됩니다.</p><p class="deadline-note">계약 기간은 <a href="${BUNDANG_PAYMENT_SCHEDULE_SOURCE.url}" target="_blank" rel="noreferrer">2026.07.02 정정공고</a>의 <b>주택 계약 기준</b>입니다(11월 4~13일, 10~16시, 주말 포함). 발코니·추가선택품목 계약금도 금액 비교를 위해 같은 행에 합산했지만 <b>계약일은 별도 안내</b>이며 주택 계약일에 모두 납부한다는 뜻이 아닙니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`;
+    }).join('')}</tbody></table></div>${this.scheduleCards(rows)}<p class="financing-note">집단대출 가정은 <b>중도금 납부일에 대출 실행</b>, <b>잔금·입주 시 원금과 후불이자 상환</b>으로 표시합니다. 대출 유입은 현금 부담에서 차감하며 계약 금액 자체를 줄이지 않습니다. 세금·부대비용은 아래 입주 정산에 별도로 포함됩니다.</p><p class="deadline-note">계약 기간은 <a href="${BUNDANG_PAYMENT_SCHEDULE_SOURCE.url}" target="_blank" rel="noreferrer">2026.07.02 정정공고</a>의 <b>주택 계약 기준</b>입니다(11월 4~13일, 10~16시, 주말 포함). 발코니·추가선택품목 계약금도 금액 비교를 위해 같은 행에 합산했지만 <b>계약일은 별도 안내</b>이며 주택 계약일에 모두 납부한다는 뜻이 아닙니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`;
+  }
+
+  private scheduleCards(rows: FundedScheduleRow[]): string {
+    return `<div class="schedule-cards" aria-label="회차별 납부 요약">${rows.map((row, index) => {
+      const phase = row.label === '계약금' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      const total = row.supply + row.balcony + row.systemAc + row.other;
+      return `<details id="calculator-installment-${index}" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}"><summary><span class="installment-heading"><b>${escape(row.label)}</b><span>내 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="installment-breakdown"><dl>${([['주택', row.supply], ['발코니', row.balcony], ['시스템에어컨', row.systemAc], ['기타 옵션', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}<div class="installment-contract-total"><dt>계약 납부액</dt><dd>${money(total)}</dd></div></dl>${phase === 'contract' ? '<p class="stage-note">발코니·추가선택품목 계약일은 별도 안내입니다.</p>' : ''}${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-mobile-flow=')}</div></details>`;
+    }).join('')}</div>`;
   }
 
   private financingMarkup(row: BundangFinancingTimelineRowV1): string {
@@ -276,7 +344,7 @@ class CalculatorApp {
 
   private taxDetails(quote: Quote): string {
     const choices: readonly [TaxReliefMode, string, number][] = [['none', '감면 없음', 0], ['first-home', '생애최초', 2_000_000], ['birth-care', '출산·양육', 5_000_000]];
-    const result = quote.tax ? `<dl><dt>과세 추정 기준</dt><dd>${money(quote.tax.taxable)}</dd><dt>적용 취득세율</dt><dd>${quote.tax.ratePercent}%</dd><dt>선택 감면 반영</dt><dd>−${money(quote.tax.relief)}</dd><dt>취득세</dt><dd>${money(quote.tax.acquisition)}</dd><dt>지방교육세</dt><dd>${money(quote.tax.education)}</dd><dt>농어촌특별세</dt><dd>${money(quote.tax.rural)}</dd><dt class="calculation-total-label">합계</dt><dd class="calculation-total">${money(quote.tax.total)}</dd></dl>` : '<p class="muted-copy">활성화 시 계약 예상 총액 기준으로 계산합니다.</p>';
+    const result = quote.tax ? `<p class="tax-relief-print">감면 시나리오: ${choices.find(([value]) => value === this.taxReliefMode)![1]} · 자격 충족 여부는 별도 확인</p><dl><dt>과세 추정 기준</dt><dd>${money(quote.tax.taxable)}</dd><dt>적용 취득세율</dt><dd>${quote.tax.ratePercent}%</dd><dt>선택 감면 반영</dt><dd>−${money(quote.tax.relief)}</dd><dt>취득세</dt><dd>${money(quote.tax.acquisition)}</dd><dt>지방교육세</dt><dd>${money(quote.tax.education)}</dd><dt>농어촌특별세</dt><dd>${money(quote.tax.rural)}</dd><dt class="calculation-total-label">합계</dt><dd class="calculation-total">${money(quote.tax.total)}</dd></dl>` : '<p class="muted-copy">활성화 시 계약 예상 총액 기준으로 계산합니다.</p>';
     return `<details id="calculator-tax-details" class="calculator-card disclosure" ${this.taxEnabled ? 'open' : ''}><summary>취득세 추정 <span>펼치기</span></summary><div class="disclosure-body"><label class="enable-row"><input id="calculator-tax-enabled" type="checkbox" ${this.taxEnabled ? 'checked' : ''}> 취득세 추정 활성화</label><fieldset class="relief-options" ${this.taxEnabled ? '' : 'disabled'}><legend>감면 시나리오</legend>${choices.map(([value, label, amount]) => `<label><input name="tax-relief-mode" type="radio" value="${value}" ${this.taxReliefMode === value ? 'checked' : ''}><span><b>${label}</b><small>${amount ? `최대 ${money(amount)}` : '기본 계산'}</small></span></label>`).join('')}</fieldset>${result}<p class="legal-copy">생애최초는 이 아파트 기준 최대 200만원 시나리오이며 현행 취득 기한은 2028-12-31입니다. 2029년 예정 취득에는 현행법상 자동 적용되지 않습니다. 출산·양육은 <b>2028-12-31까지 출산</b>하고 출산 후 5년 이내(취득 후 1년 이내 출산 포함), 12억원 이하·1가구1주택 등 요건을 충족하면 최대 500만원입니다. 출산 기준일과 취득 기한은 다릅니다. 두 감면은 합산하지 않으며 이 선택은 자격 판정이 아닌 가정입니다. 지방교육세는 감면 전 취득세 기준의 보수적 추정으로, 감면에 연동된 교육세 감면을 제외하여 실제보다 클 수 있습니다. 거주 개시·유지 등 추징 요건은 지자체 확인이 필요하며 등기·법무·대출 부대비용은 별도입니다. <a href="https://www.law.go.kr/법령/지방세특례제한법/제36조의3" target="_blank" rel="noreferrer">생애최초 조문 ↗</a> · <a href="https://www.law.go.kr/법령/지방세특례제한법/제36조의5" target="_blank" rel="noreferrer">출산·양육 조문 ↗</a></p></div></details>`;
   }
 
@@ -338,11 +406,11 @@ class CalculatorApp {
         <div class="settlement-subtotal"><dt>잔금 추가 자납액</dt><dd id="calculator-balance-cash">${money(value.balanceCashAfterMortgageWon)}</dd></div></dl>
       </section>
       <dl class="settlement-table"><div class="settlement-total"><dt>입주 시 필요 현금<small>잔금 제외 준비금 + 잔금 추가 자납액</small></dt><dd id="calculator-required-cash">${money(value.requiredCashAtMoveInWon)}</dd></div></dl>
-      ${missing.length ? `<p class="scenario-warning" role="note">${missing.join('·')} 미반영: 위 금액은 실제 입주 비용 전부를 확정한 값이 아닙니다. 우측 항목을 펼쳐 반영하세요.</p>` : ''}
+      ${missing.length ? `<p class="scenario-warning" role="note">${missing.join('·')} 미반영: 위 금액은 실제 입주 비용 전부를 확정한 값이 아닙니다. 해당 추정 항목을 펼쳐 반영하세요.</p>` : ''}
       ${this.costsEnabled && COST_ITEMS.every(([id]) => this.costs[id] === 0) ? '<p class="scenario-warning">부대비용 예상액이 아직 0원입니다. 무료로 확정된 것이 아니므로 실제 견적을 확인하세요.</p>' : ''}
       ${value.mortgageExcessWon ? `<p class="scenario-warning">계산상 모기지 초과액 ${money(value.mortgageExcessWon)}은 현금 수령·추가대출로 간주하지 않습니다.</p>` : ''}
       <div class="funding-metrics"><div><span>입주 전 계약금·자납 중도금</span><b id="calculator-upfront-cash">${money(value.selfFundedBeforeMoveInWon)}</b></div><div><span>계약·선택한 비용 포함 예산</span><b>${money(value.totalAcquisitionBudgetWon)}</b></div><div><span>계약부터 입주까지 자기자금</span><b>${money(value.totalOwnCashWon)}</b></div></div>
-      <p class="legal-copy">기타 옵션 중도금은 별도 안내일에 입주 전 자납하는 것으로 분리했습니다. 이미 납부한 부대비용과 모기지 만기까지의 이자·향후 세금은 이 입주 예산에 넣지 않습니다. 이 시뮬레이션 입력은 저장하거나 전송하지 않습니다.</p>
+      <p class="legal-copy">기타 옵션 중도금은 별도 안내일에 입주 전 자납하는 것으로 분리했습니다. 이미 납부한 부대비용과 모기지 만기까지의 이자·향후 세금은 이 입주 예산에 넣지 않습니다. 시뮬레이션 입력은 현재 탭에서만 유지되며 서버로 전송하지 않습니다. 세대 재선택 시 초기화됩니다.</p>
     </section>`;
   }
 
@@ -356,7 +424,7 @@ class CalculatorApp {
     return `<div id="calculator-balance-mortgage-info" class="mortgage-overview"><span class="mortgage-required">공고상 의무가입 대상 · 주택가격의 30% 이상</span>
       <p>얼마나 빌릴 수 있나요? <b>(감액 후 공급가 + 발코니 확장비) × LTV</b>와 <b>4억원</b> 중 작은 금액입니다. 유상옵션·세금은 기준액에 포함하지 않습니다.</p>
       ${mortgage ? `<label class="balance-ltv-control" for="calculator-balance-ltv">담보인정비율(LTV)<select id="calculator-balance-ltv">${[30,40,50,60,70].map(value => `<option value="${value}" ${value === this.ltv ? 'selected' : ''}>${value}%</option>`).join('')}</select></label><div class="mortgage-keyfigures"><div><span>선택 LTV 기준 대출 예상액</span><b id="calculator-balance-mortgage-principal">${money(mortgage.principal)}</b></div><div><span>1년 거치 · 월 이자</span><b>${money(mortgage.graceInterest)}</b></div><div><span>이후 ${this.term - 1}년 · 월 원리금</span><b>${money(mortgage.repayment)}</b></div></div>` : '<p class="stage-note">미적용은 자금 비교용입니다. 의무가입이 면제되는 뜻이 아니며 실제 승인 금액은 은행 심사로 결정됩니다.</p>'}
-      <p class="stage-note">공고상 잔금 납부 2~3개월 전 신청 → 은행 심사·중도금 상환 → 모기지 실행·납부 확인 → 입주. ${mortgage ? '대출기간·자녀 수와 수익공유 시나리오는 우측 모기지 항목에서 조정합니다.' : '대출을 적용해 한도와 월 상환액을 확인하세요.'} 이 단지의 연 1.3% 예외를 사용하며 실제 실행 조건은 기금·취급은행 확인이 필요합니다.</p><p class="mortgage-reference"><a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 공식 상품 기준 ↗</a></p></div>`;
+      <p class="stage-note">공고상 잔금 납부 2~3개월 전 신청 → 은행 심사·중도금 상환 → 모기지 실행·납부 확인 → 입주. ${mortgage ? '대출기간·자녀 수와 수익공유 시나리오는 모기지 추정 항목에서 조정합니다.' : '대출을 적용해 한도와 월 상환액을 확인하세요.'} 이 단지의 연 1.3% 예외를 사용하며 실제 실행 조건은 기금·취급은행 확인이 필요합니다.</p><p class="mortgage-reference"><a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 공식 상품 기준 ↗</a></p></div>`;
   }
 
   private paymentGuideMarkup(): string {
@@ -377,7 +445,7 @@ class CalculatorApp {
   private resaleDetails(quote: Quote): string {
     const value = this.salePriceWon === null ? undefined : quote.mortgage?.settlement;
     return `<details id="calculator-resale-details" class="calculator-card disclosure"><summary>향후 매각·수익공유 정산 <span>펼치기</span></summary><div class="disclosure-body">
-      <p>우측 모기지의 자녀 수·대출 유지기간을 사용합니다. 매도가 예상액을 넣어 보는 시나리오이며 시세·세금·매각 승인을 예측하지 않습니다.</p>
+      <p>모기지 추정의 자녀 수·대출 유지기간을 사용합니다. 매도가 예상액을 넣어 보는 시나리오이며 시세·세금·매각 승인을 예측하지 않습니다.</p>
       <label class="money-field" for="calculator-sale-price">예상 매도가 · 원<input id="calculator-sale-price" type="number" min="1" max="100000000000" step="1" inputmode="numeric" placeholder="예: 900000000" value="${this.salePriceWon ?? ''}" ${this.mortgageEnabled ? '' : 'disabled'}></label>
       ${value && quote.mortgage ? `<dl><dt>가정한 매도가</dt><dd>${money(this.salePriceWon!)}</dd><dt>대출 유지기간 / 자녀 수</dt><dd>${this.holdingYears}년 / ${this.childCount === 2 ? '2명 이상' : this.childCount + '명'}</dd><dt>취득 기준액 · 공급가+발코니</dt><dd>${money(quote.mortgage.loanBase)}</dd><dt>양(+)의 평가차익</dt><dd>${money(value.appreciationWon)}</dd><dt>기금 정산비율</dt><dd>${value.fundSharePercent}%</dd><dt>− 기금 수익공유 정산액</dt><dd>${money(value.fundSettlementWon)}</dd><dt>− 남은 대출 원금</dt><dd>${money(value.remainingPrincipalWon)}</dd><dt class="calculation-total-label">세금·매각비용 전 회수액</dt><dd id="calculator-resale-proceeds" class="calculation-total">${money(value.netSaleProceedsWon)}</dd></dl>` : '<p class="muted-copy">모기지 추정 활성화 후 예상 매도가를 입력하세요. 매도가를 임의로 채우지 않습니다.</p>'}
       <p class="legal-copy"><b>회수액은 순이익이 아닙니다.</b> 기존 자기자금·기납부 원리금·취득/양도세·중개/등기 비용 등을 빼지 않았습니다. 손실이면 기금 수익공유금은 0원이지만 손실을 기금이 보전하지 않습니다. 중도상환은 원칙적으로 실행 3년 경과 후 전액이며 부분상환은 불가합니다. 만기 이후로 정산을 미뤄 유리한 비율을 적용하지 않습니다. <b>실제 정산가격은 은행 감정·약정 검증으로 매도가와 달라질 수 있으며, 매각 없는 전액상환·만기는 감정가격을 사용합니다.</b> <a href="${MORTGAGE_CONTRACT}" target="_blank" rel="noreferrer">KB 추가약정·정산표 ↗</a></p>
@@ -385,82 +453,170 @@ class CalculatorApp {
   }
 
   private bind(): void {
-    this.mount.querySelectorAll<HTMLButtonElement>('[data-enable-estimate]').forEach(button => {
-      // Keep a pending input focused until click: its blur/change render would
-      // otherwise replace this button between pointerdown and pointerup.
-      button.addEventListener('pointerdown', event => { if (event.button === 0) event.preventDefault(); });
-      button.addEventListener('click', () => {
-        const tax = button.dataset.enableEstimate === 'tax';
-        const active = document.activeElement;
-        if (active instanceof HTMLInputElement && this.mount.contains(active)
-          && active.matches('input[type="number"],input[type="date"]')) {
-          if (!active.reportValidity()) return;
-          active.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        if (tax) this.taxEnabled = true;
-        else this.costsEnabled = true;
-        this.render();
-        const target = this.mount.querySelector<HTMLDetailsElement>(tax ? '#calculator-tax-details' : '#calculator-cost-details');
-        if (!target) return;
-        target.open = true;
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        target.querySelector<HTMLElement>(tax ? '#calculator-tax-enabled' : '#calculator-cost-stamp')?.focus({ preventScroll: true });
-      });
+    if (this.bound) return;
+    this.bound = true;
+    this.mount.addEventListener('toggle', () => this.syncDisclosureLabels(), true);
+    this.mount.addEventListener('input', event => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || !input.matches('input[type="number"],input[type="date"]')) return;
+      this.pendingInputs.delete(input.id);
+      this.pendingInputs.add(input.id);
+      if (this.inputErrors.has(input.id)) {
+        const error = this.draftError(input);
+        if (error) this.inputErrors.set(input.id, error);
+        else this.inputErrors.delete(input.id);
+        this.syncInputErrors();
+      }
     });
-    this.mount.querySelectorAll<HTMLInputElement>('input[name="payment-plan"]').forEach((input) => input.addEventListener('change', () => { this.plan = input.value as BundangPaymentPlanKind; this.render(); }));
-    this.mount.querySelector('#calculator-print')?.addEventListener('click', () => {
-      this.preparePrint();
-      window.print();
+    this.mount.addEventListener('keydown', event => {
+      const input = event.target;
+      if (event.key !== 'Enter' || !(input instanceof HTMLInputElement)
+        || !input.matches('input[type="number"],input[type="date"]')) return;
+      event.preventDefault();
+      this.pendingInputs.add(input.id);
+      if (this.commitPendingInputs()) this.render();
     });
-
-    this.mount.querySelector('#calculator-return-options')?.addEventListener('click', () => window.location.assign(this.context!.returnUrl!));
-    this.mount.querySelector<HTMLInputElement>('#calculator-tax-enabled')?.addEventListener('change', (event) => { this.taxEnabled = (event.target as HTMLInputElement).checked; this.render(); });
-    this.mount.querySelectorAll<HTMLInputElement>('input[name="tax-relief-mode"]').forEach((input) => input.addEventListener('change', () => { this.taxReliefMode = input.value as TaxReliefMode; this.render(); }));
-    this.mount.querySelectorAll<HTMLInputElement>('input[name="interim-funding"]').forEach(input => input.addEventListener('change', () => { this.interimFunding = input.value as 'cash' | 'loan'; this.render(); }));
-    this.mount.querySelector<HTMLInputElement>('#calculator-move-in-date')?.addEventListener('change', event => {
-      const input = event.target as HTMLInputElement;
-      if (!input.value || !input.reportValidity()) { input.value = this.assumedMoveInDate; return; }
-      this.assumedMoveInDate = input.value; this.render();
-    });
-    this.mount.querySelector<HTMLInputElement>('#calculator-costs-enabled')?.addEventListener('change', event => { this.costsEnabled = (event.target as HTMLInputElement).checked; this.render(); });
-    this.mount.querySelectorAll<HTMLInputElement>('input[data-cost-id]').forEach(input => input.addEventListener('change', () => {
-      const id = input.dataset.costId as CostId;
-      const value = input.value === '' ? 0 : input.valueAsNumber;
-      if (!input.reportValidity() || !Number.isFinite(value)) { input.value = String(this.costs[id]); return; }
-      this.costs[id] = value; this.render();
-    }));
-    this.mount.querySelector<HTMLInputElement>('#calculator-sale-price')?.addEventListener('change', event => {
-      const input = event.target as HTMLInputElement;
-      if (input.value && (!input.reportValidity() || !Number.isFinite(input.valueAsNumber))) { input.value = String(this.salePriceWon ?? ''); return; }
-      this.salePriceWon = input.value ? input.valueAsNumber : null; this.render();
-    });
-    this.mount.querySelector<HTMLInputElement>('#calculator-interim-loan-enabled')?.addEventListener('change', event => { this.interimFunding = (event.target as HTMLInputElement).checked ? 'loan' : 'cash'; this.render(); });
-    this.mount.querySelectorAll<HTMLButtonElement>('[data-interim-rate-action]').forEach(button => button.addEventListener('click', () => {
-      const delta = button.dataset.interimRateAction === 'up' ? 1 : -1;
-      this.interimRatePercent = Math.max(0, Math.min(150, Math.round(this.interimRatePercent * 10) + delta)) / 10;
+    this.mount.addEventListener('change', event => {
+      const control = event.target;
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) return;
+      // Turning an estimate off discards only its invalid draft, not its last
+      // accepted scenario. A user must never get trapped in an enabled section.
+      if (control instanceof HTMLInputElement) {
+        if (control.id === 'calculator-costs-enabled' && !control.checked) this.discardPendingInputs('input[data-cost-id]');
+        if ((control.id === 'calculator-interim-loan-enabled' && !control.checked)
+          || (control.name === 'interim-funding' && control.value === 'cash')) this.discardPendingInputs('[data-interim-rate-input],#calculator-move-in-date');
+        if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id) && !control.checked) this.discardPendingInputs('#calculator-sale-price');
+      }
+      if (control instanceof HTMLInputElement && control.matches('input[type="number"],input[type="date"]')) this.pendingInputs.add(control.id);
+      if (!this.commitPendingInputs()) { this.render(); return; }
+      const checked = control instanceof HTMLInputElement && control.checked;
+      if (control instanceof HTMLInputElement && control.name === 'payment-plan') this.plan = control.value as BundangPaymentPlanKind;
+      else if (control.id === 'calculator-tax-enabled') this.taxEnabled = checked;
+      else if (control instanceof HTMLInputElement && control.name === 'tax-relief-mode') this.taxReliefMode = control.value as TaxReliefMode;
+      else if (control instanceof HTMLInputElement && control.name === 'interim-funding') this.interimFunding = control.value as 'cash' | 'loan';
+      else if (control.id === 'calculator-costs-enabled') this.costsEnabled = checked;
+      else if (control.id === 'calculator-interim-loan-enabled') this.interimFunding = checked ? 'loan' : 'cash';
+      else if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id)) this.mortgageEnabled = checked;
+      else if (['calculator-ltv', 'calculator-balance-ltv'].includes(control.id)) this.ltv = Number(control.value) as typeof this.ltv;
+      else if (control.id === 'calculator-term') { this.term = Number(control.value) as 20 | 30; this.holdingYears = Math.min(this.holdingYears, this.term); }
+      else if (control.id === 'calculator-children') this.childCount = Number(control.value) as BundangMortgageChildCount;
+      else if (control.id === 'calculator-settlement-period') this.holdingYears = Number(control.value);
       this.render();
-    }));
-    this.mount.querySelectorAll<HTMLInputElement>('[data-interim-rate-input]').forEach(input => {
-      const commit = () => {
-        if (!input.value || !input.reportValidity() || !Number.isFinite(input.valueAsNumber)) {
-          input.value = this.interimRatePercent.toFixed(1); return;
-        }
-        this.interimRatePercent = Math.round(input.valueAsNumber * 10) / 10;
-        this.render();
-      };
-      input.addEventListener('change', commit);
-      input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } });
     });
-    this.mount.querySelectorAll<HTMLInputElement>('#calculator-mortgage-enabled, #calculator-balance-mortgage-enabled').forEach(input => input.addEventListener('change', () => { this.mortgageEnabled = input.checked; this.render(); }));
-    this.mount.querySelectorAll<HTMLSelectElement>('#calculator-ltv, #calculator-balance-ltv').forEach(select => select.addEventListener('change', () => { this.ltv = Number(select.value) as 30 | 40 | 50 | 60 | 70; this.render(); }));
-    this.mount.querySelector<HTMLSelectElement>('#calculator-term')?.addEventListener('change', (event) => { this.term = Number((event.target as HTMLSelectElement).value) as 20 | 30; this.holdingYears = Math.min(this.holdingYears, this.term); this.render(); });
-    this.mount.querySelector<HTMLSelectElement>('#calculator-children')?.addEventListener('change', (event) => { this.childCount = Number((event.target as HTMLSelectElement).value) as BundangMortgageChildCount; this.render(); });
-    this.mount.querySelector<HTMLSelectElement>('#calculator-settlement-period')?.addEventListener('change', (event) => { this.holdingYears = Number((event.target as HTMLSelectElement).value); this.render(); });
+    this.mount.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
+      if (!target || target.disabled) return;
+      if (target.id === 'calculator-return-options') { window.location.assign(this.context!.returnUrl!); return; }
+      if (!target.matches('[data-enable-estimate],[data-interim-rate-action],#calculator-print')) return;
+      if (!this.commitPendingInputs()) {
+        this.mount.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus({ preventScroll: true });
+        return;
+      }
+      if (target.dataset.interimRateAction) {
+        const delta = target.dataset.interimRateAction === 'up' ? 1 : -1;
+        this.interimRatePercent = Math.max(0, Math.min(150, Math.round(this.interimRatePercent * 10) + delta)) / 10;
+      }
+      if (target.dataset.enableEstimate === 'tax') this.taxEnabled = true;
+      else if (target.dataset.enableEstimate === 'costs') this.costsEnabled = true;
+      this.render();
+      if (target.id === 'calculator-print') { this.preparePrint(); window.print(); }
+      if (target.dataset.enableEstimate) {
+        const tax = target.dataset.enableEstimate === 'tax';
+        const details = this.mount.querySelector<HTMLDetailsElement>(tax ? '#calculator-tax-details' : '#calculator-cost-details');
+        if (!details) return;
+        details.open = true;
+        this.syncDisclosureLabels();
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        details.querySelector<HTMLElement>(tax ? '#calculator-tax-enabled' : '#calculator-cost-stamp')?.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  private draftError(input: HTMLInputElement): string | null {
+    if (input.disabled) return null;
+    if (input.type === 'date') return input.value && input.validity.valid ? null : '2028-02-15~2099-12-31 사이의 유효한 날짜를 입력하세요.';
+    if (input.dataset.costId && input.value === '') return null;
+    if (input.id === 'calculator-sale-price' && input.value === '') return null;
+    if (!input.value || !input.validity.valid || !Number.isFinite(input.valueAsNumber)) {
+      if (input.hasAttribute('data-interim-rate-input')) return '금리는 0~15% 범위에서 0.1% 단위로 입력하세요.';
+      return input.dataset.costId ? '비용은 0~100억원 범위의 정수로 입력하세요.' : '매도가는 1원~1,000억원 범위의 정수로 입력하세요.';
+    }
+    return null;
+  }
+
+  private discardPendingInputs(selector: string): void {
+    for (const input of this.mount.querySelectorAll<HTMLInputElement>(selector)) {
+      this.pendingInputs.delete(input.id);
+      this.inputErrors.delete(input.id);
+      if (input.dataset.costId) input.value = String(this.costs[input.dataset.costId as CostId]);
+      else if (input.hasAttribute('data-interim-rate-input')) input.value = this.interimRatePercent.toFixed(1);
+      else if (input.id === 'calculator-move-in-date') input.value = this.assumedMoveInDate;
+      else if (input.id === 'calculator-sale-price') input.value = String(this.salePriceWon ?? '');
+    }
+  }
+
+  private commitPendingInputs(): boolean {
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement && this.mount.contains(active)
+      && active.matches('input[type="number"],input[type="date"]')) this.pendingInputs.add(active.id);
+    const inputs = [...this.pendingInputs].map(id => this.mount.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`))
+      .filter((input): input is HTMLInputElement => Boolean(input && !input.disabled));
+    this.inputErrors.clear();
+    for (const input of inputs) {
+      const error = this.draftError(input);
+      if (error) this.inputErrors.set(input.id, error);
+    }
+    this.syncInputErrors();
+    if (this.inputErrors.size) return false;
+    for (const input of inputs) {
+      if (input.hasAttribute('data-interim-rate-input')) this.interimRatePercent = Math.round(input.valueAsNumber * 10) / 10;
+      else if (input.id === 'calculator-move-in-date') this.assumedMoveInDate = input.value;
+      else if (input.dataset.costId) this.costs[input.dataset.costId as CostId] = input.value ? input.valueAsNumber : 0;
+      else if (input.id === 'calculator-sale-price') this.salePriceWon = input.value ? input.valueAsNumber : null;
+    }
+    this.pendingInputs.clear();
+    return true;
+  }
+
+  private syncInputErrors(): void {
+    this.mount.dataset.invalidInputs = String(this.inputErrors.size > 0);
+    this.mount.querySelectorAll('.input-error').forEach(node => node.remove());
+    this.mount.querySelectorAll('[aria-invalid="true"]').forEach(node => { node.removeAttribute('aria-invalid'); node.removeAttribute('aria-describedby'); });
+    for (const [id, message] of this.inputErrors) {
+      const input = this.mount.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`);
+      if (!input) continue;
+      input.setAttribute('aria-invalid', 'true');
+      input.setAttribute('aria-describedby', `${id}-error`);
+      const error = document.createElement('p');
+      error.id = `${id}-error`;
+      error.className = 'input-error';
+      error.setAttribute('role', 'alert');
+      error.textContent = message;
+      (input.closest('.interim-rate-control,.money-field,.date-field') ?? input).after(error);
+    }
+  }
+
+  private syncDisclosureLabels(): void {
+    for (const details of this.mount.querySelectorAll<HTMLDetailsElement>('details')) {
+      const summary = details.querySelector<HTMLElement>(':scope > summary');
+      if (!summary) continue;
+      let action = summary.querySelector<HTMLElement>(':scope > .disclosure-action');
+      if (!action) {
+        const last = summary.lastElementChild;
+        if (last instanceof HTMLElement && /^(펼치기|접기|열기)$/.test(last.textContent?.trim() ?? '')) action = last;
+        else { action = document.createElement('span'); summary.append(action); }
+        action.classList.add('disclosure-action');
+      }
+      action.textContent = details.open ? '접기' : '펼치기';
+      action.setAttribute('aria-hidden', 'true');
+    }
   }
 
   private preparePrint(): void {
-    this.refreshCountdowns();
     if (this.restorePrintState) return;
+    if (!this.commitPendingInputs()) return;
+    this.render();
+    this.refreshCountdowns();
     const ids = ['calculator-option-details', 'calculator-payment-guide'];
     if (this.taxEnabled) ids.push('calculator-tax-details');
     if (this.interimFunding === 'loan') ids.push('calculator-interim-loan-details');

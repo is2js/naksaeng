@@ -1,13 +1,14 @@
-# bunfirvil
+# 낙생지구 · naksaeng
 
-분당 퍼스트빌리지 검수맵과 PVP RPG 프론트엔드 렌더링 성능을 공개하는 서버리스 데모입니다.
+성남낙생 공공주택지구의 단지별 가상 놀이터와 입주·자금 계획을 제공하는 비공식 서버리스 참고 공간입니다. A1 분당퍼스트빌리지의 기존 Git 이력과 브라우저 저장 계약을 유지합니다.
 
-- 공개 주소: <https://is2js.github.io/bunfirvil/>
-- 검수 관리(운영자): <https://is2js.github.io/bunfirvil/manage/>
-- 건축물 관리(운영자): <https://is2js.github.io/bunfirvil/building-admin/>
-- 인테리어 관리(운영자): <https://is2js.github.io/bunfirvil/interior-admin/>
-- Markdown 가이드: <https://is2js.github.io/bunfirvil/guides/>
-- 분양가 계산기: <https://is2js.github.io/bunfirvil/calculator/> (인증한 세대의 타입·층 가격구간과 선택 옵션 필요)
+- 낙생지구 포털: <https://is2js.github.io/naksaeng/>
+- A1 놀이터: <https://is2js.github.io/naksaeng/bunfirvil/>
+- 검수 관리(운영자): <https://is2js.github.io/naksaeng/bunfirvil/manage/>
+- 건축물 관리(운영자): <https://is2js.github.io/naksaeng/bunfirvil/building-admin/>
+- 인테리어 관리(운영자): <https://is2js.github.io/naksaeng/bunfirvil/interior-admin/>
+- Markdown 가이드: <https://is2js.github.io/naksaeng/bunfirvil/guides/>
+- 분양가 계산기: <https://is2js.github.io/naksaeng/bunfirvil/calculator/> (인증한 세대의 타입·층 가격구간과 선택 옵션 필요)
 - 저장 방식: 브라우저 `localStorage`와 JSON 가져오기·내보내기
 - 세대 인증: 비공개 Google Sheet의 가입요청·인증명단을 분리하고, 운영자는 별도 코드도 확인합니다. 현재 탭에 역할·공유용 닉네임·인증 범위를 저장하며 코드는 저장하지 않습니다.
 - 자체 서버 기능: 없음 — DB, Socket.IO, 전투 판정, 원본 게시 기능을 포함하지 않습니다.
@@ -72,7 +73,7 @@ Sheet의 `가입요청 → 승인 → 인증명단` 운영 절차, 운영자 코
 
 대출 안내는 LH 신혼희망타운 전용 모기지의 현재 공개 조건을, 취득 관련 세율은 지방세법과 지방세특례제한법의 현재 기준을 따릅니다. 실제 입주·대출 실행 시점의 법령, 기금운용계획, 금융기관 심사와 각종 부대비용에 따라 달라질 수 있으므로 계약·세무·대출 의사결정의 확정 금액으로 사용하지 않습니다.
 
-2026-10-22 자금 정보 보완에서는 기존 계약총액·납부표를 유지하면서 중도금 대출 상환원금까지 포함하는 입주 정산, 미납 부대비용, 세전 매각 회수액을 구분합니다. 모기지 기준은 공식 상품의 공급가+발코니(기타 옵션 제외)이며 4억원 상한의 실효 LTV·전체 연도별 정산표를 반영합니다. 소득·동호·닉네임·자산 입력은 추가하지 않으며 새 가정은 페이지 메모리에만 유지합니다. [입주·자금 계산 가이드](src/guides/content/sale-finance.md)에 출처·확정/미정/가정 구분과 감면 기한을 정리했습니다.
+2026-10-22 자금 정보 보완에서는 기존 계약총액·납부표를 유지하면서 중도금 대출 상환원금까지 포함하는 입주 정산, 미납 부대비용, 세전 매각 회수액을 구분합니다. 모기지 기준은 공식 상품의 공급가+발코니(기타 옵션 제외)이며 4억원 상한의 실효 LTV·전체 연도별 정산표를 반영합니다. 소득·동호·닉네임·자산 입력은 추가하지 않으며 계산 가정은 현재 탭의 `sessionStorage`에만 유지합니다. [입주·자금 계산 가이드](src/guides/content/sale-finance.md)에 출처·확정/미정/가정 구분과 감면 기한을 정리했습니다.
 
 ## Markdown 가이드 추가
 
@@ -86,6 +87,8 @@ Node.js 22 이상이 필요합니다.
 npm ci
 npm run dev
 ```
+
+포털은 `http://127.0.0.1:5174/naksaeng/`, A1 앱은 `http://127.0.0.1:5174/naksaeng/bunfirvil/`에서 확인합니다. 개발 서버는 다음 포트도 A1 내부 서버용으로 사용하므로 5174·5175를 함께 비워 두세요. `--port 5180`이면 5180·5181을 사용합니다. `npm run preview`는 빌드된 두 화면을 4173 포트에서 제공합니다.
 
 주요 검증 명령:
 
@@ -135,6 +138,8 @@ GitHub Pages에 포함된 파일은 누구나 내려받을 수 있습니다. `op
 
 ## 배포
 
-`main`에 push하면 GitHub Actions가 단위 테스트, 정적 빌드, 누출 검사와 Chromium 스모크를 한 번 수행한 뒤 Pages artifact를 배포합니다. 빌드 기준 경로는 `/bunfirvil/`이며 모든 자산 URL은 그 하위경로를 기준으로 계산됩니다.
+정본 저장소는 [`is2js/naksaeng`](https://github.com/is2js/naksaeng)입니다. `main`에 push하면 GitHub Actions가 단위 테스트, 정적 빌드, 누출 검사와 Chromium 스모크를 한 번 수행한 뒤 Pages artifact를 배포합니다. 포털은 `/naksaeng/`, A1 앱은 `/naksaeng/bunfirvil/`을 각각 독립 base로 빌드하고 하나의 `dist`로 묶습니다. 생성 snapshot·이미지·폰트는 A1 아래에 한 번만 포함하며 전체 50MiB 예산을 검사합니다.
+
+기존 `is2js/bunfirvil` 저장소는 주소 호환용으로 보존합니다. 새 Pages가 정상 배포된 뒤에만 기존 진입 HTML을 전환하며 기존 정적 자산은 유지합니다. 기존 루트·관리·가이드·계산기 경로의 query와 공유 fragment를 새 A1 주소로 그대로 전달합니다. 두 주소는 같은 `is2js.github.io` origin이므로 기존 브라우저 저장 키를 복사하거나 바꾸지 않습니다. 이전 계산기 복귀 경로는 승인된 map·actor·variant만 새 경로로 정규화합니다. 문제 발생 시 이전 커밋을 revert하여 복구하며 저장 데이터나 Git 이력을 초기화하지 않습니다.
 
 Pages 검증·배포 runner는 Playwright 시스템 의존성 설치를 위해 `ubuntu-24.04`로 고정합니다. `ubuntu-latest`의 26.04 전환 중 패키지 저장소 403이 발생한 이력이 있으며, 브라우저 검사를 건너뛰는 대신 검증된 배포 환경을 유지합니다.

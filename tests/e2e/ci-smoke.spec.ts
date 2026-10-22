@@ -63,7 +63,7 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   await page.setViewportSize({ width: 390, height: 844 });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
   await page.goto('./');
-  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://is2js.github.io/bunfirvil/og-playground-v3.jpg');
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://is2js.github.io/naksaeng/bunfirvil/og-playground-v3.jpg');
   const previewResponse = await page.request.get('og-playground-v3.jpg');
   expect(previewResponse.ok()).toBe(true);
   expect(previewResponse.headers()['content-type']).toContain('image/jpeg');

@@ -65,7 +65,45 @@ function reachableKeys(world: WorldData, starts: string[]): Set<string> {
   return visited;
 }
 
+/** Adjacent grid steps whose centerline crosses the physical door aperture. */
+function openingCrossings(world: WorldData, apartment: WorldObject, opening: ApartmentPointObject): Array<{ allowed: boolean; lane: number }> {
+  const a = apartmentUnitWorldPoint(apartment, opening.a as [number, number]);
+  const b = apartmentUnitWorldPoint(apartment, opening.b as [number, number]);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) return [];
+  const results: Array<{ allowed: boolean; lane: number }> = [];
+  for (let y = Math.floor(Math.min(a.y, b.y)) - 2; y <= Math.ceil(Math.max(a.y, b.y)) + 2; y += 1) {
+    for (let x = Math.floor(Math.min(a.x, b.x)) - 2; x <= Math.ceil(Math.max(a.x, b.x)) + 2; x += 1) {
+      for (const [mx, my] of [[1, 0], [0, 1], [1, 1], [-1, 1]]) {
+        const side1 = (x - a.x) * dy - (y - a.y) * dx;
+        const side2 = (x + mx - a.x) * dy - (y + my - a.y) * dx;
+        if (side1 * side2 > 0 || Math.abs(side1 - side2) < 1e-6) continue;
+        const t = side1 / (side1 - side2);
+        const px = x + mx * t;
+        const py = y + my * t;
+        const lane = ((px - a.x) * dx + (py - a.y) * dy) / length;
+        if (lane < 0.05 || lane > length - 0.05) continue;
+        results.push({ allowed: isWalkable(world, x, y) && isWalkable(world, x + mx, y + my)
+          && canTraverse(world, x, y, x + mx, y + my)
+          && canTraverse(world, x + mx, y + my, x, y), lane });
+      }
+    }
+  }
+  return results;
+}
+
 describe('Bundang runtime traversal openings', () => {
+  it('allows real previously blocked 51A bedroom and bathroom edge steps', () => {
+    const world = loadWorld('51A');
+    applyPlanVariant(world, 'A');
+    for (const [fromX, fromY, toX, toY] of [[8, 21, 9, 22], [13, 34, 13, 35]]) {
+      expect(isWalkable(world, fromX, fromY)).toBe(true);
+      expect(canTraverse(world, fromX, fromY, toX, toY)).toBe(true);
+      expect(canTraverse(world, toX, toY, fromX, fromY)).toBe(true);
+    }
+  });
   for (const unitType of ['51A', '55A', '55B', '59A']) {
     for (const variant of availablePlanVariants(unitType)) {
       it(`connects ${unitType}-${variant} entrance to every interior room`, () => {
@@ -81,6 +119,34 @@ describe('Bundang runtime traversal openings', () => {
           });
           expect(candidates.some((key) => reached.has(key)), `${unitType}-${variant}:${roomId}`).toBe(true);
         }
+      });
+
+      it(`allows multiple bidirectional approaches to each ${unitType}-${variant} internal doorway without opening its exterior walls`, () => {
+        const world = loadWorld(unitType);
+        applyPlanVariant(world, variant);
+        const apartment = world.objects.find((object) => object.type === 'enterable-apartment-unit-v1') as WorldObject;
+        const openings = (apartment.geometry?.openings || []).filter((value) =>
+          ['interior-door', 'passage'].includes(String((value as ApartmentPointObject).type))) as ApartmentPointObject[];
+        expect(openings.length).toBeGreaterThan(0);
+        for (const opening of openings) {
+          const allowed = openingCrossings(world, apartment, opening).filter((result) => result.allowed);
+          // A narrow aperture may intersect just one grid lane; it must still be
+          // approachable from multiple adjacent cardinal/diagonal cells.
+          expect(allowed.length, `${unitType}-${variant}:${opening.id}`).toBeGreaterThanOrEqual(3);
+        }
+        const exteriorWall = (apartment.geometry?.wallSegments || []).find((value) =>
+          String((value as ApartmentPointObject).id || '').startsWith('outer-north')) as ApartmentPointObject | undefined;
+        expect(exteriorWall).toBeTruthy();
+        const a = apartmentUnitWorldPoint(apartment, exteriorWall?.a as [number, number]);
+        const b = apartmentUnitWorldPoint(apartment, exteriorWall?.b as [number, number]);
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = Math.hypot(dx, dy);
+        expect(length).toBeGreaterThan(0);
+        expect(crossesApartmentWall(world.objects, mx - dy / length, my + dx / length,
+          mx + dy / length, my - dx / length)).toBe(true);
       });
     }
   }

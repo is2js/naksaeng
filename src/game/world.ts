@@ -640,7 +640,10 @@ export const BUNDANG_TRAVERSAL_OPENINGS: BundangTraversalOpeningV1 = {
   schemaVersion: 1,
   openingTypes: ['interior-door', 'entry-door', 'passage'],
   clearanceCells: 0.52,
-  jambToleranceCells: 0.3,
+  // A small allowance at each jamb accommodates the half-metre movement grid:
+  // 0.38 cells is 19 cm on the Bundang plans, 4 cm more than before. The
+  // allowance is only used for a wall collinear with an actual opening.
+  jambToleranceCells: 0.38,
 };
 
 function finite(value: unknown, fallback = 0): number {
@@ -752,21 +755,25 @@ function movementPointBlocked(object: WorldObject, point: CollisionPoint, minusA
   const local = apartmentWorldPointToLocalMeters(object, point);
   const geometry = object.geometry;
   // Sprite feet are a small point footprint, not a half-cell-wide physical body.
-  const skinMeters = 0.04;
+  // Keep the structural solid-block buffer unchanged, while allowing the feet
+  // a little closer to wall and fixture faces in otherwise walkable passages.
+  const structuralSkinMeters = 0.04;
+  const passageSkinMeters = 0.01;
+  const fixtureSkinMeters = 0.02;
   for (const value of geometry?.wallSegments || []) {
     const wall = value as Record<string, unknown>;
     if (finite(wall.baseMeters) > 0.35) continue;
     const start = worldCollisionPoint(object, wall.a);
     const end = worldCollisionPoint(object, wall.b);
     const cellSize = Math.max(0.01, finite(geometry?.cellSizeMeters, 0.5));
-    if (start && end && collisionDistance(point, start, end) <= (Math.max(0.04, finite(wall.thicknessMeters, 0.12)) / 2 + skinMeters) / cellSize
+    if (start && end && collisionDistance(point, start, end) <= (Math.max(0.04, finite(wall.thicknessMeters, 0.12)) / 2 + passageSkinMeters) / cellSize
       && !wallAllowsTraversalPoint(object, point, start, end)) return true;
   }
-  if ((geometry?.solidBlocks || []).some((value) => solidContainsPoint(value as Record<string, unknown>, local, skinMeters))) return true;
+  if ((geometry?.solidBlocks || []).some((value) => solidContainsPoint(value as Record<string, unknown>, local, structuralSkinMeters))) return true;
   if (minusActive) return false;
-  if ((geometry?.kitchenFixtures || []).some((value) => solidContainsPoint(value as Record<string, unknown>, local, skinMeters))) return true;
+  if ((geometry?.kitchenFixtures || []).some((value) => solidContainsPoint(value as Record<string, unknown>, local, fixtureSkinMeters))) return true;
   return (geometry?.interiorProps || []).some((prop) => prop.installationRole === 'bathroom-base-fixture'
-    && prop.collisionMode !== 'visual-only' && pointInsidePropFootprint(local, prop as Record<string, unknown>, skinMeters));
+    && prop.collisionMode !== 'visual-only' && pointInsidePropFootprint(local, prop as Record<string, unknown>, fixtureSkinMeters));
 }
 
 /** Release only a known apartment mask cell whose precise physical footprint is clear. */

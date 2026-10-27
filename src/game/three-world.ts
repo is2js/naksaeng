@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { RPG_CAMERA_BASE_ZOOM } from './camera';
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
+import { laserPointerWorldPoint } from './laser-pointer-projection';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -1083,6 +1084,7 @@ export class ThreeWorldRenderer {
     group.visible = true;
     this.canvas.dataset.inspectionLaserVisible = 'true';
     this.canvas.dataset.inspectionLaserDistanceMm = String(Math.round(finite(measurement.distanceMm)));
+    this.canvas.dataset.inspectionLaserRenderedStart = JSON.stringify(negativePoint);
     this.canvas.dataset.inspectionLaserAxis = String(measurement.axis || 'free');
     this.canvas.dataset.inspectionLaserPhase = measurement.measurementMode === 'point-ray'
       || measurement.measurementMode === 'point-pair-free'
@@ -1095,6 +1097,7 @@ export class ThreeWorldRenderer {
     if (this.apartmentInspectionLaserGroup) this.apartmentInspectionLaserGroup.visible = false;
     delete this.canvas.dataset.inspectionLaserVisible;
     delete this.canvas.dataset.inspectionLaserDistanceMm;
+    delete this.canvas.dataset.inspectionLaserRenderedStart;
     delete this.canvas.dataset.inspectionLaserPhase;
   }
 
@@ -1108,6 +1111,7 @@ export class ThreeWorldRenderer {
     this.apartmentInspectionLaserGroup = null;
     delete this.canvas.dataset.inspectionLaserVisible;
     delete this.canvas.dataset.inspectionLaserDistanceMm;
+    delete this.canvas.dataset.inspectionLaserRenderedStart;
     delete this.canvas.dataset.inspectionLaserAxis;
     delete this.canvas.dataset.inspectionLaserPhase;
   }
@@ -1250,6 +1254,30 @@ export class ThreeWorldRenderer {
     return {
       x: intersection.x + this.world.width / 2 - 0.5,
       y: intersection.z + this.world.height / 2 - 0.5,
+    };
+  }
+
+  unprojectApartmentInspectionLaser(
+    x: number,
+    y: number,
+    apartment: WorldObject,
+    measurableIds: ReadonlySet<string> | null,
+  ): ProjectedPoint | null {
+    if (!this.world || !apartment.geometry) return null;
+    this.resize();
+    this.camera.updateMatrixWorld();
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2((x / this.cssWidth) * 2 - 1, 1 - (y / this.cssHeight) * 2), this.camera);
+    const cellSize = Math.max(.01, finite(apartment.geometry.cellSizeMeters, .5));
+    const elevation = finite(apartment.elevation) + ISTARPARK_LASER_HEIGHT_METERS / cellSize;
+    const hitInfo = { obstacleId: '', kind: '' };
+    const intersection = laserPointerWorldPoint(raycaster, [this.structureRoot, this.propRoot], elevation, measurableIds, hitInfo);
+    this.canvas.dataset.inspectionLaserPointerSurface = hitInfo.obstacleId;
+    this.canvas.dataset.inspectionLaserPointerKind = hitInfo.kind || 'plane';
+    if (!intersection) return null;
+    return {
+      x: intersection.x + this.world.width / 2 - .5,
+      y: intersection.z + this.world.height / 2 - .5,
     };
   }
 
@@ -1440,6 +1468,7 @@ export class ThreeWorldRenderer {
     floor.position.y = 0.035;
     floor.receiveShadow = false;
     floor.userData.structureKind = 'apartment-floor';
+    floor.userData.laserFloor = true;
     this.structureRoot.add(floor);
 
     for (const roomValue of geometry.roomZones || []) {
@@ -1457,6 +1486,7 @@ export class ThreeWorldRenderer {
         }),
       );
       overlay.position.y = 0.052;
+      overlay.userData.laserFloor = true;
       overlay.receiveShadow = false;
       this.structureRoot.add(overlay);
     }
@@ -1487,6 +1517,8 @@ export class ThreeWorldRenderer {
       // 외부 지면에는 외벽 그림자만 투영한다. 주방 구조/가벽 그림자는 끈다.
       body.castShadow = false;
       body.receiveShadow = false;
+      body.userData.laserObstacleId = String(fixture.id || 'fixture');
+      body.userData.laserObstacleKind = 'fixture';
       this.structureRoot.add(body);
       const top = new THREE.Mesh(
         new THREE.BoxGeometry(Math.abs(x2 - x1) / cellSize + 0.06, topHeight, Math.abs(y2 - y1) / cellSize + 0.06),
@@ -1496,6 +1528,8 @@ export class ThreeWorldRenderer {
       top.rotation.y = fixturePlacement.worldYaw;
       top.castShadow = false;
       top.receiveShadow = false;
+      top.userData.laserObstacleId = String(fixture.id || 'fixture');
+      top.userData.laserObstacleKind = 'fixture';
       this.structureRoot.add(top);
     }
 
@@ -1521,6 +1555,8 @@ export class ThreeWorldRenderer {
       }));
       mesh.castShadow = false;
       mesh.receiveShadow = false;
+      mesh.userData.laserObstacleId = String(block.id || 'solid-block');
+      mesh.userData.laserObstacleKind = 'structure';
       this.structureRoot.add(mesh);
       const worldPolygon = polygon.map((point) => this.localPoint(object, point));
       this.structureOccluders.push({
@@ -1567,6 +1603,8 @@ export class ThreeWorldRenderer {
       if (castsShadow) exteriorShadowCasterCount += 1;
       // 실내 벽이 전역 shadow map을 다시 받으면 카메라 이동 시 shadow-acne가 번쩍인다.
       mesh.receiveShadow = false;
+      mesh.userData.laserObstacleId = String(segment.id || 'wall');
+      mesh.userData.laserObstacleKind = 'wall';
       this.structureRoot.add(mesh);
       this.structureOccluders.push({
         mesh,

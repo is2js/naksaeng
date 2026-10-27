@@ -1,6 +1,7 @@
 // @ts-nocheck
-// PVP RPG 검수맵과 동일한 130 mm 자동·2점 방향 레이저 실측 계산 계약.
+// Bunfirvil 130 mm 자동·2점 레이저: 렌더링된 실제 표면을 기준으로 접점과 거리를 계산한다.
 import { bundangEffectiveKitchenFixtures } from './bundang-option-layout';
+import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
 export type InspectionLaserAxis = "x" | "y";
 export type InspectionLaserPhase = "hover" | "pick-start" | "await-second" | "complete";
 export interface InspectionLaserSurfaceHit {
@@ -55,6 +56,7 @@ export interface InspectionLaserInput {
   axis?: InspectionLaserAxis;
   axisLock?: InspectionLaserAxis | null;
   geometry?: any;
+  apartment?: any;
   props?: any[] | null;
   assets?: any[];
   laserHeightMeters?: number;
@@ -63,10 +65,6 @@ export interface InspectionLaserInput {
 
 const EPSILON = 0.00001;
 export const ISTARPARK_LASER_HEIGHT_METERS = 0.13;
-const FINISH_CALIBRATION_MAX_SHRINK_METERS = 0.2;
-const FINISH_CALIBRATION_MAX_FACE_SHIFT_METERS = 0.15;
-const FINISH_CALIBRATION_ENDPOINT_TOLERANCE_METERS = 0.02;
-const finishCalibrationCache = new WeakMap();
 const KNOWN_PROP_DIMENSIONS = Object.freeze({
   "toilet-floor-mounted": [0.40, 0.70, 0.75],
   "vanity-basin-compact": [0.80, 0.50, 0.85],
@@ -138,10 +136,12 @@ export function istarparkLaserPointInPolygon(target: any = [], polygon: any = []
   return inside;
 }
 
-function wallPolygon(segment = {}) {
+function wallPolygon(segment = {}, laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS) {
   if (!Array.isArray(segment.a) || !Array.isArray(segment.b)) return [];
-  // Lintels and headers are overhead-only and must not close a clear doorway.
-  if (finite(segment.baseMeters) > 0.35) return [];
+  // Only geometry intersecting the laser plane can obstruct a measurement.
+  // This excludes lintels and other elevated or low wall segments without
+  // excluding a genuine low wall that crosses the laser height.
+  if (!rowCrossesLaserHeight(segment, laserHeightMeters)) return [];
   const start = point(segment.a);
   const end = point(segment.b);
   const dx = end[0] - start[0];
@@ -212,7 +212,7 @@ function rowCrossesLaserHeight(row = {}, laserHeightMeters = ISTARPARK_LASER_HEI
 
 function propIsMeasurable(prop = {}, assets = [], laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS) {
   const asset = propAsset(prop, assets);
-  const mountKind = String(prop.mountKind || prop.mountingKind || asset?.mountKind || asset?.mounting?.kind || "").toLowerCase();
+  const mountKind = String(prop.mountKind || prop.mountingKind || asset?.mountKind || asset?.mountingKind || asset?.mounting?.kind || "").toLowerCase();
   const role = `${prop.installationRole || ""} ${prop.fixtureRole || ""}`.toLowerCase();
   const explicitCollision = prop.collision ?? prop.collisionMode ?? asset?.collisionMode ?? asset?.collisionDefault;
   const identity = [
@@ -228,6 +228,7 @@ function propIsMeasurable(prop = {}, assets = [], laserHeightMeters = ISTARPARK_
   if (
     ["room-finish", "ceiling"].includes(mountKind)
     || role.includes("floor-finish")
+    || role.includes("ceiling-appliance")
     || /floor[-_ ]?finish|finish[-_ ]?floor|wide[-_ ]?plank[-_ ]?floor|porcelain[-_ ]?tile[-_ ]?floor/.test(identity)
   ) return false;
   if (String(explicitCollision || "").toLowerCase() === "visual-only") return false;
@@ -249,6 +250,7 @@ function obstacleLabel(kind = "") {
 
 export function istarparkLaserObstacles({
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS,
@@ -256,7 +258,7 @@ export function istarparkLaserObstacles({
   const measurementHeight = Math.max(0, finite(laserHeightMeters, ISTARPARK_LASER_HEIGHT_METERS));
   const rows = [];
   for (const wall of Array.isArray(geometry.wallSegments) ? geometry.wallSegments : []) {
-    const polygon = wallPolygon(wall);
+    const polygon = wallPolygon(wall, measurementHeight);
     if (polygon.length >= 3) rows.push({
       id: String(wall.id || "wall"),
       kind: "wall",
@@ -267,7 +269,9 @@ export function istarparkLaserObstacles({
   }
   for (const block of Array.isArray(geometry.solidBlocks) ? geometry.solidBlocks : []) {
     if (!rowCrossesLaserHeight(block, measurementHeight, finite(geometry.clearHeightMeters, 2.3))) continue;
-    const polygon = rowPolygon(block);
+    const polygon = apartment
+      ? apartmentSolidBlockVisualFootprint(apartment, block)
+      : rowPolygon(block);
     if (polygon.length < 3) continue;
     const role = `${block.structuralRole || ""} ${block.role || ""}`.toLowerCase();
     const kind = role.includes("service") ? "service-wall" : "structure";
@@ -430,15 +434,6 @@ function laserDimensionLimit({ geometry = {}, anchor = [], axis = "x" } = {}) {
     .sort((left, right) => left.score - right.score || left.span - right.span)[0] || null;
 }
 
-function dimensionBoundaryObstacle(limit = {}, side = "negative") {
-  return {
-    id: `dimension-boundary:${String(limit.id || "room")}:${side}`,
-    kind: "wall",
-    label: "벽",
-    dimensionBoundary: true,
-    dimensionAnnotationId: String(limit.id || ""),
-  };
-}
 function clearanceAroundOccupiedAnchor(groups = [], containingIndex = -1, along = 0) {
   const containing = groups[containingIndex];
   if (!containing) return null;
@@ -472,155 +467,32 @@ function clearanceAroundOccupiedAnchor(groups = [], containingIndex = -1, along 
   ))[0] || null;
 }
 
-function obstacleGroupsAtAxis(obstacles = [], axis = "x", crossCoordinate = 0, dimensionLimit = null) {
+function obstacleGroupsAtAxis(obstacles = [], axis = "x", crossCoordinate = 0) {
   const intervals = obstacles.flatMap((obstacle) => (
     polygonIntervalsAtAxis(obstacle.polygon, axis, crossCoordinate)
       .map(([start, end]) => ({ start, end, obstacle }))
   ));
-  const groups = mergedObstacleIntervals(intervals);
-  if (!dimensionLimit) return groups;
-  const negativeObstacle = dimensionBoundaryObstacle(dimensionLimit, "negative");
-  const positiveObstacle = dimensionBoundaryObstacle(dimensionLimit, "positive");
-  return [
-    ...groups,
-    {
-      start: dimensionLimit.minimum,
-      end: dimensionLimit.minimum,
-      startObstacle: negativeObstacle,
-      endObstacle: negativeObstacle,
-    },
-    {
-      start: dimensionLimit.maximum,
-      end: dimensionLimit.maximum,
-      startObstacle: positiveObstacle,
-      endObstacle: positiveObstacle,
-    },
-  ].sort((left, right) => left.start - right.start || left.end - right.end);
+  return mergedObstacleIntervals(intervals);
 }
 
 function intervalContainsMeasurementAnchor(interval = {}, along = 0) {
-  if (interval.startObstacle?.dimensionBoundary || interval.endObstacle?.dimensionBoundary) return false;
   return along >= interval.start - EPSILON && along <= interval.end + EPSILON;
 }
 
 function intervalIsNegativeContact(interval = {}, along = 0) {
-  return interval.end < along - EPSILON || (
-    interval.endObstacle?.dimensionBoundary
-    && String(interval.endObstacle.id || "").endsWith(":negative")
-    && Math.abs(interval.end - along) <= EPSILON
-  );
+  return interval.end < along - EPSILON;
 }
 
 function intervalIsPositiveContact(interval = {}, along = 0) {
-  return interval.start > along + EPSILON || (
-    interval.startObstacle?.dimensionBoundary
-    && String(interval.startObstacle.id || "").endsWith(":positive")
-    && Math.abs(interval.start - along) <= EPSILON
-  );
+  return interval.start > along + EPSILON;
 }
 
-function nearestRawClearance(groups = [], along = 0) {
-  const containingIndex = groups.findIndex((interval) => intervalContainsMeasurementAnchor(interval, along));
-  if (containingIndex >= 0) return null;
-  const negative = groups
-    .filter((interval) => intervalIsNegativeContact(interval, along))
-    .sort((left, right) => right.end - left.end)[0];
-  const positive = groups
-    .filter((interval) => intervalIsPositiveContact(interval, along))
-    .sort((left, right) => left.start - right.start)[0];
-  return negative && positive ? { negative, positive } : null;
-}
-
-function finishCalibrationKey(axis = "x", obstacleId = "", side = "negative") {
-  return `${axis}:${String(obstacleId || "")}:${side}`;
-}
-
-function median(values = []) {
-  const rows = values.filter(Number.isFinite).sort((left, right) => left - right);
-  if (!rows.length) return 0;
-  const middle = Math.floor(rows.length / 2);
-  return rows.length % 2 ? rows[middle] : (rows[middle - 1] + rows[middle]) / 2;
-}
-
-function istarparkFinishCalibration(geometry = {}, laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS) {
-  if (!geometry || typeof geometry !== "object") return new Map();
-  const cacheKey = finite(laserHeightMeters, ISTARPARK_LASER_HEIGHT_METERS).toFixed(4);
-  let geometryCache = finishCalibrationCache.get(geometry);
-  if (!geometryCache) {
-    geometryCache = new Map();
-    finishCalibrationCache.set(geometry, geometryCache);
-  }
-  if (geometryCache.has(cacheKey)) return geometryCache.get(cacheKey);
-
-  const samples = new Map();
-  const structuralObstacles = istarparkLaserObstacles({
-    geometry,
-    props: [],
-    laserHeightMeters,
-  });
-  for (const annotation of Array.isArray(geometry.dimensionAnnotations) ? geometry.dimensionAnnotations : []) {
-    if (!Array.isArray(annotation?.a) || !Array.isArray(annotation?.b)) continue;
-    const start = point(annotation.a);
-    const end = point(annotation.b);
-    const axis = Math.abs(end[0] - start[0]) >= Math.abs(end[1] - start[1]) ? "x" : "y";
-    const alongIndex = axis === "y" ? 1 : 0;
-    const crossIndex = alongIndex === 0 ? 1 : 0;
-    const authoredMinimum = Math.min(start[alongIndex], end[alongIndex]);
-    const authoredMaximum = Math.max(start[alongIndex], end[alongIndex]);
-    const authoredSpan = authoredMaximum - authoredMinimum;
-    const expectedSpan = finite(annotation.valueMeters, authoredSpan);
-    if (
-      expectedSpan <= EPSILON
-      || Math.abs(authoredSpan - expectedSpan) > 0.025
-    ) continue;
-    const anchor = [
-      (start[0] + end[0]) / 2,
-      (start[1] + end[1]) / 2,
-    ];
-    const along = anchor[alongIndex];
-    const cross = anchor[crossIndex];
-    const clearance = nearestRawClearance(
-      obstacleGroupsAtAxis(structuralObstacles, axis, cross),
-      along,
-    );
-    if (!clearance) continue;
-    const negativeObstacle = clearance.negative.endObstacle;
-    const positiveObstacle = clearance.positive.startObstacle;
-    if (!negativeObstacle || !positiveObstacle) continue;
-    const rawMinimum = clearance.negative.end;
-    const rawMaximum = clearance.positive.start;
-    const rawSpan = rawMaximum - rawMinimum;
-    const totalShrink = rawSpan - expectedSpan;
-    const negativeShift = authoredMinimum - rawMinimum;
-    const positiveShift = rawMaximum - authoredMaximum;
-    if (
-      totalShrink <= EPSILON
-      || totalShrink > FINISH_CALIBRATION_MAX_SHRINK_METERS
-      || Math.abs(negativeShift) > FINISH_CALIBRATION_MAX_FACE_SHIFT_METERS
-      || Math.abs(positiveShift) > FINISH_CALIBRATION_MAX_FACE_SHIFT_METERS
-      || Math.abs((negativeShift + positiveShift) - totalShrink)
-        > FINISH_CALIBRATION_ENDPOINT_TOLERANCE_METERS
-    ) continue;
-    for (const [key, value] of [
-      [finishCalibrationKey(axis, negativeObstacle.id, "negative"), negativeShift],
-      [finishCalibrationKey(axis, positiveObstacle.id, "positive"), positiveShift],
-    ]) {
-      const values = samples.get(key) || [];
-      values.push(value);
-      samples.set(key, values);
-    }
-  }
-  const calibration = new Map(
-    [...samples.entries()].map(([key, values]) => [key, median(values)]),
-  );
-  geometryCache.set(cacheKey, calibration);
-  return calibration;
-}
 
 export function measureIstarparkLaserGap({
   anchorPlanPoint = [],
   axis = "x",
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS,
@@ -642,10 +514,9 @@ export function measureIstarparkLaserGap({
     axis: normalizedAxis,
   });
   const groups = obstacleGroupsAtAxis(
-    istarparkLaserObstacles({ geometry, props, assets, laserHeightMeters: measurementHeight }),
+    istarparkLaserObstacles({ geometry, apartment, props, assets, laserHeightMeters: measurementHeight }),
     normalizedAxis,
     cross,
-    dimensionLimit,
   );
   const containingIndex = groups.findIndex((interval) => intervalContainsMeasurementAnchor(interval, along));
   const containing = groups[containingIndex];
@@ -673,20 +544,10 @@ export function measureIstarparkLaserGap({
   }
   const negativeObstacle = negative.endObstacle;
   const positiveObstacle = positive.startObstacle;
-  const calibration = istarparkFinishCalibration(geometry, measurementHeight);
-  const negativeShift = finite(calibration.get(
-    finishCalibrationKey(normalizedAxis, negativeObstacle.id, "negative"),
-  ));
-  const positiveShift = finite(calibration.get(
-    finishCalibrationKey(normalizedAxis, positiveObstacle.id, "positive"),
-  ));
   const rawNegativeCoordinate = negative.end;
   const rawPositiveCoordinate = positive.start;
-  const calibratedNegativeCoordinate = rawNegativeCoordinate + negativeShift;
-  const calibratedPositiveCoordinate = rawPositiveCoordinate - positiveShift;
-  const calibrationValid = calibratedPositiveCoordinate > calibratedNegativeCoordinate + EPSILON;
-  const negativeCoordinate = calibrationValid ? calibratedNegativeCoordinate : rawNegativeCoordinate;
-  const positiveCoordinate = calibrationValid ? calibratedPositiveCoordinate : rawPositiveCoordinate;
+  const negativeCoordinate = rawNegativeCoordinate;
+  const positiveCoordinate = rawPositiveCoordinate;
   const rawDistanceMeters = Math.max(0, rawPositiveCoordinate - rawNegativeCoordinate);
   const distanceMeters = Math.max(0, positiveCoordinate - negativeCoordinate);
   const displayAlong = snappedClearance ? (negativeCoordinate + positiveCoordinate) / 2 : along;
@@ -701,7 +562,8 @@ export function measureIstarparkLaserGap({
     snappedFromObstacle: snappedClearance ? containing.startObstacle : null,
     dimensionAnnotationId: String(dimensionLimit?.id || ""),
     dimensionAnnotationMm: dimensionLimit ? Math.round(dimensionLimit.annotationSpan * 1000) : null,
-    dimensionLimitMm: dimensionLimit ? Math.round(dimensionLimit.span * 1000) : null,
+    // The annotation is advisory, not a physical contact or a measurement cap.
+    dimensionLimitMm: null,
     laserHeightMeters: measurementHeight,
     negativeHit: {
       point: contactPoint(normalizedAxis, negativeCoordinate, cross),
@@ -717,11 +579,8 @@ export function measureIstarparkLaserGap({
     },
     rawDistanceMeters: Number(rawDistanceMeters.toFixed(6)),
     rawDistanceMm: Math.round(rawDistanceMeters * 1000),
-    finishCalibrationApplied: calibrationValid
-      && (Math.abs(negativeShift) > EPSILON || Math.abs(positiveShift) > EPSILON),
-    finishCalibrationMm: calibrationValid
-      ? Math.round((rawDistanceMeters - distanceMeters) * 1000)
-      : 0,
+    finishCalibrationApplied: false,
+    finishCalibrationMm: 0,
     distanceMeters: Number(distanceMeters.toFixed(6)),
     distanceMm,
     label: `${distanceMm}mm · ${negativeObstacle.label} ↔ ${positiveObstacle.label}`,
@@ -763,6 +622,7 @@ function laserSurfaceCandidates(obstacle = {}, candidate = [], axisLock = null) 
 export function snapIstarparkLaserPoint({
   candidatePlanPoint = [],
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   axisLock = null,
@@ -780,7 +640,7 @@ export function snapIstarparkLaserPoint({
     candidate[crossIndex] = reference[crossIndex];
   }
   const floor = Array.isArray(geometry.floorPolygon) ? geometry.floorPolygon.map(point) : [];
-  const obstacles = istarparkLaserObstacles({ geometry, props, assets, laserHeightMeters });
+  const obstacles = istarparkLaserObstacles({ geometry, apartment, props, assets, laserHeightMeters });
   const unlimitedSurfaceSearch = maxSnapDistanceMeters == null;
   const maximumSnapDistance = unlimitedSurfaceSearch
     ? Number.POSITIVE_INFINITY
@@ -914,91 +774,14 @@ export function istarparkLaserAxisTowardPointer({
   return Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
 }
 
-function directionalLaserCalibrationAxis(rayDirection = [], axisLock = null) {
-  if (axisLock === "x" || axisLock === "y") return axisLock;
-  const direction = point(rayDirection);
-  if (Math.abs(direction[1]) <= 0.00001) return "x";
-  if (Math.abs(direction[0]) <= 0.00001) return "y";
-  return null;
-}
 
-function directionalCalibrationContactMatches(hit = null, obstacleId = "") {
-  const hitId = String(hit?.obstacleId || "");
-  return hitId === String(obstacleId || "") || hitId.startsWith("dimension-boundary:");
-}
-
-function directionalLaserDirectionIsSurfaceTangent(startHit = null, startObstacle = null, direction = []) {
-  if (startHit?.valid !== true || !startObstacle?.polygon?.length) return false;
-  const surfacePoint = point(startHit.point);
-  const rayDirection = point(direction);
-  const segments = startObstacle.polygon.map((segmentStart, index) => {
-    const segmentEnd = startObstacle.polygon[(index + 1) % startObstacle.polygon.length];
-    const nearest = nearestPointOnSegment(surfacePoint, segmentStart, segmentEnd);
-    return {
-      start: point(segmentStart),
-      end: point(segmentEnd),
-      distance: Math.hypot(nearest[0] - surfacePoint[0], nearest[1] - surfacePoint[1]),
-    };
-  });
-  const nearestDistance = Math.min(...segments.map((segment) => segment.distance));
-  return segments.some((segment) => {
-    if (segment.distance > nearestDistance + 0.00001) return false;
-    const dx = segment.end[0] - segment.start[0];
-    const dy = segment.end[1] - segment.start[1];
-    const length = Math.hypot(dx, dy);
-    if (length <= EPSILON) return false;
-    return Math.abs(dx * rayDirection[1] - dy * rayDirection[0]) / length <= 0.00001;
-  });
-}
-
-function directionalLaserStartHit({
-  startHit = null,
-  startObstacle = null,
-  pointerPlanPoint = [],
-  axisLock = null,
-} = {}) {
-  if (startHit?.valid !== true || !startObstacle?.polygon?.length) return startHit;
-  if (!["wall", "service-wall"].includes(String(startObstacle.kind || ""))) return startHit;
-  const normalizedAxisLock = axisLock === "x" || axisLock === "y" ? axisLock : null;
-  const rawSourcePlanPoint = point(startHit.sourcePlanPoint || startHit.point);
-  const sourcePlanPoint = startObstacle.kind === "wall" && startObstacle.centerLine?.length === 2
-    ? nearestPointOnSegment(
-      rawSourcePlanPoint,
-      startObstacle.centerLine[0],
-      startObstacle.centerLine[1],
-    )
-    : rawSourcePlanPoint;
-  if (
-    startObstacle.kind !== "wall"
-    && !istarparkLaserPointInPolygon(sourcePlanPoint, startObstacle.polygon)
-  ) return startHit;
-  const direction = directionalLaserVector(sourcePlanPoint, pointerPlanPoint, normalizedAxisLock);
-  if (!direction) return startHit;
-  if (directionalLaserDirectionIsSurfaceTangent(startHit, startObstacle, direction)) return startHit;
-  const exits = [];
-  for (let index = 0; index < startObstacle.polygon.length; index += 1) {
-    const intersection = raySegmentIntersection(
-      sourcePlanPoint,
-      direction,
-      startObstacle.polygon[index],
-      startObstacle.polygon[(index + 1) % startObstacle.polygon.length],
-    );
-    if (intersection) exits.push(intersection);
-  }
-  const exit = exits.sort((left, right) => left.distance - right.distance)[0] || null;
-  if (!exit) return startHit;
-  return {
-    ...startHit,
-    point: exit.point.map((value) => Number(value.toFixed(6))),
-    directionalSurface: true,
-  };
-}
 
 export function measureIstarparkLaserDirectionalGap({
   startHit = null,
   startPlanPoint = [],
   pointerPlanPoint = [],
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   axisLock = null,
@@ -1010,6 +793,7 @@ export function measureIstarparkLaserDirectionalGap({
     : snapIstarparkLaserPoint({
       candidatePlanPoint: startPlanPoint,
       geometry,
+      apartment,
       props,
       assets,
       maxSnapDistanceMeters: null,
@@ -1027,6 +811,7 @@ export function measureIstarparkLaserDirectionalGap({
   const normalizedAxisLock = axisLock === "x" || axisLock === "y" ? axisLock : null;
   const obstacles = istarparkLaserObstacles({
     geometry,
+    apartment,
     props,
     assets,
     laserHeightMeters: measurementHeight,
@@ -1034,12 +819,9 @@ export function measureIstarparkLaserDirectionalGap({
   const startObstacle = obstacles.find((obstacle) => (
     String(obstacle.id || "") === String(resolvedStartHit.obstacleId || "")
   ));
-  const directionalStartHit = directionalLaserStartHit({
-    startHit: resolvedStartHit,
-    startObstacle,
-    pointerPlanPoint,
-    axisLock: normalizedAxisLock,
-  });
+  // Once the user clicks a face, it is a fixed measurement point. Do not
+  // silently move it to the opposite face when the pointer changes direction.
+  const directionalStartHit = resolvedStartHit;
   const rayDirection = directionalLaserVector(
     directionalStartHit.point,
     pointerPlanPoint,
@@ -1113,8 +895,8 @@ export function measureIstarparkLaserDirectionalGap({
       rayDirection,
     };
   }
-  let calibratedStartHit = directionalStartHit;
-  let endHit = {
+  const calibratedStartHit = directionalStartHit;
+  const endHit = {
     valid: true,
     point: contact.point.map((value) => Number(value.toFixed(6))),
     sourcePlanPoint: point(pointerPlanPoint),
@@ -1124,51 +906,7 @@ export function measureIstarparkLaserDirectionalGap({
     kind: String(contact.obstacle.kind || "structure"),
     label: String(contact.obstacle.label || obstacleLabel(contact.obstacle.kind)),
   };
-  let distanceMeters = rawDistanceMeters;
-  let alignedClearance = null;
-  const calibrationAxis = directionalLaserCalibrationAxis(rayDirection, normalizedAxisLock);
-  if (calibrationAxis) {
-    const rawMidpoint = [
-      (directionalStartHit.point[0] + endHit.point[0]) / 2,
-      (directionalStartHit.point[1] + endHit.point[1]) / 2,
-    ];
-    const automaticClearance = measureIstarparkLaserGap({
-      anchorPlanPoint: rawMidpoint,
-      axis: calibrationAxis,
-      geometry,
-      props,
-      assets,
-      laserHeightMeters: measurementHeight,
-    });
-    const alongIndex = calibrationAxis === "y" ? 1 : 0;
-    const forward = rayDirection[alongIndex] > 0;
-    const automaticStartHit = forward
-      ? automaticClearance?.negativeHit
-      : automaticClearance?.positiveHit;
-    const automaticEndHit = forward
-      ? automaticClearance?.positiveHit
-      : automaticClearance?.negativeHit;
-    if (
-      automaticClearance?.valid === true
-      && automaticClearance.distanceMeters >= 0.01 - EPSILON
-      && automaticClearance.distanceMeters <= rawDistanceMeters + EPSILON
-      && directionalCalibrationContactMatches(automaticStartHit, directionalStartHit.obstacleId)
-      && directionalCalibrationContactMatches(automaticEndHit, endHit.obstacleId)
-    ) {
-      calibratedStartHit = {
-        ...directionalStartHit,
-        point: point(automaticStartHit.point).map((value) => Number(value.toFixed(6))),
-        clearFinishCalibrated: true,
-      };
-      endHit = {
-        ...endHit,
-        point: point(automaticEndHit.point).map((value) => Number(value.toFixed(6))),
-        clearFinishCalibrated: true,
-      };
-      distanceMeters = Math.max(0, finite(automaticClearance.distanceMeters));
-      alignedClearance = automaticClearance;
-    }
-  }
+  const distanceMeters = rawDistanceMeters;
   const distanceMm = Math.round(distanceMeters * 1000);
   return {
     valid: true,
@@ -1189,9 +927,9 @@ export function measureIstarparkLaserDirectionalGap({
     rawDistanceMm: Math.round(rawDistanceMeters * 1000),
     finishCalibrationApplied: distanceMeters < rawDistanceMeters - EPSILON,
     finishCalibrationMm: Math.max(0, Math.round((rawDistanceMeters - distanceMeters) * 1000)),
-    dimensionAnnotationId: String(alignedClearance?.dimensionAnnotationId || ""),
-    dimensionAnnotationMm: alignedClearance?.dimensionAnnotationMm ?? null,
-    dimensionLimitMm: alignedClearance?.dimensionLimitMm ?? null,
+    dimensionAnnotationId: "",
+    dimensionAnnotationMm: null,
+    dimensionLimitMm: null,
     distanceMeters: Number(distanceMeters.toFixed(6)),
     distanceMm,
     label: `${distanceMm}mm · ${calibratedStartHit.label} ↔ ${endHit.label}`,
@@ -1203,6 +941,7 @@ export function measureIstarparkLaserFreePointPair({
   startPlanPoint = [],
   endPlanPoint = [],
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   axisLock = null,
@@ -1214,6 +953,7 @@ export function measureIstarparkLaserFreePointPair({
     : snapIstarparkLaserPoint({
       candidatePlanPoint: startPlanPoint,
       geometry,
+      apartment,
       props,
       assets,
       maxSnapDistanceMeters: null,
@@ -1229,22 +969,8 @@ export function measureIstarparkLaserFreePointPair({
     };
   }
   const normalizedAxisLock = axisLock === "x" || axisLock === "y" ? axisLock : null;
-  const obstacles = istarparkLaserObstacles({
-    geometry,
-    props,
-    assets,
-    laserHeightMeters: measurementHeight,
-  });
-  const startObstacle = obstacles.find((obstacle) => (
-    String(obstacle.id || "") === String(resolvedStartHit.obstacleId || "")
-  ));
   const rawEndPoint = point(endPlanPoint);
-  const directionalStartHit = directionalLaserStartHit({
-    startHit: resolvedStartHit,
-    startObstacle,
-    pointerPlanPoint: rawEndPoint,
-    axisLock: normalizedAxisLock,
-  });
+  const directionalStartHit = resolvedStartHit;
   const freeEndPoint = normalizedAxisLock === "x"
     ? [rawEndPoint[0], directionalStartHit.point[1]]
     : normalizedAxisLock === "y"
@@ -1298,6 +1024,7 @@ export function measureIstarparkLaserPointPair({
   startPlanPoint = [],
   endPlanPoint = [],
   geometry = {},
+  apartment = null,
   props = null,
   assets = [],
   axisLock = null,
@@ -1308,6 +1035,7 @@ export function measureIstarparkLaserPointPair({
   const startHit = snapIstarparkLaserPoint({
     candidatePlanPoint: startPlanPoint,
     geometry,
+    apartment,
     props,
     assets,
     maxSnapDistanceMeters,
@@ -1319,6 +1047,7 @@ export function measureIstarparkLaserPointPair({
   const endHit = snapIstarparkLaserPoint({
     candidatePlanPoint: endPlanPoint,
     geometry,
+    apartment,
     props,
     assets,
     axisLock,

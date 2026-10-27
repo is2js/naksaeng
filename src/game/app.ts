@@ -46,6 +46,7 @@ import {
 } from './interior-placement';
 import {
   istarparkLaserAxisTowardPointer,
+  istarparkLaserObstacles,
   measureIstarparkLaserDirectionalGap,
   measureIstarparkLaserFreePointPair,
   measureIstarparkLaserGap,
@@ -1367,6 +1368,7 @@ export class ShowcaseApp {
     this.inspectionLaser.secondPlanPoint = null;
     this.inspectionLaser.firstHit = null;
     this.inspectionLaser.startGhostHit = null;
+    delete this.get<HTMLCanvasElement>('#three-world-canvas').dataset.inspectionLaserStartPoint;
     this.get<HTMLElement>('#game-stage').dataset.istarparkLaserActive = 'true';
     this.renderInspectionLaserHud();
   }
@@ -1501,13 +1503,27 @@ export class ShowcaseApp {
     const apartment = this.activeApartment();
     const screenPoint = this.screenPoint(event.clientX, event.clientY);
     if (!apartment?.geometry || !screenPoint || !this.threeRenderer) return null;
-    const worldPoint = this.threeRenderer.unproject(screenPoint.x, screenPoint.y);
+    const worldPoint = this.inspectionLaserPointerWorldPoint(apartment, screenPoint);
     if (!worldPoint) return null;
     return {
       apartment,
       screenPoint,
       planPoint: apartmentWorldPointToLocalMeters(apartment, worldPoint),
     };
+  }
+
+  private inspectionLaserPointerWorldPoint(apartment: WorldObject, screenPoint: { x: number; y: number }): { x: number; y: number } | null {
+    if (!apartment.geometry || !this.threeRenderer) return null;
+    const surfaceIds = this.inspectionLaser.phase === 'hover' ? null : new Set<string>(
+      istarparkLaserObstacles({
+        apartment,
+        geometry: apartment.geometry,
+        props: this.threeRenderer.getRenderedProps(),
+        assets: this.interiorAssets,
+      }).map((obstacle) => String(obstacle.id || '')),
+    );
+    const world = this.threeRenderer.unprojectApartmentInspectionLaser(screenPoint.x, screenPoint.y, apartment, surfaceIds);
+    return world;
   }
 
   private renderInspectionLaserFirstPoint(ghost = false): boolean {
@@ -1536,6 +1552,7 @@ export class ShowcaseApp {
     const measurement = (this.inspectionLaser.lineSnap
       ? measureIstarparkLaserDirectionalGap
       : measureIstarparkLaserFreePointPair)({
+      apartment,
       startHit: this.inspectionLaser.firstHit,
       startPlanPoint: firstPlanPoint,
       ...(this.inspectionLaser.lineSnap
@@ -1552,7 +1569,6 @@ export class ShowcaseApp {
       assets: this.interiorAssets,
     }) as InspectionLaserMeasurement;
     this.inspectionLaser.measurement = measurement;
-    if (measurement.startHit?.valid) this.inspectionLaser.firstHit = measurement.startHit;
     if (measurement.valid) this.threeRenderer.setApartmentInspectionLaserFrame(apartment, measurement);
     else this.renderInspectionLaserFirstPoint();
     this.renderInspectionLaserHud();
@@ -1578,6 +1594,7 @@ export class ShowcaseApp {
       return true;
     }
     const firstHit = snapIstarparkLaserPoint({
+      apartment: context.apartment,
       candidatePlanPoint: context.planPoint,
       geometry: context.apartment.geometry,
       props: this.threeRenderer?.getRenderedProps() || [],
@@ -1599,6 +1616,7 @@ export class ShowcaseApp {
     this.inspectionLaser.secondPlanPoint = null;
     this.inspectionLaser.secondPointAxisLock = null;
     this.inspectionLaser.firstHit = firstHit;
+    this.get<HTMLCanvasElement>('#three-world-canvas').dataset.inspectionLaserStartPoint = JSON.stringify(firstHit.point);
     this.inspectionLaser.startGhostHit = null;
     this.inspectionLaser.measurement = null;
     this.renderInspectionLaserFirstPoint();
@@ -1737,7 +1755,7 @@ export class ShowcaseApp {
       this.renderInspectionLaserHud();
       return;
     }
-    const worldPoint = this.threeRenderer.unproject(screenPoint.x, screenPoint.y);
+    const worldPoint = this.inspectionLaserPointerWorldPoint(apartment, screenPoint);
     const anchorPlanPoint = worldPoint ? apartmentWorldPointToLocalMeters(apartment, worldPoint) : null;
     const props = this.threeRenderer.getRenderedProps();
     let measurement: InspectionLaserMeasurement = {
@@ -1747,6 +1765,7 @@ export class ShowcaseApp {
     };
     if (anchorPlanPoint && this.inspectionLaser.phase === 'pick-start') {
       const startGhostHit = snapIstarparkLaserPoint({
+        apartment,
         candidatePlanPoint: anchorPlanPoint,
         geometry: apartment.geometry,
         props,
@@ -1766,6 +1785,7 @@ export class ShowcaseApp {
       measurement = (this.inspectionLaser.lineSnap
         ? measureIstarparkLaserDirectionalGap
         : measureIstarparkLaserFreePointPair)({
+        apartment,
         startHit: this.inspectionLaser.firstHit,
         startPlanPoint: this.inspectionLaser.firstPlanPoint,
         ...(this.inspectionLaser.lineSnap
@@ -1781,9 +1801,9 @@ export class ShowcaseApp {
         props,
         assets: this.interiorAssets,
       }) as InspectionLaserMeasurement;
-      if (measurement.startHit?.valid) this.inspectionLaser.firstHit = measurement.startHit;
     } else if (anchorPlanPoint) {
       measurement = measureIstarparkLaserGap({
+        apartment,
         anchorPlanPoint,
         axis: this.inspectionLaser.axis,
         geometry: apartment.geometry,

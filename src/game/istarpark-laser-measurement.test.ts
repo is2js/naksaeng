@@ -91,7 +91,7 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(withFinish.anchorSnapped).toBe(false);
   });
 
-  it('평면도 마감 치수보다 크게 표시하지 않고 가구가 막은 나머지 순수 폭만 계산한다', () => {
+  it('도면 치수로 벽면 접점을 가상 이동하지 않고 가구부터 실제 벽면까지 측정한다', () => {
     const result = measureIstarparkLaserGap({
       anchorPlanPoint: [2.5, 1.5],
       axis: 'x',
@@ -101,8 +101,8 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(result).toMatchObject({
       valid: true,
       rawDistanceMm: 2400,
-      distanceMm: 2300,
-      finishCalibrationMm: 100,
+      distanceMm: 2400,
+      finishCalibrationMm: 0,
       negativeHit: { kind: 'furniture' },
       positiveHit: { kind: 'wall' },
     });
@@ -123,7 +123,7 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(result.distanceMm).toBeLessThanOrEqual(3600);
   });
 
-  it('같은 공간·축에서 가장 가까운 마루 실측표기를 레이저 최대값으로 제한한다', () => {
+  it('마루 치수 표기는 참고만 하고 실존하지 않는 가상 벽 접점을 만들지 않는다', () => {
     const result = measureIstarparkLaserGap({
       anchorPlanPoint: [2, 1.5],
       axis: 'x',
@@ -131,11 +131,59 @@ describe('이스타파크 레이저 실측 계약', () => {
     });
     expect(result).toMatchObject({
       valid: true,
-      rawDistanceMm: 3600,
-      distanceMm: 3600,
+      rawDistanceMm: 3800,
+      distanceMm: 3800,
       dimensionAnnotationId: 'living-width',
-      dimensionLimitMm: 3600,
+      dimensionLimitMm: null,
     });
+  });
+
+  it('열린 구간의 도면 치수 끝에서 잘리지 않고 실제 반대 벽까지 잰다', () => {
+    const geometry = {
+      ...roughRoomCappedByFloorLabel,
+      dimensionAnnotations: [{ id: 'open-room-width', roomId: 'living', valueMeters: 2,
+        a: [.2, 1.5], b: [2.2, 1.5] }],
+    };
+    const result = measureIstarparkLaserGap({ anchorPlanPoint: [1.5, 1.5], axis: 'x', geometry });
+    expect(result).toMatchObject({
+      valid: true, distanceMm: 3800, dimensionAnnotationId: 'open-room-width',
+      negativeHit: { obstacleId: 'west', point: [.1, 1.5] },
+      positiveHit: { obstacleId: 'east', point: [3.9, 1.5] },
+    });
+  });
+
+  it('레이저 높이 위·아래의 벽 조각과 천장 설비는 가상의 중간 접점이 아니다', () => {
+    const geometry = { ...room, wallSegments: [...room.wallSegments,
+      { id: 'raised-wall', a: [1, 0], b: [1, 3], baseMeters: .2, heightMeters: 1 },
+      { id: 'low-edge', a: [2, 0], b: [2, 3], baseMeters: 0, heightMeters: .1 },
+    ] };
+    const props = [
+      { id: 'ceiling-unit', assetId: 'ac', positionMeters: [1.5, 1.5], dimensionsMeters: [1, 1, 1] },
+      { id: 'ceiling-role', assetId: 'fan', installationRole: 'ceiling-appliance', positionMeters: [2.5, 1.5], dimensionsMeters: [1, 1, 1] },
+    ];
+    const assets = [{ assetId: 'ac', mountingKind: 'ceiling' }];
+    const result = measureIstarparkLaserGap({ anchorPlanPoint: [1.5, 1.5], axis: 'x', geometry, props, assets });
+    expect(result).toMatchObject({ valid: true, distanceMm: 3800,
+      negativeHit: { obstacleId: 'west' }, positiveHit: { obstacleId: 'east' } });
+    const lowWall = { ...geometry, wallSegments: [...geometry.wallSegments,
+      { id: 'low-wall', a: [3, 0], b: [3, 3], baseMeters: 0, heightMeters: .2, thicknessMeters: .1 },
+    ] };
+    expect(measureIstarparkLaserGap({ anchorPlanPoint: [1.5, 1.5], axis: 'x', geometry: lowWall, props, assets }))
+      .toMatchObject({ valid: true, positiveHit: { obstacleId: 'low-wall', point: [2.95, 1.5] } });
+  });
+
+  it('59A 설비벽의 렌더링 footprint 밖 원본 영역은 보이지 않는 레이저 장애물이 아니다', () => {
+    const geometry = {
+      ...room,
+      roomZones: [{ id: 'bathroom-2', boundsMeters: [1, 1, 3, 3] }],
+      solidBlocks: [{ id: 'bathroom-2-north-service-block', structuralRole: 'service-wall',
+        boundsMeters: [.5, .5, 3.5, 1.5], heightMeters: 2.3 }],
+    };
+    const apartment = { unitTypeId: '59A', geometry };
+    const obstacle = istarparkLaserObstacles({ geometry, apartment }).find((row: { id: string }) => row.id === 'bathroom-2-north-service-block');
+    expect(obstacle.polygon).toEqual([[1, 1], [3, 1], [3, 1.5], [1, 1.5]]);
+    const hit = snapIstarparkLaserPoint({ candidatePlanPoint: [3.4, 1.25], geometry, apartment, maxSnapDistanceMeters: .1, requireSurface: true });
+    expect(hit.valid).toBe(false);
   });
 
   it('2점 실측은 마우스 좌표가 아니라 가리킨 방향에서 처음 만난 면까지 잰다', () => {
@@ -242,8 +290,8 @@ describe('이스타파크 레이저 실측 계약', () => {
     })).toMatchObject({
       valid: true,
       axis: 'x',
-      distanceMm: 1900,
-      startHit: { point: [-.1, 1.5] },
+      distanceMm: 2100,
+      startHit: { point: [.1, 1.5] },
       endHit: {
         point: [-2, 1.5],
         sourcePlanPoint: [-2, .5],
@@ -338,7 +386,7 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(appSource).toMatch(/!this\.inspectionLaser\.lineSnap && this\.inspectionLaser\.phase !== 'hover'/);
   });
 
-  it('내부벽 시작점은 커서가 향한 공간 쪽 벽 두께를 제외한다', () => {
+  it('내부벽의 확정된 시작면을 고정하고 반대 방향은 벽 관통을 막는다', () => {
     const splitRoom = {
       floorPolygon: [[0, 0], [6, 0], [6, 4], [0, 4]],
       wallSegments: [
@@ -370,14 +418,15 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(left).toMatchObject({
       valid: true,
       distanceMm: 2800,
-      startHit: { point: [2.9, 2], directionalSurface: true },
+      startHit: { point: [2.9, 2] },
       endHit: { point: [.1, 2] },
     });
-    expect(right).toMatchObject({
-      valid: true,
-      distanceMm: 2800,
-      startHit: { point: [3.1, 2], directionalSurface: true },
-      endHit: { point: [5.9, 2] },
+    expect(right).toMatchObject({ valid: false, reason: 'blocked-start-direction', startHit: { point: [2.9, 2] } });
+    const rightStart = snapIstarparkLaserPoint({ candidatePlanPoint: [3.1, 2], geometry: splitRoom,
+      maxSnapDistanceMeters: null, requireSurface: true });
+    expect(measureIstarparkLaserDirectionalGap({ startHit: rightStart, pointerPlanPoint: [5, 2],
+      axisLock: 'x', geometry: splitRoom })).toMatchObject({
+      valid: true, distanceMm: 2800, startHit: { point: [3.1, 2] }, endHit: { point: [5.9, 2] },
     });
   });
 
@@ -420,17 +469,19 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(startHit.obstacleId).toBe('bathroom-1-south');
 
     for (const expected of [
-      { pointerPlanPoint: [7.4, 7], distanceMm: 3000 },
-      { pointerPlanPoint: [7.4, 3], distanceMm: 1240 },
+      { pointerPlanPoint: [7.4, 7], distanceMm: 3175, start: startHit },
+      { pointerPlanPoint: [7.4, 3], distanceMm: 1240, start: snapIstarparkLaserPoint({
+        candidatePlanPoint: [7.4, 4.7], geometry, props, maxSnapDistanceMeters: null, requireSurface: true,
+      }) },
     ]) {
       const axisLock = istarparkLaserAxisTowardPointer({
-        startPlanPoint: startHit.sourcePlanPoint,
+        startPlanPoint: expected.start.point,
         pointerPlanPoint: expected.pointerPlanPoint,
         fallbackAxis: 'x',
       });
       expect(axisLock).toBe('y');
       expect(measureIstarparkLaserDirectionalGap({
-        startHit,
+        startHit: expected.start,
         pointerPlanPoint: expected.pointerPlanPoint,
         axisLock,
         geometry,
@@ -477,10 +528,10 @@ describe('이스타파크 레이저 실측 계약', () => {
       axisLock: snappedAxis,
       geometry,
       props,
-    })).toMatchObject({ valid: true, axis: 'y', distanceMm: 3000 });
+    })).toMatchObject({ valid: true, axis: 'y', distanceMm: 3175 });
   });
 
-  it('축 정렬 2점 실측도 자동 실측의 마감 보정값을 재사용한다', () => {
+  it('축 정렬 2점 실측도 가상 보정 없이 실제 벽면 사이를 측정한다', () => {
     const startHit = snapIstarparkLaserPoint({
       candidatePlanPoint: [0, 1.5],
       geometry: finishCalibratedRoom,
@@ -496,10 +547,10 @@ describe('이스타파크 레이저 실측 계약', () => {
     expect(result).toMatchObject({
       valid: true,
       rawDistanceMm: 3800,
-      finishCalibrationMm: 200,
-      distanceMm: 3600,
-      startHit: { point: [.2, 1.5] },
-      endHit: { point: [3.8, 1.5] },
+      finishCalibrationMm: 0,
+      distanceMm: 3800,
+      startHit: { point: [.1, 1.5] },
+      endHit: { point: [3.9, 1.5] },
     });
   });
 

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { RPG_CAMERA_BASE_ZOOM } from './camera';
-import { CeilingActorMask, isCeilingActorOccluder } from './ceiling-actor-mask';
+import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -1625,6 +1625,15 @@ export class ThreeWorldRenderer {
       : null;
     const camera: NumericPoint = [this.camera.position.x, this.camera.position.z];
     const focus: NumericPoint | null = focusWorld ? [focusWorld.x, focusWorld.z] : null;
+    let fadedCeilingCount = 0;
+    let ceilingOpacity = 1;
+    for (const appliance of this.propRoot.children) {
+      if (!appliance.userData.ceilingFadeState) continue;
+      if (updateCeilingFade(appliance, focusWorld, elapsed)) fadedCeilingCount += 1;
+      ceilingOpacity = Math.min(ceilingOpacity, Number(appliance.userData.ceilingFadeOpacity ?? 1));
+    }
+    this.canvas.dataset.ceilingFadedCount = String(fadedCeilingCount);
+    this.canvas.dataset.ceilingFadeOpacity = ceilingOpacity.toFixed(3);
     let fadedCount = 0;
     const occluders = [...this.structureOccluders, ...this.finishOccluders];
     for (const entry of occluders) {
@@ -1817,7 +1826,9 @@ export class ThreeWorldRenderer {
     group.renderOrder = mountingKind === 'room-finish' ? 3.04 : 3.1;
     group.userData.editorPropId = String(prop.id || '');
     group.userData.ceilingActorOccluder = isCeilingActorOccluder(mountingKind, prop.installationRole);
+    group.userData.ceilingAssetId = assetId;
     this.propRoot.add(group);
+    if (group.userData.ceilingActorOccluder && isFadeableCeilingAppliance(assetId, String(prop.sourceOptionId || ''))) prepareCeilingFade(group);
     if (group.userData.ceilingActorOccluder) this.ceilingMaskRevision++;
     this.registerFinishOccluders(object, prop, group);
     this.applyEditorGhostHiddenState();

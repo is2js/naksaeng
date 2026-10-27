@@ -79,3 +79,65 @@ test('air conditioner and ventilation mask only their projected parts and clear 
     await expect(page.locator('#actor-layer')).not.toHaveAttribute('style', /mask:/);
   }
 });
+
+test('ceiling appliances fade near the player and return to opaque when the player moves away', async ({ page, context }) => {
+  test.setTimeout(240_000);
+  await context.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
+    schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'operator', authRevision: 2, scope: 'playground', nickname: '테스트',
+  })));
+  const appliances = [
+    { option: 'system-ac-2-general', asset: 'ceiling-cassette-air-conditioner' },
+    { option: 'air-planner-ceiling-vent', asset: 'air-planner-ceiling-vent' },
+    { option: 'bathroom-combination-ventilator', asset: 'bunfirvil-bathroom-combination-ventilator-rounded' },
+  ];
+  const stage = page.locator('#game-stage');
+  const canvas = page.locator('#three-world-canvas');
+  const layer = page.locator('#actor-layer');
+  await page.goto(`./?map=${map}&variant=A`);
+  for (const { option, asset } of appliances) {
+    await page.evaluate(({ mapId, optionId }) => localStorage.setItem(`bunfirvil:review:v1:${mapId}`, JSON.stringify({ selectedOptionIds: [optionId] })), { mapId: map, optionId: option });
+    await page.reload();
+    await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 25_000 });
+    const polygons = page.locator(`polygon[data-ceiling-asset-id="${asset}"][data-ground-x][data-ground-y]`);
+    await expect(polygons.first()).toBeAttached({ timeout: 20_000 });
+    const propId = await polygons.first().getAttribute('data-ceiling-prop-id');
+    expect(propId).toBeTruthy();
+    const polygon = page.locator(`polygon[data-ceiling-prop-id="${propId}"]`).first();
+    const teleport = async (x: number, y: number): Promise<void> => {
+      await stage.evaluate((element, point) => {
+        const bounds = element.getBoundingClientRect();
+        element.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, pointerType: 'mouse', button: 1, buttons: 4,
+          clientX: bounds.left + point.x, clientY: bounds.top + point.y,
+        }));
+      }, { x, y });
+      await page.waitForTimeout(2_100);
+    };
+    await stage.evaluate((element, id) => {
+      const target = document.querySelector<SVGPolygonElement>(`polygon[data-ceiling-prop-id="${id}"]`);
+      if (!target) throw new Error('천장 설비가 화면에 없습니다.');
+      const bounds = element.getBoundingClientRect();
+      element.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true, pointerType: 'mouse', button: 1, buttons: 4,
+        clientX: bounds.left + Number(target.dataset.groundX), clientY: bounds.top + Number(target.dataset.groundY),
+      }));
+    }, propId);
+    await page.waitForTimeout(2_100);
+    await expect.poll(async () => Number(await polygon.getAttribute('data-ceiling-opacity')), { timeout: 10_000 }).toBeLessThan(0.8);
+    await expect.poll(async () => Number(await canvas.getAttribute('data-ceiling-faded-count'))).toBeGreaterThan(0);
+    const fadedFill = await polygon.getAttribute('fill');
+    expect(fadedFill).toMatch(/^rgb\((?!0,0,0)/);
+    const box = await stage.boundingBox();
+    expect(box).not.toBeNull();
+    for (const [x, y] of [[0.5, 0.7], [0.3, 0.6], [0.7, 0.6], [0.5, 0.4]]) {
+      if (Number(await polygon.getAttribute('data-ceiling-opacity')) > .99) break;
+      await teleport(box!.width * x, box!.height * y);
+    }
+    await expect.poll(async () => Number(await polygon.getAttribute('data-ceiling-opacity')), { timeout: 10_000 }).toBeGreaterThan(.99);
+    await expect(polygon).toHaveAttribute('fill', 'rgb(0,0,0)');
+  }
+  await page.evaluate((mapId) => localStorage.setItem(`bunfirvil:review:v1:${mapId}`, JSON.stringify({ selectedOptionIds: [] })), map);
+  await page.reload();
+  await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 25_000 });
+  await expect(layer).not.toHaveAttribute('data-ceiling-mask-count');
+});

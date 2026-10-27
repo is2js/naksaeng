@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { ceilingMaskHull, ceilingMeshBounds, isCeilingActorOccluder } from './ceiling-actor-mask';
+import { ceilingApplianceIsNear, ceilingMaskHull, ceilingMeshBounds, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 
 describe('ceiling appliance actor occlusion', () => {
   it('projects a compact outer outline rather than cutting a rectangular hole around the screen', () => {
@@ -31,5 +31,43 @@ describe('ceiling appliance actor occlusion', () => {
     const firstZ = parts[0].corners.map((corner) => corner.z);
     const secondZ = parts[1].corners.map((corner) => corner.z);
     expect(Math.min(...firstZ)).toBeGreaterThan(Math.max(...secondZ));
+  });
+
+  it('fades only air conditioners and ventilators, not ceiling lights', () => {
+    for (const id of ['ceiling-cassette-air-conditioner', 'air-planner-ceiling-vent', 'bunfirvil-bathroom-combination-ventilator-rounded']) {
+      expect(isFadeableCeilingAppliance(id)).toBe(true);
+    }
+    expect(isFadeableCeilingAppliance('ceiling-smart-downlight')).toBe(false);
+    const bounds = new THREE.Box3(new THREE.Vector3(0, 4, 0), new THREE.Vector3(1, 5, 1));
+    expect(ceilingApplianceIsNear(bounds, new THREE.Vector3(1.8, 0, .5))).toBe(true);
+    expect(ceilingApplianceIsNear(bounds, new THREE.Vector3(2, 0, .5))).toBe(false);
+    expect(ceilingApplianceIsNear(bounds, null)).toBe(false);
+  });
+
+  it('fades groups independently and restores their original material and shadow settings', () => {
+    const source = new THREE.MeshBasicMaterial({ opacity: .6, transparent: true, depthWrite: false });
+    const first = new THREE.Group();
+    const second = new THREE.Group();
+    const firstMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), source);
+    const secondMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), source);
+    firstMesh.castShadow = true;
+    second.position.x = 8;
+    first.add(firstMesh);
+    second.add(secondMesh);
+    prepareCeilingFade(first);
+    prepareCeilingFade(second);
+    for (let i = 0; i < 80; i++) {
+      expect(updateCeilingFade(first, new THREE.Vector3(0, 0, 0), 16)).toBe(true);
+      expect(updateCeilingFade(second, new THREE.Vector3(0, 0, 0), 16)).toBe(false);
+    }
+    expect(firstMesh.material.opacity).toBeCloseTo(.6 * .28, 3);
+    expect(source.opacity).toBe(.6);
+    expect(firstMesh.castShadow).toBe(false);
+    expect(secondMesh.material.opacity).toBe(.6);
+    for (let i = 0; i < 120; i++) updateCeilingFade(first, null, 16);
+    expect(firstMesh.material.opacity).toBe(.6);
+    expect(firstMesh.material.transparent).toBe(true);
+    expect(firstMesh.material.depthWrite).toBe(false);
+    expect(firstMesh.castShadow).toBe(true);
   });
 });

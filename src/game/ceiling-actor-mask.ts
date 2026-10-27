@@ -3,6 +3,73 @@ import * as THREE from 'three';
 type Point = { x: number; y: number };
 type CeilingMeshBounds = { mesh: THREE.Mesh; corners: THREE.Vector3[] };
 
+type OriginalMaterial = { material: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean };
+type CeilingFadeState = { bounds: THREE.Box3; current: number; materials: OriginalMaterial[]; shadows: Array<{ mesh: THREE.Mesh; castShadow: boolean }> };
+
+/** Only the requested ceiling equipment fades; ceiling lights keep their normal appearance. */
+export function isFadeableCeilingAppliance(assetId: string, sourceOptionId = ''): boolean {
+  return assetId === 'ceiling-cassette-air-conditioner'
+    || assetId === 'air-planner-ceiling-vent'
+    || assetId === 'bunfirvil-bathroom-combination-ventilator-rounded'
+    || /^system-ac-\d+-(general|premium)$/.test(sourceOptionId);
+}
+
+/** Distance to the footprint, measured in world/cell units and independent of height. */
+export function ceilingApplianceIsNear(bounds: THREE.Box3, focus: THREE.Vector3 | null, margin = 0.9): boolean {
+  if (!focus || bounds.isEmpty()) return false;
+  const dx = Math.max(bounds.min.x - focus.x, 0, focus.x - bounds.max.x);
+  const dz = Math.max(bounds.min.z - focus.z, 0, focus.z - bounds.max.z);
+  return Math.hypot(dx, dz) <= margin;
+}
+
+/** Capture independently owned materials and baseline state once, before animation begins. */
+export function prepareCeilingFade(group: THREE.Object3D): void {
+  const copies = new Map<THREE.Material, THREE.Material>();
+  const shadows: CeilingFadeState['shadows'] = [];
+  group.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const copy = (source: THREE.Material): THREE.Material => {
+      if (!copies.has(source)) copies.set(source, source.clone());
+      return copies.get(source)!;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(copy) : copy(mesh.material);
+    shadows.push({ mesh, castShadow: mesh.castShadow });
+  });
+  // Other objects may share a source material, so never dispose it here. These isolated
+  // copies are disposed with this group; unshared source materials are collected normally.
+  group.updateWorldMatrix(true, true);
+  const materials = [...copies.values()].map((material) => ({
+    material, opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite,
+  }));
+  group.userData.ceilingFadeState = { bounds: new THREE.Box3().setFromObject(group), current: 1, materials, shadows } satisfies CeilingFadeState;
+  group.userData.ceilingFadeOpacity = 1;
+}
+
+/** Animate each appliance independently and restore its exact original material policy. */
+export function updateCeilingFade(group: THREE.Object3D, focus: THREE.Vector3 | null, elapsed: number): boolean {
+  const state = group.userData.ceilingFadeState as CeilingFadeState | undefined;
+  if (!state) return false;
+  const near = group.visible && ceilingApplianceIsNear(state.bounds, focus);
+  const target = near ? 0.28 : 1;
+  const duration = target < state.current ? 160 : 240;
+  state.current += (target - state.current) * Math.min(1, Math.max(0, elapsed) / duration);
+  if (Math.abs(state.current - target) < 0.004) state.current = target;
+  for (const original of state.materials) {
+    const material = original.material;
+    const transparent = original.transparent || state.current < 0.995;
+    if (material.transparent !== transparent) {
+      material.transparent = transparent;
+      material.needsUpdate = true;
+    }
+    material.opacity = original.opacity * state.current;
+    material.depthWrite = state.current >= 0.7 ? original.depthWrite : false;
+  }
+  for (const { mesh, castShadow } of state.shadows) mesh.castShadow = castShadow && state.current >= 0.7;
+  group.userData.ceilingFadeOpacity = state.current;
+  return near;
+}
+
 /** Convex outline of the projected corners of one ceiling appliance. */
 export function ceilingMaskHull(points: readonly Point[]): Point[] {
   const ordered = points.filter(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))
@@ -109,10 +176,10 @@ export class CeilingActorMask {
         parts = ceilingMeshBounds(appliance);
         appliance.userData.ceilingMeshBounds = parts;
       }
-      return parts.filter(({ mesh }) => isVisible(mesh, appliance));
+      return parts.filter(({ mesh }) => isVisible(mesh, appliance)).map((part) => ({ ...part, appliance }));
     });
     const signature = [revision, width, height, ...camera.matrixWorldInverse.elements, ...camera.projectionMatrix.elements,
-      ...meshes.map(({ mesh }) => mesh.uuid)].join(',');
+      ...meshes.map(({ mesh, appliance }) => `${mesh.uuid}:${Number(appliance.userData.ceilingFadeOpacity ?? 1).toFixed(3)}`)].join(',');
     if (signature === this.signature) return;
     this.signature = signature;
     this.mask.replaceChildren(this.background);
@@ -124,7 +191,7 @@ export class CeilingActorMask {
     }
     const ns = 'http://www.w3.org/2000/svg';
     let count = 0;
-    for (const { corners } of meshes) {
+    for (const { corners, appliance } of meshes) {
       const hull = ceilingMaskHull(corners.map((corner) => {
         const projected = corner.clone().project(camera);
         return { x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2 };
@@ -132,7 +199,20 @@ export class CeilingActorMask {
       if (!hull.length || hull.every((p) => p.x < 0) || hull.every((p) => p.x > width)
         || hull.every((p) => p.y < 0) || hull.every((p) => p.y > height)) continue;
       const polygon = document.createElementNS(ns, 'polygon');
-      polygon.setAttribute('fill', 'black');
+      const opacity = Math.max(0, Math.min(1, Number(appliance.userData.ceilingFadeOpacity ?? 1)));
+      const gray = Math.round((1 - opacity) * 255);
+      polygon.setAttribute('fill', `rgb(${gray},${gray},${gray})`);
+      polygon.dataset.ceilingAssetId = String(appliance.userData.ceilingAssetId || '');
+      polygon.dataset.ceilingPropId = String(appliance.userData.editorPropId || '');
+      polygon.dataset.ceilingOpacity = opacity.toFixed(3);
+      const state = appliance.userData.ceilingFadeState as CeilingFadeState | undefined;
+      if (state) {
+        const ground = state.bounds.getCenter(new THREE.Vector3());
+        ground.y = 0;
+        ground.project(camera);
+        polygon.dataset.groundX = String((ground.x + 1) * width / 2);
+        polygon.dataset.groundY = String((1 - ground.y) * height / 2);
+      }
       polygon.setAttribute('points', hull.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '));
       this.mask.append(polygon);
       count++;

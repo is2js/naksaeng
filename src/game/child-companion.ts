@@ -13,6 +13,15 @@ export const MAX_CHILD_COMPANIONS = 6;
 export const CHILD_DIRECTIONS: Direction[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 
 export const CHILD_DISPLAY_SCALE = .92;
+
+// The PVP release renders each rigged 3D model into 128px directional sheets.
+// visualScale is fixed per model, matching its original PVP registration.
+export const CHILD_DOLL_VISUALS: Record<ChildAgeGroup, Record<ChildGender, { id: string; visualScale: number }>> = {
+  infant: { boy: { id: 'magic-doll-baby-boy', visualScale: 1.0653008962868118 }, girl: { id: 'magic-doll-baby-girl', visualScale: .9454545454545454 } },
+  elementary: { boy: { id: 'magic-doll-growth-n024', visualScale: 1 }, girl: { id: 'magic-doll-growth-n030', visualScale: 1.0105263157894737 } },
+  middle: { boy: { id: 'magic-doll-growth-n025', visualScale: 1.006993006993007 }, girl: { id: 'magic-doll-growth-n026', visualScale: 1.006993006993007 } },
+  high: { boy: { id: 'magic-doll-growth-n027', visualScale: 1.06032285471538 }, girl: { id: 'magic-doll-growth-n028', visualScale: 1.090909090909091 } },
+};
 export interface ChildFollowState {
   x: number; y: number; updatedAt: number;
   direction: Direction; motion: 'idle' | 'walk';
@@ -87,19 +96,18 @@ export class ChildCompanionView {
     const { motion, direction, x, y } = this.follow;
     if (!previous || previous.motion !== motion) this.motionStartedAt = time;
     const point = project(x, y);
-    const dollId = this.choice.gender === 'boy' ? 'n021' : 'n022';
-    const image = resolveProjectUrl(`assets/showcase-characters/dolls/${dollId}/${motion}-${direction}.png`);
+    const visual = CHILD_DOLL_VISUALS[this.choice.age][this.choice.gender];
+    const image = resolveProjectUrl(`assets/showcase-characters/dolls/lk-3d-r3/${visual.id}/sheets/${motion}/${direction}.webp`);
     if (image !== this.lastImage) {
       this.lastImage = image;
       this.sprite.style.backgroundImage = `url("${image}")`;
     }
-    const frames = motion === 'walk' ? 4 : 2;
-    const duration = motion === 'walk' ? 250 : 360;
+    const frames = motion === 'walk' ? 8 : 4;
+    const duration = motion === 'walk' ? 125 : 250;
     const frame = Math.floor((time - this.motionStartedAt) / duration) % frames;
     this.sprite.style.backgroundSize = `${frames * 44}px 44px`;
     this.sprite.style.backgroundPosition = `${-frame * 44}px 0`;
-    const ageScale = { infant: .8, elementary: 1, middle: 1.17, high: 1.32 }[this.choice.age];
-    const scale = Math.max(.55, Math.min(2.2, worldScale * ageScale)) * CHILD_DISPLAY_SCALE;
+    const scale = Math.max(.55, Math.min(2.2, worldScale * visual.visualScale)) * CHILD_DISPLAY_SCALE;
     this.element.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) scale(${scale})`;
     this.element.style.zIndex = String(1_000 + Math.round(point.y));
     this.element.dataset.motion = motion;

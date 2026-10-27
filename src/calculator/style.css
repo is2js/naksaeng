@@ -22,6 +22,12 @@
   .schedule-table tbody th strong{font-size:10px}.schedule-countdown b{font-size:9px}.schedule-countdown small{font-size:8px}
   .calculator-side .source-card{display:none!important}
 }
+
+.contract-stamp-note{margin:14px 0;padding:13px 15px;border:1px solid rgba(225,185,99,.32);border-radius:12px;background:rgba(225,185,99,.08);color:#cbdcd3;font-size:13px;line-height:1.6}
+.contract-stamp-note strong{color:#f0d38c;font-size:14px}
+.contract-stamp-note b{color:#f0d38c}
+.contract-stamp-note p{margin:6px 0 0}
+@media print{.contract-stamp-note{color:#304e3d!important;background:#fff!important;border-color:#bba36a!important;break-inside:avoid}.contract-stamp-note strong,.contract-stamp-note b{color:#60491e!important}}
 .calculator-hero>div>p.source-stamp{margin:8px 0 0!important;color:#788f8a!important;font-size:10px!important}
 
 /* 2026-09 finance-planning refinements */

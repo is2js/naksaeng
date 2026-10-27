@@ -78,6 +78,11 @@ describe('Bundang sale finance', () => {
     expect(pre.tranches.map((line) => line.executionDate)).toEqual(['2028-02-14']);
     expect(main.totalPrincipalWon).toBe(120_000_000);
     expect(main.tranches.map((line) => line.executionDate)).toEqual(['2027-04-12', '2028-02-14']);
+    expect(main.tranches.map(({ principalWon, days, interestWon }) => ({ principalWon, days, interestWon }))).toEqual([
+      { principalWon: 60_000_000, days: 661, interestWon: 4_346_301 },
+      { principalWon: 60_000_000, days: 353, interestWon: 2_321_096 },
+    ]);
+    expect(main.totalInterestWon).toBe(6_667_397);
     expect(main.totalInterestWon).toBeGreaterThan(pre.totalInterestWon);
     expect(calculateBundangInterimLoanInterest({ adjustedSupplyPriceWon: 600_000_000, paymentPlanKind: 'main-subscription', annualRateBps: 450 }).totalInterestWon).toBeGreaterThan(main.totalInterestWon);
   });

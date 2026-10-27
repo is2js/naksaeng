@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
-  "assetKey": "100",
+  "assetKey": "300",
+  "sourceRelease": "lk-medical-3d-look-20261018-r3",
   "name": "돌범",
   "cellSize": 256,
   "footY": 239,
@@ -8,9 +9,9 @@
   "directions": ["n", "ne", "e", "se", "s", "sw", "w", "nw"],
   "defaultActions": { "idle": "normal", "walk": "normal", "attack": "fist1", "cast": "normal" },
   "motions": {
-    "idle": { "loop": true, "durationMs": 900, "actions": { "normal": { "frameCount": 3, "sheet": "sheets/idle/normal.png", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 3 } } },
-    "walk": { "loop": true, "durationMs": 420, "actions": { "normal": { "frameCount": 6, "sheet": "sheets/walk/normal.png", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 6 } } },
-    "attack": { "loop": false, "durationMs": 320, "actions": { "fist1": { "frameCount": 5, "sheet": "sheets/attack/fist1.png", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 5 } } },
-    "cast": { "loop": false, "durationMs": 360, "actions": { "normal": { "frameCount": 9, "sheet": "sheets/cast/normal.png", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 9 } } }
+    "idle": { "loop": true, "durationMs": 900, "actions": { "normal": { "frameCount": 3, "sheet": "sheets/idle/normal.webp", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 3 } } },
+    "walk": { "loop": true, "durationMs": 420, "actions": { "normal": { "frameCount": 6, "sheet": "sheets/walk/normal.webp", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 6 } } },
+    "attack": { "loop": false, "durationMs": 320, "actions": { "fist1": { "frameCount": 5, "sheet": "sheets/attack/fist1.webp", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 5 } } },
+    "cast": { "loop": false, "durationMs": 360, "actions": { "normal": { "frameCount": 9, "sheet": "sheets/cast/normal.webp", "sheetFrameWidth": 256, "sheetFrameHeight": 256, "sheetRows": 8, "sheetColumns": 9 } } }
   }
 }

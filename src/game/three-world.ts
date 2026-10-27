@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { RPG_CAMERA_BASE_ZOOM } from './camera';
+import { CeilingActorMask, isCeilingActorOccluder } from './ceiling-actor-mask';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -638,6 +639,7 @@ export class ThreeWorldRenderer {
   private readonly camera = new THREE.OrthographicCamera(-12, 12, 12, -12, 0.1, 220);
   private readonly structureRoot = new THREE.Group();
   private readonly propRoot = new THREE.Group();
+  private readonly ceilingActorMask: CeilingActorMask;
   private readonly editorSelectionRoot = new THREE.Group();
   private readonly editorGhostRoot = new THREE.Group();
   private apartmentInspectionLaserGroup: THREE.Group | null = null;
@@ -671,6 +673,7 @@ export class ThreeWorldRenderer {
   private lastOcclusionTime = 0;
   private loadToken = 0;
   private propLoadToken = 0;
+  private ceilingMaskRevision = 0;
   private contractsReady: Promise<void>;
 
   constructor(
@@ -684,6 +687,7 @@ export class ThreeWorldRenderer {
       alpha: false,
       powerPreference: 'high-performance',
     });
+    this.ceilingActorMask = new CeilingActorMask(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1253,9 +1257,15 @@ export class ThreeWorldRenderer {
     this.resize();
     this.updateStructureOcclusion(time);
     this.renderer.render(this.scene, this.camera);
+    this.ceilingActorMask.update(this.camera, this.propRoot, this.cssWidth, this.cssHeight, this.ceilingMaskRevision);
+  }
+
+  clearCeilingActorMask(): void {
+    this.ceilingActorMask.clear();
   }
 
   dispose(): void {
+    this.ceilingActorMask.dispose();
     this.clearApartmentInspectionLaserFrame();
     this.clearEditorGhost();
     disposeTree(this.structureRoot);
@@ -1676,6 +1686,7 @@ export class ThreeWorldRenderer {
 
   private rebuildProps(): void {
     disposeTree(this.propRoot);
+    this.ceilingMaskRevision++;
     disposeTree(this.editorSelectionRoot);
     this.finishOccluders = [];
     this.renderedProps.clear();
@@ -1805,7 +1816,9 @@ export class ThreeWorldRenderer {
     group.rotation.y = placement.worldYaw;
     group.renderOrder = mountingKind === 'room-finish' ? 3.04 : 3.1;
     group.userData.editorPropId = String(prop.id || '');
+    group.userData.ceilingActorOccluder = isCeilingActorOccluder(mountingKind, prop.installationRole);
     this.propRoot.add(group);
+    if (group.userData.ceilingActorOccluder) this.ceilingMaskRevision++;
     this.registerFinishOccluders(object, prop, group);
     this.applyEditorGhostHiddenState();
     this.refreshEditorSelection();

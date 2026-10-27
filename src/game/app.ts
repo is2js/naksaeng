@@ -815,7 +815,7 @@ export class ShowcaseApp {
       const entry = {
         ...sourceEntry,
         label: CHARACTER_DISPLAY_NAMES[fallback.key],
-        manifestUrl: `assets/showcase-characters/${fallback.key}/animation.json`,
+        manifestUrl: `assets/showcase-characters/${fallback.key}/animation.json?v=lk-medical-3d-look-20261018-r3`,
       };
       const actor: ActorState = {
         key: entry.key,
@@ -2505,11 +2505,13 @@ export class ShowcaseApp {
         rendererLabel = this.threeRenderer.label;
       } catch (error) {
         console.warn('[bunfirvil] Three.js map initialization failed; using Canvas2D.', error);
+        this.threeRenderer.clearCeilingActorMask();
         webglCanvas.hidden = true;
         canvas.hidden = false;
         this.renderer = this.canvasRenderer;
       }
     } else {
+      this.threeRenderer?.clearCeilingActorMask();
       webglCanvas.hidden = true;
       canvas.hidden = false;
       this.renderer = this.canvasRenderer;
@@ -3499,6 +3501,7 @@ export class ShowcaseApp {
     } catch (error) {
       if (this.renderer === this.threeRenderer && this.world) {
         console.warn('[bunfirvil] WebGL render failed; switching to Canvas2D.', error);
+        this.threeRenderer?.clearCeilingActorMask();
         this.get<HTMLCanvasElement>('#three-world-canvas').hidden = true;
         this.get<HTMLCanvasElement>('#world-canvas').hidden = false;
         this.renderer = this.canvasRenderer;

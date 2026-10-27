@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CHILD_AGE_LABELS, CHILD_DIRECTIONS, MAX_CHILD_COMPANIONS, childCompanionOffset, advanceChildFollow } from './child-companion';
+import { CHILD_AGE_LABELS, CHILD_DIRECTIONS, CHILD_DOLL_VISUALS, MAX_CHILD_COMPANIONS, childCompanionOffset, advanceChildFollow } from './child-companion';
 
 describe('showcase child companions', () => {
   it('supports four age groups, both PVP doll directions, and a bounded group', () => {
@@ -51,7 +51,7 @@ describe('showcase child companions', () => {
     expect(Math.max(Math.abs(far.x - 100), Math.abs(far.y - 100))).toBeLessThanOrEqual(2);
   });
 
-  it('ships the selected PVP actor motions and both eight-direction doll sheets', () => {
+  it('ships the selected PVP actor motions and eight-direction 3D-rendered doll sheets', () => {
     const publicRoot = resolve(process.cwd(), 'public/assets/showcase-characters');
     for (const actor of ['100', '200']) {
       const actorRoot = resolve(publicRoot, actor);
@@ -60,10 +60,14 @@ describe('showcase child companions', () => {
         expect(existsSync(resolve(actorRoot, manifest.motions[motion].actions[action].sheet)), `${actor}:${motion}`).toBe(true);
       }
     }
-    for (const doll of ['n021', 'n022']) {
+    const dolls = Object.values(CHILD_DOLL_VISUALS).flatMap((group) => Object.values(group));
+    expect(new Set(dolls.map((doll) => doll.id)).size).toBe(8);
+    for (const doll of dolls) {
       for (const motion of ['idle', 'walk']) {
         for (const direction of CHILD_DIRECTIONS) {
-          expect(existsSync(resolve(publicRoot, 'dolls', doll, `${motion}-${direction}.png`)), `${doll}:${motion}:${direction}`).toBe(true);
+          const file = resolve(publicRoot, 'dolls', 'lk-3d-r3', doll.id, 'sheets', motion, `${direction}.webp`);
+          expect(existsSync(file), `${doll.id}:${motion}:${direction}`).toBe(true);
+          expect(readFileSync(file).subarray(8, 12).toString()).toBe('WEBP');
         }
       }
     }

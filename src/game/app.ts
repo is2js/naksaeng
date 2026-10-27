@@ -121,8 +121,8 @@ const numberFormat = new Intl.NumberFormat('ko-KR');
 const MOVEMENT_INTERVAL_MS = 420;
 const TURN_ONLY_HOLD_TO_MOVE_MS = 96;
 const CHARACTER_DISPLAY_NAMES: Record<CharacterKey, string> = {
-  '100': '돌범',
-  '200': '피치',
+  '100': '남성',
+  '200': '여성',
 };
 
 function planFacingLabel(unitType: string, variant: ApartmentPlanVariant): '남서향' | '남동향' {
@@ -375,7 +375,7 @@ export class ShowcaseApp {
       this.currentMap.unitType,
       planVariantFromQuery(window.location.search),
     ).variant;
-    // 쇼케이스는 돌범으로 시작하고 슬롯 2에서 돌범/피치를 전환한다.
+    // 외형은 남성 캐릭터로 시작하며 이름은 인증 닉네임을 사용한다.
     this.activeActor = '100';
 
     this.renderShell(fallback);
@@ -537,8 +537,8 @@ export class ShowcaseApp {
               <div class="actor-switch" role="group" aria-label="조작 캐릭터">
                 <span>캐릭터</span>
                 <div>
-                  <button type="button" data-actor-key="100" class="${this.activeActor === '100' ? 'is-active' : ''}"><i class="actor-dot actor-dot--100"></i>돌범</button>
-                  <button type="button" data-actor-key="200" class="${this.activeActor === '200' ? 'is-active' : ''}"><i class="actor-dot actor-dot--200"></i>피치</button>
+                  <button type="button" data-actor-key="100" class="${this.activeActor === '100' ? 'is-active' : ''}"><i class="actor-dot actor-dot--100"></i>남성 캐릭터</button>
+                  <button type="button" data-actor-key="200" class="${this.activeActor === '200' ? 'is-active' : ''}"><i class="actor-dot actor-dot--200"></i>여성 캐릭터</button>
                 </div>
               </div>
               <div class="deck-actions">
@@ -662,7 +662,7 @@ export class ShowcaseApp {
               <div class="combat-dock">
                 <div class="active-actor-card">
                   <span class="portrait portrait--${this.activeActor}" id="active-portrait">${CHARACTER_DISPLAY_NAMES[this.activeActor]}</span>
-                  <div><small>ACTIVE ACTOR</small><b id="active-actor-label">${CHARACTER_DISPLAY_NAMES[this.activeActor]}</b></div>
+                  <div><small>ACTIVE ACTOR</small><b id="active-actor-label">${escapeHtml(this.authenticatedNickname || '나')}</b></div>
                   <span class="local-tag">LOCAL</span>
                 </div>
                 <div id="hotbar" class="hotbar" aria-label="쇼케이스 전환 핫바"></div>
@@ -766,7 +766,7 @@ export class ShowcaseApp {
           <p class="touch-help">모바일: 왼쪽 아래 원형 조이스틱을 원하는 방향으로 누르거나 밀면 이동하며 캐릭터 중심으로 화면이 따라옵니다. 손을 떼거나 가운데로 돌아오면 멈춥니다. 맵을 드래그해 둘러본 뒤 조이스틱으로 이동하면 자동 추적이 재개됩니다. 우하단에는 지도만 표시하는 미니맵과 작은 ＋/− 확대·축소 버튼이 있습니다. ‘실측’을 눌러 레이저를 켜고 측정 지점을 탭하며, 같은 버튼의 ‘실측 종료’로 끕니다. 핫바는 탭으로 실행합니다. 선택 옵션·합계·계산기는 맵 아래에 있으며 ‘펼치기’로 목록을 확인합니다. 가구는 위치를 터치·드래그한 뒤 ‘배치 확정’을 누르세요. 가구 편집·실측·설정 중에는 조이스틱이 멈춥니다.</p>
           <div class="help-grid">
             <div><span class="help-icon">⌨</span><b>한 셀 이동·기본 공격</b><p>WASD 또는 방향키로 한 셀씩 이동하며 키 조합으로 8방향을 사용합니다. Space는 기본 공격입니다.</p></div>
-            <div><span class="help-icon">1–5</span><b>놀이터 핫바</b><p>1 텔레포트(또는 휠 클릭)는 2초 간격으로 세대 내부에서만 이동합니다. 2 돌범·피치 성별 전환, 3 거실 방향 전환, 4 피그미 변신, 5 자녀 인형 소환을 실행합니다.</p></div>
+            <div><span class="help-icon">1–5</span><b>놀이터 핫바</b><p>1 텔레포트(또는 휠 클릭)는 2초 간격으로 세대 내부에서만 이동합니다. 2 성별 전환, 3 거실 방향 전환, 4 피그미 변신, 5 자녀 인형 소환을 실행합니다.</p></div>
             <div><span class="help-icon">옵션</span><b>옵션 프리뷰</b><p>옵션 선택은 맵 프롭과 견적에 즉시 반영되어 이 브라우저에 저장됩니다. 기본 인테리어와 옵션 구성은 이동·회전·삭제할 수 없습니다.</p></div>
             <div><span class="help-icon">GHOST</span><b>사용자 가구 배치</b><p>가구 카드를 누르면 고스트가 커서를 따라갑니다. 초록은 설치 가능, 빨강은 설치 불가이며 좌클릭으로 확정하고 우클릭 또는 Esc로 취소합니다.</p></div>
             <div><span class="help-icon">L</span><b>화면·가구 조작</b><p>빈 맵을 드래그해 이동하고 Ctrl+휠로 확대·축소합니다. 사용자 가구는 재배치할 수 있고 L은 벽 자석, Shift+휠은 회전, Delete는 삭제입니다.</p></div>
@@ -814,7 +814,7 @@ export class ShowcaseApp {
       const sourceEntry = entries.get(fallback.key) || fallback;
       const entry = {
         ...sourceEntry,
-        label: CHARACTER_DISPLAY_NAMES[fallback.key],
+        label: this.authenticatedNickname || '나',
         manifestUrl: `assets/showcase-characters/${fallback.key}/animation.json?v=lk-medical-3d-look-20261018-r3`,
       };
       const actor: ActorState = {
@@ -2752,8 +2752,8 @@ export class ShowcaseApp {
       this.setActiveActor(next);
       this.toast(
         transformationWasActive
-          ? `${CHARACTER_DISPLAY_NAMES[next]}로 전환하고 변신을 해제했습니다.`
-          : `${CHARACTER_DISPLAY_NAMES[next]}로 전환했습니다.`,
+          ? `${CHARACTER_DISPLAY_NAMES[next]} 외형으로 전환하고 변신을 해제했습니다.`
+          : `${CHARACTER_DISPLAY_NAMES[next]} 외형으로 전환했습니다.`,
         'success',
       );
       return;
@@ -2776,7 +2776,7 @@ export class ShowcaseApp {
       this.pigmyTransformationActive = !this.pigmyTransformationActive;
       this.actorViews.forEach((view, key) => view.setTransformed(key === this.activeActor && this.pigmyTransformationActive));
       this.renderHotbar();
-      this.toast(this.pigmyTransformationActive ? '피그미 변신 ON' : `${CHARACTER_DISPLAY_NAMES[this.activeActor]}로 돌아왔습니다.`, 'success');
+      this.toast(this.pigmyTransformationActive ? '피그미 변신 ON' : '변신을 해제했습니다.', 'success');
       return;
     }
     if (index === 4) {

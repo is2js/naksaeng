@@ -30,8 +30,9 @@ export class ActorView {
     element.innerHTML = `
       <span class="actor-shadow" aria-hidden="true"></span>
       <span class="actor-sprite" aria-hidden="true"><span class="actor-fallback">${entry.key}</span></span>
-      <span class="actor-name">${entry.label}</span>
+      <span class="actor-name"></span>
     `;
+    (element.querySelector('.actor-name') as HTMLElement).textContent = entry.label;
     this.element = element;
     this.sprite = element.querySelector<HTMLElement>('.actor-sprite') as HTMLSpanElement;
     element.addEventListener('click', () => this.onSelect(entry.key));

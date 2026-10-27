@@ -44,7 +44,7 @@ test('authenticated nickname remains literal across appearances, transformation,
   await expect(man.locator('.actor-name b')).toHaveCount(0);
 });
 
-test('shared playground displays the visitor name on the actor and the owner in the title', async ({ page, context }) => {
+test('shared playground keeps the owner name on the actor and in the title', async ({ page, context }) => {
   test.setTimeout(120_000);
   const json = strToU8(JSON.stringify({
     schemaVersion: 1, sharedByNickname: '공유자', mapId: 'bundang-first-village-55a-prototype',
@@ -62,5 +62,11 @@ test('shared playground displays the visitor name on the actor and the owner in 
   await page.goto(`./#share=v1.${token}`);
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
   await expect(page.locator('#map-title')).toHaveText('공유자님의 55A타입 공유 놀이터');
-  await expect(page.locator('.rpg-actor--100 .actor-name')).toHaveText('방문자');
+  const actor = page.locator('.rpg-actor--100');
+  await expect(actor.locator('.actor-name')).toHaveText('공유자');
+  await expect(actor).toHaveAttribute('aria-label', '공유자 조작');
+
+  await page.reload();
+  await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
+  await expect(actor.locator('.actor-name')).toHaveText('공유자');
 });

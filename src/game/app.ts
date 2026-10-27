@@ -375,7 +375,7 @@ export class ShowcaseApp {
       this.currentMap.unitType,
       planVariantFromQuery(window.location.search),
     ).variant;
-    // 외형은 남성 캐릭터로 시작하며 이름은 인증 닉네임을 사용한다.
+    // 외형은 남성 캐릭터로 시작하며 이름은 일반/공유 모드에 따라 결정한다.
     this.activeActor = '100';
 
     this.renderShell(fallback);
@@ -471,6 +471,10 @@ export class ShowcaseApp {
       console.warn('[bunfirvil] furniture palette unavailable.', error);
       this.interiorAssets = [];
     }
+  }
+
+  private characterNickname(): string {
+    return (this.readOnlyShare ? this.sharedState?.sharedByNickname : this.authenticatedNickname) || '나';
   }
 
   private renderShell(fallback: boolean): void {
@@ -662,7 +666,7 @@ export class ShowcaseApp {
               <div class="combat-dock">
                 <div class="active-actor-card">
                   <span class="portrait portrait--${this.activeActor}" id="active-portrait">${CHARACTER_DISPLAY_NAMES[this.activeActor]}</span>
-                  <div><small>ACTIVE ACTOR</small><b id="active-actor-label">${escapeHtml(this.authenticatedNickname || '나')}</b></div>
+                  <div><small>ACTIVE ACTOR</small><b id="active-actor-label">${escapeHtml(this.characterNickname())}</b></div>
                   <span class="local-tag">LOCAL</span>
                 </div>
                 <div id="hotbar" class="hotbar" aria-label="쇼케이스 전환 핫바"></div>
@@ -814,7 +818,7 @@ export class ShowcaseApp {
       const sourceEntry = entries.get(fallback.key) || fallback;
       const entry = {
         ...sourceEntry,
-        label: this.authenticatedNickname || '나',
+        label: this.characterNickname(),
         manifestUrl: `assets/showcase-characters/${fallback.key}/animation.json?v=lk-medical-3d-look-20261018-r3`,
       };
       const actor: ActorState = {

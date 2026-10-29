@@ -120,7 +120,7 @@ class CalculatorApp {
   private taxEnabled = false;
   private taxReliefMode: TaxReliefMode = 'none';
   private interimRatePercent = 4;
-  private mortgageEnabled = false;
+  private mortgageEnabled = true;
   private ltv: 30 | 40 | 50 | 60 | 70 = 70;
   private term: 20 | 30 = 30;
   private childCount: BundangMortgageChildCount = 0;
@@ -140,6 +140,8 @@ class CalculatorApp {
   constructor(private readonly mount: HTMLElement) {
     this.plan = this.context?.applicantRoute ?? 'main-subscription';
     if (this.context) Object.assign(this, readSaleCalculatorPreferences({ unitType: this.context.unitType, floorBand: this.context.priceFloorBand }) ?? {});
+    // Older session preferences may contain the former optional-off state.
+    this.mortgageEnabled = true;
     window.addEventListener('beforeprint', () => this.preparePrint());
     window.addEventListener('afterprint', () => { this.restorePrintState?.(); this.restorePrintState = null; });
     document.addEventListener('visibilitychange', this.scheduleCountdownRefresh);
@@ -371,8 +373,8 @@ class CalculatorApp {
 
   private mortgageDetails(quote: Quote): string {
     const result = quote.mortgage;
-    return `<details id="calculator-mortgage-details" class="calculator-card disclosure" ${this.mortgageEnabled ? 'open' : ''}><summary>신혼희망타운 전용 모기지 추정 <span>열기</span></summary><div class="disclosure-body">
-      <label class="enable-row"><input id="calculator-mortgage-enabled" type="checkbox" ${this.mortgageEnabled ? 'checked' : ''}> 대출 추정 활성화</label>
+    return `<details id="calculator-mortgage-details" class="calculator-card disclosure"><summary>신혼희망타운 전용 모기지 추정 <span>열기</span></summary><div class="disclosure-body">
+      <label class="enable-row"><input id="calculator-mortgage-enabled" type="checkbox" checked disabled> 전용 모기지 필수 적용 · 추정</label>
       <div class="mini-controls mortgage-controls">
         <label>선택 LTV<select id="calculator-ltv" ${this.mortgageEnabled ? '' : 'disabled'}>${[30,40,50,60,70].map(value => `<option ${value === this.ltv ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
         <label>상환 만기<select id="calculator-term" ${this.mortgageEnabled ? '' : 'disabled'}><option value="20" ${this.term === 20 ? 'selected' : ''}>20년</option><option value="30" ${this.term === 30 ? 'selected' : ''}>30년</option></select></label>
@@ -390,6 +392,11 @@ class CalculatorApp {
     return `<section id="calculator-move-in-settlement" class="move-in-block" aria-labelledby="move-in-heading">
       <div class="subhead"><h3 id="move-in-heading">입주 시 자금 정산</h3><span class="assumption-chip">현재 선택한 가정 기준</span></div>
       <p>계약 총액과 입주 때 준비할 현금은 다릅니다. <b>중도금 대출은 본인자금으로 먼저 정리</b>하고 전용 모기지는 주택·발코니 잔금에만 반영합니다.</p>
+      <div class="cash-plan-summary" aria-label="계약금과 계약 후 준비할 기본 자금">
+        <div class="cash-plan-contract"><span>01 · 계약금 합계</span><strong id="calculator-contract-cash">${money(value.contractPaymentsWon)}</strong><small>주택·발코니·선택 옵션 계약금 합계입니다. 별도 계약 품목의 납부일은 다를 수 있습니다.</small></div>
+        <div class="cash-plan-remaining"><span>02 · 계약 후 입주까지 필요한 기본 현금</span><strong id="calculator-post-contract-base-cash">${money(value.postContractBaseCashWon)}</strong><small>계약 총액 − 계약금 − 잔금에 충당하는 전용 모기지</small></div>
+      </div>
+      <p class="stage-note">02에는 계약 후 자납할 중도금과 잔금, 집단대출을 이용한다면 추후 상환할 원금이 포함됩니다. 이미 납부한 중도금은 직접 빼서 계획하세요. <b>후불이자·취득세·부대비용은 이 기본 금액에 포함되지 않습니다.</b> 실제 입주 시점의 추정 현금은 아래 정산을 확인하세요.</p>
       <fieldset class="funding-switch"><legend>주택 중도금 20% 납부 방식</legend><label><input id="calculator-funding-loan" name="interim-funding" value="loan" type="radio" ${this.interimFunding === 'loan' ? 'checked' : ''}> 집단대출 가정</label><label><input id="calculator-funding-cash" name="interim-funding" value="cash" type="radio" ${this.interimFunding === 'cash' ? 'checked' : ''}> 전액 자납 가정</label></fieldset>
       <section class="settlement-stage" aria-labelledby="interim-repayment-heading"><h4 id="interim-repayment-heading"><i aria-hidden="true">01</i> 우선 확보할 중도금 상환자금</h4>
         ${this.interimFunding === 'loan' ? this.interimRateControl('calculator-settlement-rate') : '<p class="muted-copy">전액 자납 가정 · 입주 때 상환할 중도금 대출과 후불이자는 없습니다.</p>'}
@@ -405,7 +412,7 @@ class CalculatorApp {
         <div class="settlement-subtotal"><dt>잔금 제외 준비금 · 중도금 포함</dt><dd id="calculator-non-balance-cash">${money(value.nonBalanceCostsWon)}</dd></div></dl><p class="stage-note">위 01 금액을 포함한 소계이므로 두 번 더하지 않습니다. 세금·부대비용의 실제 납부일은 각각 다르며 모두 모기지 전에 납부한다는 뜻은 아닙니다.</p>
       </section>
       <section class="settlement-stage balance-stage" aria-labelledby="balance-funding-heading"><h4 id="balance-funding-heading"><i aria-hidden="true">02</i> 잔금과 전용 모기지</h4>
-        <label class="enable-row mortgage-enable"><input id="calculator-balance-mortgage-enabled" type="checkbox" ${this.mortgageEnabled ? 'checked' : ''}> 전용 모기지 적용 <b>연 1.3% 고정</b></label>
+        <label class="enable-row mortgage-enable"><input id="calculator-balance-mortgage-enabled" type="checkbox" checked disabled> 전용 모기지 필수 적용 · 추정 <b>연 1.3% 고정</b></label>
         ${this.mortgageOverviewMarkup(quote)}
         <dl class="settlement-table"><div><dt>주택·발코니 잔금</dt><dd>${money(value.housingBalanceWon)}</dd></div><div><dt>＋ 시스템에어컨·기타 옵션 잔금 · 자납</dt><dd>${money(value.optionBalanceWon)}</dd></div><div><dt>− 주택·발코니 잔금에 모기지 충당</dt><dd id="calculator-mortgage-applied">${this.mortgageEnabled ? money(value.mortgageAppliedWon) : '미적용'}</dd></div>
         <div class="settlement-subtotal"><dt>잔금 추가 자납액</dt><dd id="calculator-balance-cash">${money(value.balanceCashAfterMortgageWon)}</dd></div></dl>
@@ -502,7 +509,7 @@ class CalculatorApp {
       else if (control instanceof HTMLInputElement && control.name === 'interim-funding') this.interimFunding = control.value as 'cash' | 'loan';
       else if (control.id === 'calculator-costs-enabled') this.costsEnabled = checked;
       else if (control.id === 'calculator-interim-loan-enabled') this.interimFunding = checked ? 'loan' : 'cash';
-      else if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id)) this.mortgageEnabled = checked;
+      else if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id)) this.mortgageEnabled = true;
       else if (['calculator-ltv', 'calculator-balance-ltv'].includes(control.id)) this.ltv = Number(control.value) as typeof this.ltv;
       else if (control.id === 'calculator-term') { this.term = Number(control.value) as 20 | 30; this.holdingYears = Math.min(this.holdingYears, this.term); }
       else if (control.id === 'calculator-children') this.childCount = Number(control.value) as BundangMortgageChildCount;

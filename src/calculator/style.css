@@ -74,6 +74,15 @@ input:focus-visible{outline:2px solid var(--mint-bright);outline-offset:3px}
 .settlement-table .settlement-total{margin-top:8px;padding:17px 13px;border:1px solid rgba(225,185,99,.32);border-radius:8px;background:linear-gradient(100deg,rgba(225,185,99,.12),rgba(92,211,189,.06))}
 .settlement-total dt{color:#e5d2a7;font-weight:800}
 .settlement-total dd{color:#f0d18b;font-size:clamp(21px,3vw,28px);letter-spacing:-.035em}
+.cash-plan-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px;margin:18px 0 10px}
+.cash-plan-summary>div{min-width:0;padding:16px;border:1px solid var(--line);border-radius:10px;background:rgba(4,20,22,.62)}
+.cash-plan-summary span,.cash-plan-summary small{display:block;line-height:1.5}
+.cash-plan-summary span{color:#c2d6cc;font-size:14px;font-weight:700}
+.cash-plan-summary strong{display:block;margin:9px 0;color:#eef8f0;font-size:clamp(19px,2.5vw,26px);overflow-wrap:anywhere}
+.cash-plan-summary small{color:#aebfb3;font-size:12px}
+.cash-plan-summary .cash-plan-remaining{border-color:rgba(225,185,99,.55);background:linear-gradient(120deg,rgba(225,185,99,.19),rgba(92,211,189,.1))}
+.cash-plan-remaining strong{color:#f4d28a;font-size:clamp(23px,3vw,32px)}
+@media(max-width:600px){.cash-plan-summary{grid-template-columns:1fr}.cash-plan-summary>div{padding:14px}}
 .scenario-warning{padding:10px 12px;border-left:2px solid var(--gold);background:rgba(225,185,99,.06);color:#d5bf91!important;font-size:11px!important;line-height:1.7}
 .funding-metrics{margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 .funding-metrics>div{padding:12px;border:1px solid var(--line);border-radius:7px;min-width:0;background:rgba(3,13,17,.28)}
@@ -229,6 +238,7 @@ input[aria-invalid="true"]{outline:2px solid #e79296!important;outline-offset:2p
   .funding-switch{border-color:#b9c9c3}.funding-switch legend,.funding-switch label{color:#20372e!important}
   .settlement-table>div{border-color:#d1ded8;break-inside:avoid}.settlement-table dd,.funding-metrics b{color:#132d22!important}
   .settlement-table .settlement-total{border-color:#b69d66;background:#fff9eb!important}.settlement-total dd,.settlement-total dt{color:#78531c!important}
+  .cash-plan-summary>div,.cash-plan-summary .cash-plan-remaining{background:#fff!important;border-color:#b69d66}.cash-plan-summary span,.cash-plan-summary strong,.cash-plan-summary small{color:#172c23!important}
   .funding-metrics>div,.payment-explainer{border-color:#c0d0c8;background:#fff!important}.funding-metrics span{color:#52675e!important}
   .assumption-chip,.scenario-warning{border-color:#c2ad76;color:#725321!important;background:#fffaf0!important}
   .cost-controls,.date-field,#calculator-sale-price{display:none!important}.cost-print-summary{display:grid!important}

@@ -15,6 +15,10 @@ export interface BundangMoveInSettlementInputV1 {
 }
 
 export interface BundangMoveInSettlementV1 {
+  /** All contract installments; separate contracts may have different due dates. */
+  contractPaymentsWon: number;
+  /** Contract total less contract payments and the mortgage actually applied. Excludes interest, tax and other costs. */
+  postContractBaseCashWon: number;
   balancePaymentsWon: number;
   /** Only the housing and balcony balances are eligible for the final mortgage. */
   housingBalanceWon: number;
@@ -73,11 +77,13 @@ export function calculateBundangMoveInSettlement(
   const housingBalances: number[] = [];
   const optionBalances: number[] = [];
   const beforeMoveIn: number[] = [];
+  const contractPayments: number[] = [];
   const supplyInterims: number[] = [];
   for (const schedule of input.paymentSchedules) {
     checkedWon(schedule.totalWon, '계약 항목 합계');
     for (const installment of schedule.installments) {
       const amount = checkedWon(installment.amountWon, '납부 회차 금액');
+      if (installment.id === 'contract') contractPayments.push(amount);
       if (installment.id === 'balance') {
         (schedule.target === 'supply' || schedule.target === 'balcony'
           ? housingBalances : optionBalances).push(amount);
@@ -107,12 +113,16 @@ export function calculateBundangMoveInSettlement(
   ], '입주 시 필요금액');
   const mortgageAppliedWon = Math.min(mortgage, housingBalanceWon);
   const mortgageExcessWon = mortgage - mortgageAppliedWon;
+  const contractPaymentsWon = sumWon(contractPayments, '계약금 합계');
+  const postContractBaseCashWon = sumWon([beforeMoveInWon, balancePaymentsWon], '계약 총액') - contractPaymentsWon - mortgageAppliedWon;
   const balanceCashAfterMortgageWon = balancePaymentsWon - mortgageAppliedWon;
   const requiredCashAtMoveInWon = sumWon([
     nonBalanceCostsWon, balanceCashAfterMortgageWon,
   ], '입주 시 필요 자기자금');
   const selfFundedBeforeMoveInWon = beforeMoveInWon - interimLoanRepaymentWon;
   return {
+    contractPaymentsWon,
+    postContractBaseCashWon,
     balancePaymentsWon,
     housingBalanceWon,
     optionBalanceWon,

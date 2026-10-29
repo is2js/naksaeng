@@ -50,6 +50,8 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('#calculator-context-header')).toContainText('55A · 5층 이상');
   await expect(page.locator('.context-highlight')).toContainText('55A · 5층 이상 · 본청약 기준');
   await expect(page.getByLabel('본청약(신규신청자)')).toBeChecked();
+  await expect(page.locator('#calculator-contract-cash')).toHaveText('64,706,800원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('182,361,200원');
   await expect(page.locator('.calculator-side > :first-child')).toHaveAttribute('id', 'calculator-option-details');
   await expect(page.locator('#calculator-option-details')).not.toHaveAttribute('open', '');
   await page.locator('#calculator-option-details summary').click();
@@ -85,6 +87,8 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
 
   await page.locator('.plan-switch label').filter({ hasText: '사전청약 당첨자' }).click();
   await expect(page.getByLabel('사전청약 당첨자')).toBeChecked();
+  await expect(page.locator('#calculator-contract-cash')).toHaveText('32,353,400원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,714,600원');
   await expect(page.locator('.context-highlight')).toContainText('사전청약 당첨자 기준');
   await expect(page.locator('.schedule-table tbody')).toContainText('계약금');
   await expect(page.locator('.schedule-table tbody')).toContainText('31,825,500원');
@@ -132,20 +136,23 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('#calculator-settlement-rate-input')).toHaveValue('4.4');
 
   const preMortgageCash = await page.locator('#calculator-pre-mortgage-cash').textContent();
-  await page.locator('#calculator-balance-mortgage-enabled').check();
+  await expect(page.locator('#calculator-balance-mortgage-enabled')).toBeChecked();
+  await expect(page.locator('#calculator-balance-mortgage-enabled')).toBeDisabled();
   await expect(page.locator('#calculator-mortgage-enabled')).toBeChecked();
+  await expect(page.locator('#calculator-mortgage-enabled')).toBeDisabled();
   await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('400,000,000원');
   await expect(page.locator('#calculator-pre-mortgage-cash')).toHaveText(preMortgageCash!);
   await expect(page.locator('#calculator-balance-mortgage-info')).toContainText('의무가입 대상');
   await page.locator('#calculator-balance-ltv').selectOption('30');
   await expect(page.locator('#calculator-ltv')).toHaveValue('30');
   await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('192,494,400원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('422,220,200원');
   await page.locator('#calculator-balance-ltv').selectOption('70');
   await expect(interimDetails).toHaveAttribute('open', '');
   await expect(interimDetails.locator('.calculation-total')).toContainText('원');
   const mortgageDetails = page.locator('#calculator-mortgage-details');
   await mortgageDetails.locator('summary').click();
-  await page.getByLabel('대출 추정 활성화').check();
+  await expect(page.locator('#calculator-mortgage-enabled')).toBeDisabled();
   await expect(page.locator('#calculator-mortgage-details')).toHaveAttribute('open', '');
   await expect(page.locator('#calculator-mortgage-details')).toContainText('월 원리금');
   await expect(page.locator('#calculator-mortgage-details')).toContainText('1.3% 고정');
@@ -181,6 +188,7 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await page.locator('#calculator-cost-management').fill('1000000');
   await page.locator('#calculator-cost-management').press('Tab');
   await expect(page.locator('#calculator-extra-cost-total')).toHaveText('1,000,000원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,714,600원');
   await expect(page.locator('.hero-total strong')).toHaveText(unchangedContract!);
   await expect(costs).toHaveAttribute('open', '');
   await page.getByLabel('미납 부대비용 반영', { exact: true }).uncheck();
@@ -231,6 +239,8 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('#calculator-tax-details')).toBeVisible();
   await expect(page.locator('.source-card')).toBeHidden();
   await expect(page.locator('#calculator-move-in-settlement')).toBeVisible();
+  await expect(page.locator('#calculator-contract-cash')).toBeVisible();
+  await expect(page.locator('#calculator-post-contract-base-cash')).toBeVisible();
   await expect(page.locator('#calculator-cost-details .cost-print-summary')).toContainText('1,000,000원');
   await expect(page.locator('#calculator-deadline-today')).toBeVisible();
   await expect(page.locator('#calculator-deadline-today')).toContainText('2026.10.23');

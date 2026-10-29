@@ -15,6 +15,31 @@ function contract(plan: BundangPaymentPlanKind = 'main-subscription', minus = fa
 }
 
 describe('Bundang move-in settlement', () => {
+  it.each(['main-subscription', 'pre-subscription'] as const)(
+    'separates contract cash from the remaining purchase price excluding mortgage and extra costs for %s', (plan) => {
+      for (const minus of [false, true]) {
+        const quote = contract(plan, minus);
+        const expectedContract = quote.paymentSchedules.flatMap((schedule) => schedule.installments)
+          .filter((installment) => installment.id === 'contract')
+          .reduce((sum, installment) => sum + installment.amountWon, 0);
+        for (const interimFunding of ['cash', 'loan'] as const) {
+          for (const mortgagePrincipalWon of [400_000_000, 900_000_000]) {
+            const result = calculateBundangMoveInSettlement({
+              paymentSchedules: quote.paymentSchedules, interimFunding, mortgagePrincipalWon,
+              interimInterestWon: 5_000_000, acquisitionTaxWon: 7_000_000,
+              additionalCosts: [{ id: 'moving', amountWon: 1_000_000 }],
+            });
+            expect(result.contractPaymentsWon).toBe(expectedContract);
+            expect(result.postContractBaseCashWon).toBe(quote.contractTotalWon - expectedContract - result.mortgageAppliedWon);
+            expect(result.contractPaymentsWon + result.postContractBaseCashWon + result.mortgageAppliedWon).toBe(quote.contractTotalWon);
+            expect(result.mortgageAppliedWon).toBe(Math.min(mortgagePrincipalWon, result.housingBalanceWon));
+            expect(result.totalOwnCashWon).toBe(result.contractPaymentsWon + result.postContractBaseCashWon
+              + result.deferredInterestWon + result.acquisitionTaxWon + result.additionalCostsWon);
+          }
+        }
+      }
+    },
+  );
   it.each(['main-subscription', 'pre-subscription'] as const)('accounts for both interim funding methods under %s without duplicating the mortgage', (plan) => {
     const quote = contract(plan);
     const common = {

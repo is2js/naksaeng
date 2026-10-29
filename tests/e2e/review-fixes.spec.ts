@@ -43,6 +43,7 @@ test('operator code, cross-type share membership and modal keyboard regression s
   await expect(page.locator('#help-dialog')).not.toBeVisible();
   await expect(page.locator('.rpg-actor[data-motion="attack"]')).toHaveCount(0);
   await page.locator('#share-showcase').click();
+  await page.locator('#share-link-copy').click();
   const url = await page.evaluate(() => navigator.clipboard.readText());
   expect(url).toContain('#share=v1.');
   await page.evaluate(() => sessionStorage.clear());

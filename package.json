@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:smoke": "playwright test",
-    "test:smoke:ci": "playwright test tests/e2e/ci-smoke.spec.ts tests/e2e/sale-calculator.spec.ts tests/e2e/district-calculator-ux.spec.ts",
+    "test:smoke:ci": "playwright test tests/e2e/ci-smoke.spec.ts tests/e2e/sale-calculator.spec.ts tests/e2e/district-calculator-ux.spec.ts tests/e2e/mobile-readability.spec.ts tests/e2e/sharing-and-basic-quote.spec.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
     "validate": "npm run test:unit && npm run build && npm run verify:dist"
   },

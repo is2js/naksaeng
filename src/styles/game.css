@@ -2010,6 +2010,7 @@ input:focus-visible {
 
 .option-preview::after { width: 28px; height: 34px; margin: -13px 0 0 31px; transform: skewY(17deg); }
 .option-preview img { width: 100%; height: 100%; position: absolute; inset: 0; object-fit: contain; background: #111b1e; z-index: 1; }
+.option-storage-note { margin: 0; padding: 7px 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .option-preview i { position: relative; z-index: 0; color: rgba(229, 211, 169, 0.34); font: 800 25px Georgia, serif; }
 .option-preview em { padding: 2px 4px; position: absolute; left: 4px; bottom: 4px; z-index: 2; border-radius: 2px; color: #bdd0cc; background: rgba(0, 0, 0, 0.56); font: normal 650 7px ui-monospace, monospace; letter-spacing: .08em; }
 .option-card.is-selected .option-preview em { color: #f4d891; }
@@ -2326,6 +2327,21 @@ input:focus-visible {
 
 @media (pointer: coarse), (max-width: 760px) {
   .rpg-actor, #world-canvas, #three-world-canvas { touch-action: none; }
+  /* Keep the existing palette, but make each choice readable and tappable on a phone. */
+  .palette-tabs { height: 48px; }
+  .palette-tabs button { font-size: 13px; }
+  .palette-viewbar button { min-height: 44px; font-size: 11px; }
+  .option-categories { gap: 6px; }
+  .option-categories button { min-height: 44px; padding: 8px 11px; font-size: 12px; }
+  .option-copy b { overflow: visible; font-size: 13px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+  .option-copy > small { display: block; overflow: visible; color: #a3b8b3; font-size: 12px; line-height: 1.5; -webkit-line-clamp: unset; overflow-wrap: anywhere; }
+  .option-category, .dependency { font-size: 11px; }
+  .option-copy strong { font-size: 12px; }
+  .minus-option-discounts span { white-space: normal; }
+  .system-ac-card { grid-template-rows: minmax(65px, auto) 44px; }
+  .system-ac-stepper { height: 44px; grid-template-columns: 44px minmax(70px, 1fr) 44px; }
+  .system-ac-stepper output { font-size: 11px; }
+  .furniture-search { min-height: 44px; font-size: 16px; }
   .game-stage { min-height: 520px; height: clamp(520px, 72svh, 680px); }
   .showcase-layout { display: flex; flex-direction: column; }
   .option-panel { width: 100%; height: auto; max-height: 720px; }
@@ -2987,7 +3003,7 @@ button.household-cell.is-selected::after { content: '✓'; position: absolute; t
   .household-topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .household-header-actions { gap: 5px; }
   .household-header-actions .build-chip { display: none; }
-  .household-header-action { min-width: 42px; min-height: 32px; padding: 6px 8px; }
+  .household-header-action { min-width: 44px; min-height: 44px; padding: 8px; }
   .household-header-action span { display: none; }
   .household-header-action small { display: block; }
   .household-selector-shell { padding-bottom: 108px; }
@@ -3003,32 +3019,38 @@ button.household-cell.is-selected::after { content: '✓'; position: absolute; t
   .household-selector-tools { justify-content: flex-start; }
   .household-selector-tools button,
   .household-selector-tools .selector-overview-link { min-height: 32px; max-width: none; padding: 7px 9px; font-size: 9px; }
-  .household-wizard-progress { margin-bottom: 14px; grid-template-columns: auto minmax(12px, 36px) auto minmax(12px, 36px) auto; gap: 6px; }
+  .household-wizard-progress { margin-bottom: 14px; grid-template-columns: auto minmax(8px, 36px) auto minmax(8px, 36px) auto; gap: 4px; }
+  .household-wizard-progress button { min-height: 44px; }
   .household-wizard-progress button i { width: 28px; height: 28px; }
-  .household-wizard-progress button b { font-size: 9.5px; }
+  .household-wizard-progress button b { font-size: 11px; }
   .household-building-picker-panel { padding: 12px; border-radius: 8px; }
   .household-building-picker { gap: 8px; }
   .household-building-choice { min-height: 62px; padding: 10px 6px; }
   .household-building-number small { font-size: 9px; }
   .household-building-detail { max-width: 380px; margin-bottom: 28px; padding: 12px; gap: 11px; border-radius: 8px; }
   .household-building-detail-head { align-items: center; }
-  .household-building-back { min-height: 32px; padding: 7px 9px; font-size: 9px; }
+  .household-building-back { min-height: 44px; padding: 8px 10px; font-size: 11px; }
   .household-selected-building { display: grid; place-items: center; padding: 6px 9px; font-size: 9px; }
   .household-building-rows { gap: 8px; }
   .household-building-row { padding-inline: 4px; border-radius: 7px; gap: 2px; }
   .household-cell span { display: none; }
-  .household-building-row.is-single { --unit-cell-height: 26px; --single-cell-width: 44px; grid-template-columns: 25px auto; padding: 10px 6px; gap: 5px; border-radius: 10px; }
+  .household-building-row.is-single { --unit-cell-height: 44px; --single-cell-width: clamp(29px, calc((100vw - 110px) / 6), 48px); grid-template-columns: 25px auto; padding: 10px 6px; gap: 5px; border-radius: 10px; }
   .household-building-row.is-single .household-floor-rail,
   .household-building-row.is-single .household-building-card { grid-template-rows: 38px auto 29px; }
   .household-building-row.is-single .household-cell span { display: block; }
-  .household-building-row.is-single .household-cell { margin: 1px; padding: 3px 1px; border-radius: 5px; font-size: 10.5px; }
-  .household-building-row.is-single .household-floor-rail > div span { font-size: 8.5px; }
+  .household-building-row.is-single .household-cell { margin: 1px; padding: 3px 1px; border-radius: 5px; font-size: 12px; }
+  .household-building-row.is-single .household-cell:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: -2px; }
+  .household-building-row.is-single .household-floor-rail > div span { font-size: 10px; }
   .household-building-row.is-single .household-building-card header b { font-size: 15px; }
-  .household-building-row.is-single .household-building-card footer span { padding: 4px 1px; font-size: 9px; }
+  .household-building-row.is-single .household-building-card footer span { padding: 4px 1px; font-size: 10px; }
   .household-nickname-stage { margin-bottom: 28px; padding: 12px; gap: 11px; border-radius: 8px; }
   .household-nickname-stage-head { align-items: center; }
   .household-nickname-card { padding: 22px 18px 18px; }
-  .household-nickname-controls input { font-size: 12px; }
+  .household-nickname-controls input { height: 48px; font-size: 16px; }
+  .household-nickname-controls > button { height: 48px; font-size: 12px; }
+  .household-nickname-controls label span { font-size: 11px; }
+  .household-nickname-card output { min-height: 20px; font-size: 12px; line-height: 1.5; }
+  .household-registration-request button { min-height: 44px; padding: 8px 0; font-size: 12px; }
   .household-selection-dock { min-height: 96px; padding: 9px 12px; align-items: stretch; flex-direction: column; gap: 6px; }
   .household-selection-dock > div { min-width: 0; }
   .household-selection-dock button { width: 100%; min-height: 34px; padding-block: 8px; }
@@ -3038,7 +3060,7 @@ button.household-cell.is-selected::after { content: '✓'; position: absolute; t
   .household-building-picker { gap: 7px; }
   .household-building-choice { min-height: 60px; }
   .household-wizard-progress button { gap: 5px; }
-  .household-wizard-progress button b { font-size: 8.5px; }
+  .household-wizard-progress button b { font-size: 11px; }
   .household-wizard-progress button i { width: 27px; height: 27px; }
   .household-nickname-controls { grid-template-columns: minmax(0, 1fr) auto; }
   .household-nickname-controls > button { padding-inline: 12px; }
@@ -3071,3 +3093,6 @@ button.household-cell.is-selected::after { content: '✓'; position: absolute; t
 .household-operator-code input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--ink); font: inherit; }
 .household-operator-code small, .household-share-registration { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .household-share-registration a { color: var(--gold); text-decoration: underline; }
+@media (pointer: coarse), (max-width: 719px) {
+  .household-operator-code input { min-height: 48px; font-size: 16px; }
+}

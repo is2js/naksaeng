@@ -62,6 +62,27 @@ function optionProps(
 }
 
 describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
+  it('모바일 미리보기는 원본을 보존하면서 가벼운 WebP 자산을 제공한다', async () => {
+    const names = [
+      'air-planner-ceiling-vent', 'bathroom-combination-ventilator',
+      'bedroom-1-built-in-closet-pet', 'bedroom-1-clothing-care-closet',
+      'cooktop-gas-3burner-default', 'dress-room-powder-storage',
+      'electric-cooktop-erh-3903', 'induction-cooktop-bei3asb4bi',
+      'induction-cooktop-nz63b5056ak', 'refrigerator-cabinet-bespoke-alt2',
+      'refrigerator-cabinet-lg-built-in', 'refrigerator-cabinet-pet-basic',
+    ];
+    for (const name of names) {
+      const directory = path.join(process.cwd(), 'public', 'assets', 'options', 'previews');
+      const [original, optimized] = await Promise.all([
+        readFile(path.join(directory, `${name}-v2.png`)),
+        readFile(path.join(directory, `${name}-v2.webp`)),
+      ]);
+      expect(optimized.subarray(0, 4).toString()).toBe('RIFF');
+      expect(optimized.subarray(8, 12).toString()).toBe('WEBP');
+      expect(optimized.length, name).toBeLessThan(original.length);
+    }
+  });
+
   it('마이너스 패키지는 기본 욕실·주방 마감과 기본 쿡탑/후드만 순수 파생으로 숨긴다', async () => {
     const apartments = await apartmentsByUnit();
     for (const [unitType, apartment] of apartments) {
@@ -105,12 +126,12 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['entry-open-premium-shoe-cabinet']?.label)
       .toBe('오픈형 프리미엄 신발장');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['bedroom-1-built-in-closet-pet']?.previewUrl)
-      .toBe('assets/options/previews/bedroom-1-built-in-closet-pet-v2.png');
+      .toBe('assets/options/previews/bedroom-1-built-in-closet-pet-v2.webp');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['bathroom-combination-ventilator']?.previewUrl)
-      .toBe('assets/options/previews/bathroom-combination-ventilator-v2.png');
+      .toBe('assets/options/previews/bathroom-combination-ventilator-v2.webp');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['air-planner-ceiling-vent']).toMatchObject({
       label: '실별 환기·공기청정 시스템',
-      previewUrl: 'assets/options/previews/air-planner-ceiling-vent-v2.png',
+      previewUrl: 'assets/options/previews/air-planner-ceiling-vent-v2.webp',
     });
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['smart-lighting-package']?.label)
       .toBe('스마트홈 연계 조명 시스템');
@@ -121,22 +142,22 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['bedroom-1-clothing-care-closet']?.label)
       .toBe('침실1 와이드 붙박이장 의류관리기형');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['refrigerator-cabinet-pet-basic']?.previewUrl)
-      .toBe('assets/options/previews/refrigerator-cabinet-pet-basic-v2.png');
+      .toBe('assets/options/previews/refrigerator-cabinet-pet-basic-v2.webp');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['refrigerator-cabinet-bespoke-alt2']?.previewUrl)
-      .toBe('assets/options/previews/refrigerator-cabinet-bespoke-alt2-v2.png');
+      .toBe('assets/options/previews/refrigerator-cabinet-bespoke-alt2-v2.webp');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['refrigerator-cabinet-lg-built-in']?.previewUrl)
-      .toBe('assets/options/previews/refrigerator-cabinet-lg-built-in-v2.png');
+      .toBe('assets/options/previews/refrigerator-cabinet-lg-built-in-v2.webp');
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['electric-cooktop-erh-3903']).toMatchObject({
       label: '나비엔 매직 인덕션 2구+하이라이트1구(ERH-3903)',
-      previewUrl: 'assets/options/previews/electric-cooktop-erh-3903-v2.png',
+      previewUrl: 'assets/options/previews/electric-cooktop-erh-3903-v2.webp',
     });
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['induction-cooktop-bei3asb4bi']).toMatchObject({
       label: 'LG 인덕션 3구(BEI3ASB4BI)',
-      previewUrl: 'assets/options/previews/induction-cooktop-bei3asb4bi-v2.png',
+      previewUrl: 'assets/options/previews/induction-cooktop-bei3asb4bi-v2.webp',
     });
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['induction-cooktop-nz63b5056ak']).toMatchObject({
       label: '삼성 인덕션 3구(NZ63B5056AK)',
-      previewUrl: 'assets/options/previews/induction-cooktop-nz63b5056ak-v2.png',
+      previewUrl: 'assets/options/previews/induction-cooktop-nz63b5056ak-v2.webp',
     });
     expect(BUNDANG_OPTION_DISPLAY_OVERRIDES['bedroom-2-built-in-closet-pet']).toMatchObject({
       label: '침실2 붙박이장',

@@ -120,7 +120,7 @@ export function readSaleCalculatorHouseholdContext(
     if (!validApplicantRoute(value.applicantRoute)) return reject();
     const optionIds = safeOptionIds(value.optionIds);
     const returnUrl = sameOriginReturnUrl(value.returnUrl);
-    if (!optionIds?.length || !returnUrl) return reject();
+    if (!optionIds || !returnUrl) return reject();
     const sanitized = { schemaVersion: 1 as const, unitType: value.unitType, priceFloorBand: value.priceFloorBand, applicantRoute: value.applicantRoute, optionIds, returnUrl };
     storage.setItem(SALE_CALCULATOR_CONTEXT_SESSION_KEY, JSON.stringify(sanitized));
     return sanitized;
@@ -139,7 +139,7 @@ export function writeSaleCalculatorLaunchContext(
   if (!household) return null;
   const optionIds = safeOptionIds(value.optionIds);
   const returnUrl = sameOriginReturnUrl(value.returnUrl);
-  if (!optionIds || optionIds.length === 0 || !returnUrl) return null;
+  if (!optionIds || !returnUrl) return null;
   const context: SaleCalculatorContextV1 = {
     schemaVersion: 1,
     unitType: household.unitType,

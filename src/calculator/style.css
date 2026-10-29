@@ -284,3 +284,11 @@ input[aria-invalid="true"]{outline:2px solid #e79296!important;outline-offset:2p
   .tranche-list small{font-size:10px}
   .option-list li{break-inside:avoid}
 }
+
+/* Contract-booking details are important before visiting the sales office. */
+.contract-booking-note{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;margin:0 0 14px;padding:11px 14px;border:1px solid rgba(225,185,99,.35);border-radius:8px;background:rgba(225,185,99,.08);font-size:12px;line-height:1.55}
+.contract-booking-note b{color:#f1d28d}.contract-booking-note span{color:#e5eee9}.contract-booking-note small{color:#b2c2bd;font-size:11px}.contract-booking-note a,.contract-stamp-note a{color:#a7eddd;text-underline-offset:3px}
+.stamp-settlement-reminder{margin:12px 0;padding:10px 12px;border:1px solid rgba(225,185,99,.27);border-radius:7px;color:#d9e6df;background:rgba(225,185,99,.06);font-size:12px;line-height:1.6}.stamp-settlement-reminder b{color:#f1d28d}
+.calculator-mobile-jump{display:none}
+@media(max-width:760px){.calculator-mobile-jump{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 12px}.calculator-mobile-jump button{min-height:44px;padding:6px 4px;color:#dcece7;border:1px solid rgba(151,193,187,.25);border-radius:7px;background:#11262b;font-size:12px;font-weight:700}.calculator-mobile-jump button:hover,.calculator-mobile-jump button:focus-visible{border-color:var(--mint);color:#fff}.contract-booking-note{align-items:flex-start;flex-direction:column;gap:3px}.contract-booking-note small{font-size:12px}}
+@media print{.calculator-mobile-jump{display:none!important}.contract-booking-note,.stamp-settlement-reminder{color:#253f34!important;background:#fff!important;border:1px solid #a7bcb3!important;break-inside:avoid}.contract-booking-note b,.contract-booking-note span,.contract-booking-note small,.stamp-settlement-reminder b{color:#253f34!important}.contract-booking-note a,.contract-stamp-note a{color:#17644a!important}}

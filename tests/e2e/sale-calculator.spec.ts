@@ -275,6 +275,37 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('.contract-breakdown .discount')).toContainText('−29,260,000원');
 });
 
+test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가 유지된다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seedCalculatorSession(page, {
+    schemaVersion: 1, unitType: '55A', priceFloorBand: '5+', applicantRoute: 'main-subscription', optionIds: [], returnUrl: RETURN_URL,
+  });
+  await page.goto('calculator/');
+  await expect(page.getByRole('heading', { name: '내 자금 계획' })).toBeVisible();
+  await expect(page.locator('.hero-total strong')).toHaveText('641,648,000원');
+  await expect(page.locator('.contract-breakdown')).toContainText('선택 옵션 합계0원');
+  await expect(page.locator('.contract-booking-note')).toContainText('당일 예약 불가');
+  await expect(page.locator('.contract-booking-note')).toContainText('10.30 10:00 ~ 11.12 23:59');
+  await expect(page.locator('.contract-booking-note')).toContainText('10:00~17:00');
+  await expect(page.locator('.contract-stamp-note')).toContainText('15만원을 선납');
+  await expect(page.locator('.contract-stamp-note')).toContainText('잔금에서 차감');
+  await expect(page.locator('.contract-stamp-note')).toContainText('모두 미반영');
+  await expect(page.locator('.stamp-settlement-reminder')).toContainText('반영되지 않았으니');
+  await page.locator('[data-calculator-jump="calculator-option-details"]').click();
+  await expect(page.locator('#calculator-option-details')).toHaveAttribute('open', '');
+  await expect(page.locator('#calculator-option-details')).toContainText('선택한 유상옵션이 없습니다');
+  await page.locator('[data-calculator-jump="calculator-tax-details"]').click();
+  await expect(page.locator('#calculator-tax-details')).toHaveAttribute('open', '');
+  await expect(page.locator('#calculator-tax-enabled')).not.toBeChecked();
+  await expect(page.locator('#calculator-plan-main')).toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.contract-booking-note')).toBeVisible();
+  await expect(page.locator('.contract-stamp-note')).toBeVisible();
+  await expect(page.locator('.stamp-settlement-reminder')).toBeVisible();
+  await expect(page.locator('.calculator-mobile-jump')).toBeHidden();
+});
+
 const priceCases = [
   { name: '별도 옵션 포함', ids: ['system-ac-2-general', 'wide-plank-floor-finish'], total: '647,068,000원', mainDeposit: '64,706,800원', preDeposit: '32,353,400원', mainBalance: '452,405,600원', preBalance: '485,301,000원', separate: true },
   { name: '별도 기타 옵션 없음', ids: ['system-ac-2-general'], total: '645,248,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainBalance: '451,313,600원', preBalance: '483,936,000원', separate: false },

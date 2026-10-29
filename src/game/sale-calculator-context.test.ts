@@ -83,7 +83,8 @@ describe('분양가 계산기 세션 컨텍스트', () => {
       applicantRoute: 'main-subscription',
       optionIds: [],
       returnUrl: '/bunfirvil/',
-    }, storage)).toBeNull();
+    }, storage)?.optionIds).toEqual([]);
+    expect(readSaleCalculatorLaunchContext(storage)?.optionIds).toEqual([]);
   });
 
   it('세대 다시 선택 시 계산기 세션 항목을 제거한다', () => {

@@ -1,0 +1,25 @@
+.share-dialog form { max-height: min(80svh, 680px); overflow-y: auto; }
+.share-dialog p { color: #c7d7d2; font-size: 14px; line-height: 1.6; }
+.share-dialog label { display: block; margin: 18px 0 7px; color: #e6efec; font-size: 13px; font-weight: 750; }
+.share-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 78px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid rgba(141, 205, 190, .32);
+  border-radius: 7px;
+  color: #e6efec;
+  background: rgba(5, 17, 21, .8);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.share-dialog #share-link-status { min-height: 22px; color: #a8d6c9; }
+.share-dialog .option-confirm-actions { flex-wrap: wrap; }
+.share-dialog .option-confirm-actions button { min-height: 44px; font-size: 13px; }
+@media (max-width: 520px) {
+  .share-dialog form { padding: 22px 18px; }
+  .share-dialog textarea { font-size: 16px; }
+}

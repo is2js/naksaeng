@@ -162,17 +162,17 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
   [BEDROOM_ONE_PET_CLOSET_OPTION_ID]: Object.freeze({
     label: '침실1 와이드 붙박이장',
     description: '붙박이장(PET) 구성입니다.',
-    previewUrl: 'assets/options/previews/bedroom-1-built-in-closet-pet-v2.png',
+    previewUrl: 'assets/options/previews/bedroom-1-built-in-closet-pet-v2.webp',
   }),
   [BEDROOM_ONE_CLOTHING_CARE_CLOSET_OPTION_ID]: Object.freeze({
     label: '침실1 와이드 붙박이장 의류관리기형',
     description: '붙박이장(PET)과 의류관리기장(PET) 구성입니다.',
-    previewUrl: 'assets/options/previews/bedroom-1-clothing-care-closet-v2.png',
+    previewUrl: 'assets/options/previews/bedroom-1-clothing-care-closet-v2.webp',
   }),
   [DRESS_ROOM_POWDER_STORAGE_OPTION_ID]: Object.freeze({
     label: '침실1 파우더 결합형 드레스룸 붙박이장',
     description: '화장대(PET)·엔지니어드 스톤(래디언스-골든쇼어)·콘센트·다운라이트·붙박이장(PET)·디자인 월 구성입니다.',
-    previewUrl: 'assets/options/previews/dress-room-powder-storage-v2.png',
+    previewUrl: 'assets/options/previews/dress-room-powder-storage-v2.webp',
   }),
   [BEDROOM_TWO_PET_CLOSET_OPTION_ID]: Object.freeze({
     label: '침실2 붙박이장',
@@ -195,12 +195,12 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
     previewUrl: 'assets/options/previews/bedroom-secondary-desk-closet-v2.webp',
   }),
   [BATHROOM_COMBINATION_VENTILATOR_OPTION_ID]: Object.freeze({
-    previewUrl: 'assets/options/previews/bathroom-combination-ventilator-v2.png',
+    previewUrl: 'assets/options/previews/bathroom-combination-ventilator-v2.webp',
   }),
   [AIR_PLANNER_OPTION_ID]: Object.freeze({
     label: '실별 환기·공기청정 시스템',
     description: '거실·주방/식당·각 침실 천장 D-에어플래너 단말과 침실 스마트 디스플레이 스위치 구성입니다. 스마트홈 연계 조명 시스템 선택 시 D-에어플래너 구성으로 적용됩니다.',
-    previewUrl: 'assets/options/previews/air-planner-ceiling-vent-v2.png',
+    previewUrl: 'assets/options/previews/air-planner-ceiling-vent-v2.webp',
   }),
   [SMART_LIGHTING_OPTION_ID]: Object.freeze({
     label: '스마트홈 연계 조명 시스템',
@@ -221,17 +221,17 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
   'electric-cooktop-erh-3903': Object.freeze({
     label: '나비엔 매직 인덕션 2구+하이라이트1구(ERH-3903)',
     description: '기본 제공 3구 가스쿡탑을 2구 인덕션+1구 하이라이트 하이브리드 쿡탑으로 교체합니다.',
-    previewUrl: 'assets/options/previews/electric-cooktop-erh-3903-v2.png',
+    previewUrl: 'assets/options/previews/electric-cooktop-erh-3903-v2.webp',
   }),
   'induction-cooktop-bei3asb4bi': Object.freeze({
     label: 'LG 인덕션 3구(BEI3ASB4BI)',
     description: '기본 제공 3구 가스쿡탑을 LG 빌트인 인덕션 3구로 교체합니다.',
-    previewUrl: 'assets/options/previews/induction-cooktop-bei3asb4bi-v2.png',
+    previewUrl: 'assets/options/previews/induction-cooktop-bei3asb4bi-v2.webp',
   }),
   'induction-cooktop-nz63b5056ak': Object.freeze({
     label: '삼성 인덕션 3구(NZ63B5056AK)',
     description: '기본 제공 3구 가스쿡탑을 삼성 플렉스존 인덕션 3구로 교체합니다.',
-    previewUrl: 'assets/options/previews/induction-cooktop-nz63b5056ak-v2.png',
+    previewUrl: 'assets/options/previews/induction-cooktop-nz63b5056ak-v2.webp',
   }),
   [BUILT_IN_DISHWASHER_OPTION_ID]: Object.freeze({
     label: '빌트인 식기세척기',
@@ -253,13 +253,13 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
     previewUrl: 'assets/options/previews/built-in-oven-lg-v2.webp',
   }),
   [REFRIGERATOR_BASIC_OPTION_ID]: Object.freeze({
-    previewUrl: 'assets/options/previews/refrigerator-cabinet-pet-basic-v2.png',
+    previewUrl: 'assets/options/previews/refrigerator-cabinet-pet-basic-v2.webp',
   }),
   [REFRIGERATOR_BESPOKE_OPTION_ID]: Object.freeze({
-    previewUrl: 'assets/options/previews/refrigerator-cabinet-bespoke-alt2-v2.png',
+    previewUrl: 'assets/options/previews/refrigerator-cabinet-bespoke-alt2-v2.webp',
   }),
   [REFRIGERATOR_LG_OPTION_ID]: Object.freeze({
-    previewUrl: 'assets/options/previews/refrigerator-cabinet-lg-built-in-v2.png',
+    previewUrl: 'assets/options/previews/refrigerator-cabinet-lg-built-in-v2.webp',
   }),
 });
 

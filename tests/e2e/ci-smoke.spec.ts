@@ -191,6 +191,8 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   }
 
   await page.locator('#share-showcase').click();
+  await expect(page.locator('#share-dialog')).toContainText('닉네임');
+  await page.locator('#share-link-copy').click();
   await expect(page.locator('#toast')).toContainText('읽기 전용 공유 링크를 복사했습니다.');
   const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
   expect(sharedUrl).toMatch(/\?map=bundang-first-village-59a-prototype&variant=B#share=v1\./);

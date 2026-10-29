@@ -1,4 +1,5 @@
 import { escapeHtml, resolveProjectUrl, resolveReferencedUrl } from './base';
+import '../styles/share-dialog.css';
 import { loadCatalog, mapFromQuery } from './catalog';
 import { hasValidMapQuery } from './household-catalog';
 import { waitForHouseholdSelection } from './household-selector';
@@ -692,6 +693,7 @@ export class ShowcaseApp {
               <button type="button" class="is-active" data-palette-tab="options">옵션</button>
               <button type="button" data-palette-tab="furniture">가구 배치</button>
             </div>
+            ${this.readOnlyShare ? '' : '<p class="option-storage-note">옵션·가구는 이 브라우저의 같은 평형에서 공유되며 다른 기기에는 자동 저장되지 않습니다.</p>'}
             <div class="palette-viewbar">
               <span id="palette-view-label">${this.readOnlyShare ? '적용 옵션' : '전체 옵션'}</span>
               <button type="button" id="palette-applied-only" aria-pressed="${this.readOnlyShare ? 'true' : 'false'}" ${this.readOnlyShare ? 'hidden disabled' : ''}>적용만 보기</button>
@@ -759,6 +761,22 @@ export class ShowcaseApp {
           <div class="option-confirm-actions">
             <button type="submit" value="cancel">취소</button>
             <button type="submit" value="confirm" class="is-primary">계산기 열기</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="share-dialog" class="option-confirm-dialog share-dialog">
+        <form method="dialog">
+          <h2>놀이터 공유</h2>
+          <p>링크에는 공유자의 닉네임, 평형과 방향, 선택 옵션, 배치 가구가 포함됩니다. 동·호수와 인증코드는 포함되지 않습니다.</p>
+          <p>링크를 받은 사람에게 이 정보가 전달됩니다. 링크 데이터 자체는 암호화되지 않으며, 발급한 링크는 중앙에서 회수할 수 없습니다. 열람 전 인증이 필요합니다.</p>
+          <label for="share-link-value">읽기 전용 공유 링크</label>
+          <textarea id="share-link-value" rows="3" readonly spellcheck="false" aria-describedby="share-link-status"></textarea>
+          <p id="share-link-status" role="status" aria-live="polite"></p>
+          <div class="option-confirm-actions">
+            <button type="submit" value="close">닫기</button>
+            <button type="button" id="share-link-native" hidden>기기로 공유</button>
+            <button type="button" id="share-link-copy" class="is-primary">링크 복사</button>
           </div>
         </form>
       </dialog>
@@ -946,8 +964,12 @@ export class ShowcaseApp {
     this.mount.querySelectorAll<HTMLButtonElement>('#open-help, #viewer-open-help')
       .forEach((button) => button.addEventListener('click', () => dialog.showModal(), { signal }));
     this.mount.querySelectorAll<HTMLButtonElement>('#share-showcase').forEach((button) => {
-      button.addEventListener('click', () => void this.copyReadOnlyShareLink(), { signal });
+      button.addEventListener('click', () => this.openReadOnlyShareDialog(), { signal });
     });
+    const shareLink = this.get<HTMLTextAreaElement>('#share-link-value');
+    shareLink.addEventListener('focus', () => shareLink.select(), { signal });
+    this.get<HTMLButtonElement>('#share-link-copy').addEventListener('click', () => void this.copyReadOnlyShareLink(), { signal });
+    this.get<HTMLButtonElement>('#share-link-native').addEventListener('click', () => void this.shareReadOnlyShareLink(), { signal });
     this.get<HTMLButtonElement>('#choose-household').addEventListener('click', () => {
       clearHouseholdVerificationSession();
       clearSaleCalculatorContext();
@@ -1353,7 +1375,10 @@ export class ShowcaseApp {
   }
 
   private startInspectionLaser(): void {
-    if (!this.inspectionLaserSupported()) return;
+    if (!this.inspectionLaserSupported()) {
+      this.toast('현재 2D 화면에서는 레이저 실측을 사용할 수 없습니다. 브라우저를 새로고침하거나 다른 기기에서 다시 시도해 주세요.', 'notice');
+      return;
+    }
     this.pressedKeys.clear();
     this.inspectionLaser.active = true;
     this.inspectionLaser.axis = 'x';
@@ -1650,17 +1675,18 @@ export class ShowcaseApp {
     const active = supported && this.inspectionLaser.active;
     const touchToggle = this.mount.querySelector<HTMLButtonElement>('#touch-laser-toggle');
     if (touchToggle) {
-      touchToggle.hidden = !supported;
+      touchToggle.hidden = false;
       touchToggle.setAttribute('aria-pressed', String(active));
-      touchToggle.setAttribute('aria-label', active ? '레이저 실측 종료' : '레이저 실측 시작');
-      touchToggle.querySelector('span')!.textContent = active ? '실측 종료' : '실측';
+      touchToggle.setAttribute('aria-label', !supported ? '2D 화면에서 레이저 실측 불가 안내' : active ? '레이저 실측 종료' : '레이저 실측 시작');
+      touchToggle.querySelector('span')!.textContent = !supported ? '실측 불가' : active ? '실측 종료' : '실측';
     }
     const toggle = this.mount.querySelector<HTMLButtonElement>('#inspection-laser-toggle');
     if (toggle) {
-      toggle.hidden = !supported;
+      toggle.hidden = false;
       toggle.classList.toggle('is-active', active);
       toggle.setAttribute('aria-pressed', String(active));
-      toggle.title = active
+      toggle.querySelector('b')!.textContent = supported ? '레이저 실측' : '실측 불가';
+      toggle.title = !supported ? '현재 2D 화면에서는 레이저 실측을 사용할 수 없습니다.' : active
         ? `레이저 실측 종료 (버튼 또는 Esc) · J는 자동/2점 전환`
         : '레이저 실측 시작 (J)';
     }
@@ -3096,11 +3122,9 @@ export class ShowcaseApp {
     const saleCalculatorContext = readSaleCalculatorHouseholdContext();
     const saleCalculatorButton = this.get<HTMLButtonElement>('#open-sale-calculator');
     const calculatorMatchesMap = saleCalculatorContext?.unitType === this.currentMap.unitType;
-    saleCalculatorButton.disabled = selectedOptions.length === 0 || this.readOnlyShare;
+    saleCalculatorButton.disabled = this.readOnlyShare;
     saleCalculatorButton.title = this.readOnlyShare
       ? '공유 열람 모드에서는 분양가 계산기를 열 수 없습니다.'
-      : selectedOptions.length === 0
-      ? '옵션을 하나 이상 선택하면 분양가 계산기를 열 수 있습니다.'
       : calculatorMatchesMap
         ? '선택 옵션을 반영해 분양가 계산기를 엽니다.'
         : '세대를 다시 선택하고 인증하면 분양가 계산을 계속할 수 있습니다.';
@@ -3402,7 +3426,7 @@ export class ShowcaseApp {
   private defaultCooktopCard(): string {
     const minusOptionActive = this.selectedOptionIds.includes(BUNDANG_MINUS_OPTION_ID);
     const active = !minusOptionActive && !COOKTOP_OPTION_IDS.some((id) => this.selectedOptionIds.includes(id));
-    const previewUrl = resolveProjectUrl('assets/options/previews/cooktop-gas-3burner-default-v2.png');
+    const previewUrl = resolveProjectUrl('assets/options/previews/cooktop-gas-3burner-default-v2.webp');
     return `
       <article class="option-card option-default-card ${active ? 'is-default-active' : ''}" aria-label="미선택 시 기본 제공 나비엔 매직 3구 가스쿡탑">
         <span class="option-preview"><img src="${escapeHtml(previewUrl)}" alt="" loading="lazy" /><em>${minusOptionActive ? '제외됨' : active ? '기본 설치' : '대체됨'}</em></span>
@@ -3532,6 +3556,12 @@ export class ShowcaseApp {
         this.canvasRenderer.setWorld(this.world);
         this.canvasRenderer.setSelectedOptions(this.selectedOptionIds);
         this.get<HTMLElement>('#metric-renderer').textContent = 'CANVAS·FALLBACK';
+        if (this.inspectionLaser.active) {
+          this.stopInspectionLaser('webgl-fallback');
+          this.toast('3D 화면을 사용할 수 없어 레이저 실측을 종료했습니다. 새로고침하거나 다른 기기에서 다시 시도해 주세요.', 'notice');
+        } else {
+          this.renderInspectionLaserHud();
+        }
         this.renderer.render(time);
       } else {
         throw error;
@@ -3559,7 +3589,7 @@ export class ShowcaseApp {
     this.animationFrame = requestAnimationFrame(this.tick);
   };
 
-  private async copyReadOnlyShareLink(): Promise<void> {
+  private openReadOnlyShareDialog(): void {
     try {
       const sharedByNickname = this.sharedState?.sharedByNickname || this.authenticatedNickname;
       if (!sharedByNickname) {
@@ -3575,25 +3605,51 @@ export class ShowcaseApp {
         furniture: this.localInteriorProps.filter(isUserPlacedFurnitureProp),
       });
       const url = bundangReadOnlyShareUrl(resolveProjectUrl(''), state);
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        const field = document.createElement('textarea');
-        field.value = url;
-        field.style.position = 'fixed';
-        field.style.opacity = '0';
-        document.body.append(field);
-        try {
-          field.select();
-          if (!document.execCommand('copy')) throw new Error('copy failed');
-        } finally {
-          field.remove();
-        }
-      }
-      this.toast(`${sharedByNickname}님의 읽기 전용 공유 링크를 복사했습니다.`, 'success');
+      this.get<HTMLTextAreaElement>('#share-link-value').value = url;
+      this.get<HTMLElement>('#share-link-status').textContent = '공유할 내용을 확인한 뒤 링크를 복사하거나 기기로 공유하세요.';
+      this.get<HTMLButtonElement>('#share-link-native').hidden = typeof navigator.share !== 'function';
+      this.get<HTMLDialogElement>('#share-dialog').showModal();
     } catch (error) {
-      console.warn('[bunfirvil] share link copy failed', error);
-      this.toast('공유 링크를 만들지 못했습니다. 배치 가구 수를 확인해 주세요.', 'notice');
+      console.warn('[bunfirvil] share link creation failed', error);
+      this.toast('공유 링크를 만들지 못했습니다. 옵션과 배치 가구 수를 확인해 주세요.', 'notice');
+    }
+  }
+
+  private async copyReadOnlyShareLink(): Promise<void> {
+    const field = this.get<HTMLTextAreaElement>('#share-link-value');
+    const status = this.get<HTMLElement>('#share-link-status');
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(field.value);
+        copied = true;
+      }
+    } catch { /* Clipboard access can be denied in mobile browsers and webviews. */ }
+    if (!copied) {
+      field.focus();
+      field.select();
+      try { copied = document.execCommand('copy'); } catch { /* Use the visible manual-copy fallback. */ }
+    }
+    if (copied) {
+      status.textContent = '읽기 전용 공유 링크를 복사했습니다.';
+      this.toast('읽기 전용 공유 링크를 복사했습니다.', 'success');
+    } else {
+      field.focus();
+      field.select();
+      status.textContent = '자동 복사를 사용할 수 없습니다. 위 링크를 길게 눌러 직접 복사해 주세요.';
+    }
+  }
+
+  private async shareReadOnlyShareLink(): Promise<void> {
+    if (typeof navigator.share !== 'function') return;
+    const field = this.get<HTMLTextAreaElement>('#share-link-value');
+    const status = this.get<HTMLElement>('#share-link-status');
+    try {
+      await navigator.share({ title: '분당퍼스트빌리지 공유 놀이터', url: field.value });
+      status.textContent = '공유 화면을 열었습니다.';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      status.textContent = '기기 공유를 사용할 수 없습니다. 링크 복사 버튼을 이용해 주세요.';
     }
   }
 

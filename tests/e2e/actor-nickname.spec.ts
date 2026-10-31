@@ -1,5 +1,17 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { strToU8, zlibSync } from 'fflate';
+
+async function expectNameAboveActor(actor: Locator, nickname: string): Promise<void> {
+  const name = actor.locator('.actor-name');
+  await expect(name).toHaveText(nickname);
+  await expect(name).toBeVisible();
+  await expect(name).toHaveCSS('opacity', '1');
+  const nameBounds = await name.boundingBox();
+  const spriteBounds = await actor.locator('.actor-sprite').boundingBox();
+  expect(nameBounds).not.toBeNull();
+  expect(spriteBounds).not.toBeNull();
+  expect(nameBounds!.y + nameBounds!.height).toBeLessThanOrEqual(spriteBounds!.y + 1);
+}
 
 test('authenticated nickname remains literal across appearances, transformation, and reload', async ({ page, context }) => {
   test.setTimeout(120_000);
@@ -21,26 +33,31 @@ test('authenticated nickname remains literal across appearances, transformation,
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
   await expect(genderToggle).toBeVisible();
   await expect(man).toBeVisible();
-  await expect(man.locator('.actor-name')).toHaveText(nickname);
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(man, nickname);
   await expect(man.locator('.actor-name b')).toHaveCount(0);
   await expect(man).toHaveAttribute('aria-label', `${nickname} 조작`);
 
   await genderToggle.click();
   await expect(woman).toBeVisible();
-  await expect(woman.locator('.actor-name')).toHaveText(nickname);
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(woman, nickname);
   await expect(woman.locator('.actor-name b')).toHaveCount(0);
 
   await transformToggle.click();
   await expect(woman).toHaveAttribute('data-transformation', 'pigmy');
-  await expect(woman.locator('.actor-name')).toHaveText(nickname);
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(woman, nickname);
   await transformToggle.click();
   await genderToggle.click();
   await expect(man).toBeVisible();
-  await expect(man.locator('.actor-name')).toHaveText(nickname);
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(man, nickname);
 
   await page.reload();
   await expect(man).toBeVisible();
-  await expect(man.locator('.actor-name')).toHaveText(nickname);
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(man, nickname);
   await expect(man.locator('.actor-name b')).toHaveCount(0);
 });
 
@@ -63,10 +80,25 @@ test('shared playground keeps the owner name on the actor and in the title', asy
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
   await expect(page.locator('#map-title')).toHaveText('공유자님의 55A타입 공유 놀이터');
   const actor = page.locator('.rpg-actor--100');
-  await expect(actor.locator('.actor-name')).toHaveText('공유자');
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(actor, '공유자');
   await expect(actor).toHaveAttribute('aria-label', '공유자 조작');
 
   await page.reload();
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
-  await expect(actor.locator('.actor-name')).toHaveText('공유자');
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(actor, '공유자');
+});
+
+test('authenticated nickname remains visible above the actor on a mobile viewport', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await context.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
+    schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
+    role: 'verified', authRevision: 2, scope: 'playground', nickname: '모바일이웃',
+  })));
+  await page.goto('./?map=bundang-first-village-55a-prototype&variant=A');
+  await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
+  await page.mouse.move(1, 1);
+  await expectNameAboveActor(page.locator('.rpg-actor--100'), '모바일이웃');
 });

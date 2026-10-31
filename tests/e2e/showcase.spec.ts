@@ -97,13 +97,13 @@ test("runs the full serverless showcase and local review workflow", async ({ pag
   await expect(page.locator('.performance-hud')).toHaveCount(0);
   await expect(actor100.locator('.actor-health')).toHaveCount(0);
   await expect(actor100.locator('.actor-select-ring')).toHaveCount(0);
-  await expect(actor100.locator('.actor-name')).toHaveCSS('opacity', '0');
+  await expect(actor100.locator('.actor-name')).toHaveCSS('opacity', '1');
   await expect(actor100).toHaveAttribute('tabindex', '-1');
   await actor100.hover();
   await expect(actor100.locator('.actor-name')).toHaveCSS('opacity', '1');
   await expect(actor100.locator('.actor-name')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await page.locator('#map-select').hover();
-  await expect(actor100.locator('.actor-name')).toHaveCSS('opacity', '0');
+  await expect(actor100.locator('.actor-name')).toHaveCSS('opacity', '1');
   const actorSpriteBounds = await actor100.locator('.actor-sprite').boundingBox();
   expect(actorSpriteBounds).not.toBeNull();
   expect(actorSpriteBounds!.width).toBeCloseTo(actorSpriteBounds!.height, 1);

@@ -566,7 +566,7 @@ input:focus-visible {
 }
 
 .rpg-actor[hidden] { display: none; }
-.rpg-actor.is-transformed .actor-name { top: -27px; color: #d9ead1; }
+.rpg-actor.is-transformed .actor-name { color: #d9ead1; }
 .rpg-actor.is-transformed .actor-sprite {
   width: 102px;
   height: 102px;
@@ -645,7 +645,7 @@ input:focus-visible {
   position: absolute;
   z-index: 12;
   left: 50%;
-  top: 4px;
+  top: 50%;
   max-width: 130px;
   overflow: hidden;
   padding: 0;
@@ -659,7 +659,7 @@ input:focus-visible {
   text-align: center;
   text-overflow: ellipsis;
   text-shadow: 1px 1px 2px rgb(0 0 0 / 1), 0 0 5px rgb(0 0 0 / .82);
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
   white-space: nowrap;
 }
 

@@ -1283,9 +1283,9 @@ export class ThreeWorldRenderer {
 
   render(time = performance.now()): void {
     this.resize();
-    this.updateStructureOcclusion(time);
+    const visibleWallOccluders = this.updateStructureOcclusion(time);
     this.renderer.render(this.scene, this.camera);
-    this.ceilingActorMask.update(this.camera, this.propRoot, this.cssWidth, this.cssHeight, this.ceilingMaskRevision);
+    this.ceilingActorMask.update(this.camera, this.propRoot, this.cssWidth, this.cssHeight, this.ceilingMaskRevision, visibleWallOccluders);
   }
 
   clearCeilingActorMask(): void {
@@ -1654,7 +1654,7 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.interiorDoorLeafCount = String(renderedInteriorDoorLeafCount);
   }
 
-  private updateStructureOcclusion(time: number): void {
+  private updateStructureOcclusion(time: number): Array<{ mesh: THREE.Mesh; opacity: number }> {
     const elapsed = this.lastOcclusionTime > 0 ? Math.min(50, Math.max(0, time - this.lastOcclusionTime)) : 16;
     this.lastOcclusionTime = time;
     const focusActor = this.occlusionFocus;
@@ -1673,6 +1673,7 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.ceilingFadedCount = String(fadedCeilingCount);
     this.canvas.dataset.ceilingFadeOpacity = ceilingOpacity.toFixed(3);
     let fadedCount = 0;
+    const visibleWallOccluders: Array<{ mesh: THREE.Mesh; opacity: number }> = [];
     const occluders = [...this.structureOccluders, ...this.finishOccluders];
     for (const entry of occluders) {
       const occluded = Boolean(focus && entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus)));
@@ -1682,6 +1683,7 @@ export class ThreeWorldRenderer {
       const blend = Math.min(1, elapsed / Math.max(1, duration));
       entry.currentOpacity += (target - entry.currentOpacity) * blend;
       if (Math.abs(entry.currentOpacity - target) < 0.004) entry.currentOpacity = target;
+      if (occluded && entry.mesh.visible) visibleWallOccluders.push({ mesh: entry.mesh, opacity: entry.currentOpacity });
       const materials = Array.isArray(entry.mesh.material) ? entry.mesh.material : [entry.mesh.material];
       for (const material of materials) {
         const nextTransparent = entry.currentOpacity < 0.995;
@@ -1700,6 +1702,7 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.wallFadeOpacity = fadedCount
       ? Math.min(...occluders.filter((entry) => entry.currentOpacity < entry.baseOpacity).map((entry) => entry.currentOpacity)).toFixed(3)
       : '1.000';
+    return visibleWallOccluders;
   }
 
   private addDoor(object: WorldObject, opening: Record<string, unknown>, start: THREE.Vector3, end: THREE.Vector3, cellSize: number): void {

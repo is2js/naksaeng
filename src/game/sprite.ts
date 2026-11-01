@@ -36,6 +36,7 @@ export class ActorView {
   readonly element: HTMLButtonElement;
   private readonly sprite: HTMLSpanElement;
   private readonly transformationEffect: HTMLSpanElement;
+  private readonly transformationEffectWrapper: HTMLSpanElement;
   private manifest: CharacterManifest | null = null;
   private manifestUrl = '';
   private readonly transformations = new Map<string, { manifest: CharacterManifest; url: string }>();
@@ -43,13 +44,20 @@ export class ActorView {
   // undefined means no pending switch; null is an intentional return to the human sprite.
   private pendingTransformation: string | null | undefined;
   private transformationStartedAt = 0;
+  private transformationAwaitingFrame = false;
+  private staticSmokeAwaitingFrame = false;
+  private staticSmokeStartedAt = 0;
   private transformationEffectReady = false;
-  private transformationEffectRequested = false;
+  private readonly transformationEffectLoad: Promise<boolean>;
+  private transformationSequence = 0;
+  private visible = true;
+  private disposed = false;
   private lastSheet = '';
 
   constructor(
     readonly entry: StaticCharacterEntry,
     private readonly onSelect: (key: '100' | '200') => void,
+    effectLayer: HTMLElement,
   ) {
     const element = document.createElement('button');
     element.type = 'button';
@@ -60,13 +68,27 @@ export class ActorView {
     element.innerHTML = `
       <span class="actor-shadow" aria-hidden="true"></span>
       <span class="actor-sprite" aria-hidden="true"><span class="actor-fallback">${entry.key}</span></span>
-      <span class="actor-transformation-effect" aria-hidden="true"></span>
       <span class="actor-name"></span>
     `;
     (element.querySelector('.actor-name') as HTMLElement).textContent = entry.label;
     this.element = element;
     this.sprite = element.querySelector<HTMLElement>('.actor-sprite') as HTMLSpanElement;
-    this.transformationEffect = element.querySelector<HTMLElement>('.actor-transformation-effect') as HTMLSpanElement;
+    this.transformationEffectWrapper = document.createElement('span');
+    this.transformationEffectWrapper.className = 'actor-transformation-wrapper';
+    this.transformationEffectWrapper.dataset.actor = entry.key;
+    this.transformationEffectWrapper.setAttribute('aria-hidden', 'true');
+    this.transformationEffectWrapper.hidden = true;
+    this.transformationEffect = document.createElement('span');
+    this.transformationEffect.className = 'actor-transformation-effect';
+    this.transformationEffectWrapper.append(this.transformationEffect);
+    effectLayer.append(this.transformationEffectWrapper);
+    const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
+    this.transformationEffectLoad = preloadTransformationWalkSheet(effectUrl).then(() => {
+      if (this.disposed) return false;
+      this.transformationEffectReady = true;
+      this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;
+      return true;
+    }, () => false);
     element.addEventListener('click', () => this.onSelect(entry.key));
   }
 
@@ -95,18 +117,6 @@ export class ActorView {
       this.transformations.set(id, { manifest, url });
       this.element.dataset.transformationCandidates = this.availableTransformations().join(',');
       onAssetLoaded();
-      // Prepare in the background: a failed or not-yet-loaded visual must
-      // never prevent the actual playground transformation.
-      if (!this.transformationEffectRequested) {
-        this.transformationEffectRequested = true;
-        const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
-        const image = new Image();
-        image.onload = () => {
-          this.transformationEffectReady = true;
-          this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;
-        };
-        image.src = effectUrl;
-      }
       return true;
     } catch (error) {
       this.transformations.delete(id);
@@ -121,29 +131,62 @@ export class ActorView {
   }
 
   setVisible(visible: boolean): void {
+    this.visible = visible;
     this.element.hidden = !visible;
+    this.transformationEffectWrapper.hidden = !visible || !(this.element.classList.contains('is-transforming') || this.transformationEffectWrapper.classList.contains('is-static-smoke'));
   }
 
   setTransformed(transformed: string | null): void {
+    this.transformationSequence++;
     this.pendingTransformation = undefined;
     this.transformationStartedAt = 0;
+    this.transformationAwaitingFrame = false;
+    this.staticSmokeAwaitingFrame = false;
+    this.staticSmokeStartedAt = 0;
     this.element.classList.remove('is-transforming');
+    this.transformationEffectWrapper.classList.remove('is-transforming', 'is-static-smoke');
+    this.transformationEffectWrapper.hidden = true;
     this.applyTransformed(transformed);
   }
 
   /** The state changes immediately; only the visible sprite waits for smoke. */
   playTransformation(transformed: string | null): void {
     const next = transformed && this.transformations.has(transformed) ? transformed : null;
-    if (!this.transformationEffectReady || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      // Preserve immediate transformation and show one stationary, non-flashing
+      // smoke frame without playing a motion sequence.
       this.setTransformed(next);
+      const sequence = this.transformationSequence;
+      const showStatic = (ready: boolean) => {
+        if (ready && !this.disposed && sequence === this.transformationSequence) this.staticSmokeAwaitingFrame = true;
+      };
+      if (this.transformationEffectReady) showStatic(true);
+      else void Promise.race([this.transformationEffectLoad, new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 800))]).then(showStatic);
       return;
     }
-    this.pendingTransformation = next;
-    this.transformationStartedAt = performance.now();
-    this.element.classList.remove('is-transforming');
-    // A deliberate click can restart the CSS sequence, including rapid toggles.
-    void this.transformationEffect.offsetWidth;
-    this.element.classList.add('is-transforming');
+    const sequence = ++this.transformationSequence;
+    const begin = (ready: boolean) => {
+      if (this.disposed || sequence !== this.transformationSequence) return;
+      if (!ready) { this.setTransformed(next); return; }
+      this.pendingTransformation = next;
+      this.transformationStartedAt = 0;
+      this.transformationAwaitingFrame = true;
+      this.staticSmokeAwaitingFrame = false;
+      this.staticSmokeStartedAt = 0;
+      this.element.classList.remove('is-transforming');
+      this.transformationEffectWrapper.classList.remove('is-transforming', 'is-static-smoke');
+      this.transformationEffectWrapper.hidden = true;
+    };
+    if (this.transformationEffectReady) { begin(true); return; }
+    // A fast tap should not silently skip a still-loading effect. Bound the
+    // wait so a slow or failed network cannot prevent the transformation.
+    void Promise.race([this.transformationEffectLoad, new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 800))]).then(begin);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.transformationSequence++;
+    this.transformationEffectWrapper.remove();
   }
 
   private applyTransformed(transformed: string | null): void {
@@ -174,6 +217,27 @@ export class ActorView {
   }
 
   update(actor: ActorState, point: ProjectedPoint, time: number, worldScale = 1): void {
+    if (this.staticSmokeAwaitingFrame) {
+      this.staticSmokeAwaitingFrame = false;
+      this.staticSmokeStartedAt = time;
+      this.transformationEffectWrapper.hidden = !this.visible;
+      this.transformationEffectWrapper.classList.add('is-static-smoke');
+    }
+    if (this.staticSmokeStartedAt && time - this.staticSmokeStartedAt >= 450) {
+      this.staticSmokeStartedAt = 0;
+      this.transformationEffectWrapper.classList.remove('is-static-smoke');
+      this.transformationEffectWrapper.hidden = true;
+    }
+    if (this.transformationAwaitingFrame) {
+      this.transformationAwaitingFrame = false;
+      this.transformationStartedAt = time;
+      this.transformationEffectWrapper.hidden = !this.visible;
+      // Start on the rendered frame, not the click's wall clock: a busy WebGL
+      // frame must not consume the entire smoke animation before first paint.
+      void this.transformationEffect.offsetWidth;
+      this.transformationEffectWrapper.classList.add('is-transforming');
+      this.element.classList.add('is-transforming');
+    }
     if (this.transformationStartedAt) {
       const elapsed = Math.max(0, time - this.transformationStartedAt);
       if (this.pendingTransformation !== undefined && elapsed >= 600) {
@@ -183,10 +247,13 @@ export class ActorView {
       if (elapsed >= 1920) {
         this.transformationStartedAt = 0;
         this.element.classList.remove('is-transforming');
+        this.transformationEffectWrapper.classList.remove('is-transforming');
+        this.transformationEffectWrapper.hidden = true;
       }
     }
     const scale = Math.max(.65, Math.min(2.8, Number.isFinite(worldScale) ? worldScale : 1));
     this.element.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) scale(${scale})`;
+    this.transformationEffectWrapper.style.transform = this.element.style.transform;
     this.element.dataset.worldScale = scale.toFixed(3);
     this.element.style.zIndex = String(1_000 + Math.round(point.y));
     const renderDirection = travelLockedDirection(actor.direction, actor.travel);

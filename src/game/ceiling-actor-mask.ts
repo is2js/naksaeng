@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 type Point = { x: number; y: number };
 type CeilingMeshBounds = { mesh: THREE.Mesh; corners: THREE.Vector3[] };
+export type WallActorOccluder = { mesh: THREE.Mesh; opacity: number };
 
 type OriginalMaterial = { material: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean };
 type CeilingFadeState = { bounds: THREE.Box3; current: number; materials: OriginalMaterial[]; shadows: Array<{ mesh: THREE.Mesh; castShadow: boolean }> };
@@ -125,6 +126,36 @@ function isVisible(mesh: THREE.Object3D, appliance: THREE.Object3D): boolean {
   return false;
 }
 
+/** The actual local mesh bounds, transformed after all apartment variant transforms. */
+function wallMeshCorners(mesh: THREE.Mesh): THREE.Vector3[] {
+  if (!mesh.geometry) return [];
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  const bounds = mesh.geometry.boundingBox;
+  if (!bounds || bounds.isEmpty()) return [];
+  mesh.updateWorldMatrix(true, false);
+  const corners: THREE.Vector3[] = [];
+  for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+    corners.push(new THREE.Vector3(x, y, z).applyMatrix4(mesh.matrixWorld));
+  }
+  return corners;
+}
+
+function visibleInScene(mesh: THREE.Object3D): boolean {
+  const material = (mesh as THREE.Mesh).material;
+  if (material && (Array.isArray(material) ? material.every((item) => !item.visible) : !material.visible)) return false;
+  let current: THREE.Object3D | null = mesh;
+  while (current) {
+    if (!current.visible) return false;
+    current = current.parent;
+  }
+  return true;
+}
+
+function maskOpacity(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 1;
+}
+
 /** Screen-space mask exposes the already rendered appliance through the DOM actor layer. */
 export class CeilingActorMask {
   private readonly layer: HTMLElement | null;
@@ -162,10 +193,11 @@ export class CeilingActorMask {
     canvas.parentElement.append(this.svg);
   }
 
-  update(camera: THREE.Camera, propRoot: THREE.Group, width: number, height: number, revision: number): void {
+  update(camera: THREE.Camera, propRoot: THREE.Group, width: number, height: number, revision: number, wallOccluders: readonly WallActorOccluder[] = []): void {
     if (!this.layer || !this.mask || !this.background) return;
     const appliances = propRoot.children.filter((child) => child.visible && child.userData.ceilingActorOccluder === true);
-    if (!appliances.length) {
+    const walls = wallOccluders.filter(({ mesh }) => visibleInScene(mesh));
+    if (!appliances.length && !walls.length) {
       this.clear();
       return;
     }
@@ -178,8 +210,10 @@ export class CeilingActorMask {
       }
       return parts.filter(({ mesh }) => isVisible(mesh, appliance)).map((part) => ({ ...part, appliance }));
     });
+    for (const { mesh } of walls) mesh.updateWorldMatrix(true, false);
     const signature = [revision, width, height, ...camera.matrixWorldInverse.elements, ...camera.projectionMatrix.elements,
-      ...meshes.map(({ mesh, appliance }) => `${mesh.uuid}:${Number(appliance.userData.ceilingFadeOpacity ?? 1).toFixed(3)}`)].join(',');
+      ...meshes.map(({ mesh, appliance }) => `${mesh.uuid}:${Number(appliance.userData.ceilingFadeOpacity ?? 1).toFixed(3)}`),
+      ...walls.map(({ mesh, opacity }) => `${mesh.uuid}:${maskOpacity(opacity).toFixed(3)}:${mesh.matrixWorld.elements.join(':')}`)].join(',');
     if (signature === this.signature) return;
     this.signature = signature;
     this.mask.replaceChildren(this.background);
@@ -190,8 +224,17 @@ export class CeilingActorMask {
       element.setAttribute('height', String(height));
     }
     const ns = 'http://www.w3.org/2000/svg';
-    let count = 0;
-    for (const { corners, appliance } of meshes) {
+    let ceilingCount = 0;
+    let wallCount = 0;
+    // Later SVG polygons replace previous luminance. Draw weaker masks first
+    // so an overlapping wall/appliance uses the strongest occlusion instead
+    // of depending on the source traversal order or hiding actors entirely.
+    const parts: Array<{ corners: THREE.Vector3[]; opacity: number; appliance?: THREE.Object3D; wall?: THREE.Mesh }> = [
+      ...meshes.map(({ corners, appliance }) => ({ corners, appliance, opacity: maskOpacity(appliance.userData.ceilingFadeOpacity ?? 1) })),
+      ...walls.map(({ mesh, opacity }) => ({ corners: wallMeshCorners(mesh), wall: mesh, opacity: maskOpacity(opacity) })),
+    ];
+    parts.sort((a, b) => a.opacity - b.opacity);
+    for (const { corners, appliance, wall, opacity } of parts) {
       const hull = ceilingMaskHull(corners.map((corner) => {
         const projected = corner.clone().project(camera);
         return { x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2 };
@@ -199,29 +242,35 @@ export class CeilingActorMask {
       if (!hull.length || hull.every((p) => p.x < 0) || hull.every((p) => p.x > width)
         || hull.every((p) => p.y < 0) || hull.every((p) => p.y > height)) continue;
       const polygon = document.createElementNS(ns, 'polygon');
-      const opacity = Math.max(0, Math.min(1, Number(appliance.userData.ceilingFadeOpacity ?? 1)));
       const gray = Math.round((1 - opacity) * 255);
       polygon.setAttribute('fill', `rgb(${gray},${gray},${gray})`);
-      polygon.dataset.ceilingAssetId = String(appliance.userData.ceilingAssetId || '');
-      polygon.dataset.ceilingPropId = String(appliance.userData.editorPropId || '');
-      polygon.dataset.ceilingOpacity = opacity.toFixed(3);
-      const state = appliance.userData.ceilingFadeState as CeilingFadeState | undefined;
-      if (state) {
-        const ground = state.bounds.getCenter(new THREE.Vector3());
-        ground.y = 0;
-        ground.project(camera);
-        polygon.dataset.groundX = String((ground.x + 1) * width / 2);
-        polygon.dataset.groundY = String((1 - ground.y) * height / 2);
+      if (appliance) {
+        polygon.dataset.ceilingAssetId = String(appliance.userData.ceilingAssetId || '');
+        polygon.dataset.ceilingPropId = String(appliance.userData.editorPropId || '');
+        polygon.dataset.ceilingOpacity = opacity.toFixed(3);
+        const state = appliance.userData.ceilingFadeState as CeilingFadeState | undefined;
+        if (state) {
+          const ground = state.bounds.getCenter(new THREE.Vector3());
+          ground.y = 0;
+          ground.project(camera);
+          polygon.dataset.groundX = String((ground.x + 1) * width / 2);
+          polygon.dataset.groundY = String((1 - ground.y) * height / 2);
+        }
+        ceilingCount++;
+      } else if (wall) {
+        polygon.dataset.wallOccluder = 'true';
+        polygon.dataset.wallOpacity = opacity.toFixed(3);
+        wallCount++;
       }
       polygon.setAttribute('points', hull.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '));
       this.mask.append(polygon);
-      count++;
     }
-    const mask = count ? `url(#${this.maskId})` : '';
+    const mask = ceilingCount + wallCount ? `url(#${this.maskId})` : '';
     this.layer.style.mask = mask;
     if (mask) this.layer.style.setProperty('-webkit-mask', mask);
     else this.layer.style.removeProperty('-webkit-mask');
-    this.layer.dataset.ceilingMaskCount = String(count);
+    this.layer.dataset.ceilingMaskCount = String(ceilingCount);
+    this.layer.dataset.wallMaskCount = String(wallCount);
   }
 
   clear(): void {
@@ -230,6 +279,7 @@ export class CeilingActorMask {
       this.layer.style.mask = '';
       this.layer.style.removeProperty('-webkit-mask');
       delete this.layer.dataset.ceilingMaskCount;
+      delete this.layer.dataset.wallMaskCount;
     }
   }
 

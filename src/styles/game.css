@@ -574,6 +574,19 @@ input:focus-visible {
   top: -25px;
 }
 
+/* Smoke follows the actor in the unmasked effect layer, above wall/ceiling masks. */
+.actor-transformation-wrapper {
+  width: 68px;
+  height: 84px;
+  margin: -76px 0 0 -34px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  transform-origin: 50% 90%;
+  will-change: transform;
+}
+.actor-transformation-wrapper[hidden] { display: none; }
 /* One shared 24-frame violet smoke sheet; anchor its source foot pixel at the actor's ground point. */
 .actor-transformation-effect {
   display: none;
@@ -589,9 +602,14 @@ input:focus-visible {
   background-size: 2400% 100%;
   background-position: 0 0;
 }
-.rpg-actor.is-transforming .actor-transformation-effect {
+.actor-transformation-wrapper.is-transforming .actor-transformation-effect {
   display: block;
   animation: actor-transformation-smoke 1920ms steps(24, end) both;
+}
+.actor-transformation-wrapper.is-static-smoke .actor-transformation-effect {
+  display: block;
+  animation: none;
+  background-position: 52.173913% 0;
 }
 @keyframes actor-transformation-smoke {
   from { background-position: 0 0; }

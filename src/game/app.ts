@@ -433,6 +433,7 @@ export class ShowcaseApp {
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.optionFocusFrame);
     this.effectPlayer?.destroy();
+    this.actorViews.forEach((view) => view.dispose());
     this.childCompanionViews.forEach((view) => view.element.remove());
     this.threeRenderer?.dispose();
   }
@@ -838,6 +839,7 @@ export class ShowcaseApp {
       { key: '200', label: CHARACTER_DISPLAY_NAMES['200'], manifestUrl: 'generated/characters/200/animation.json' },
     ];
     const layer = this.get<HTMLElement>('#actor-layer');
+    const effectLayer = this.get<HTMLElement>('#effect-layer');
     for (const fallback of fallbackEntries) {
       const sourceEntry = entries.get(fallback.key) || fallback;
       const entry = {
@@ -861,7 +863,7 @@ export class ShowcaseApp {
         queuedDirection: null,
         travel: null,
       };
-      const view = new ActorView(entry, (key) => this.setActiveActor(key));
+      const view = new ActorView(entry, (key) => this.setActiveActor(key), effectLayer);
       this.actors.set(entry.key, actor);
       this.actorViews.set(entry.key, view);
       layer.append(view.element);

@@ -18,9 +18,11 @@ async function checkMaskPixels(page: Page): Promise<void> {
   const points = await layer.evaluate((element) => {
     const match = element.style.mask.match(/#([^"')]+)/);
     const mask = match ? document.getElementById(match[1]) : null;
-    const polygons = [...(mask?.querySelectorAll('polygon') || [])];
+    const polygons = [...(mask?.querySelectorAll('polygon[data-ceiling-asset-id]') || [])];
+    const allPolygons = [...(mask?.querySelectorAll('polygon') || [])];
     const box = element.getBoundingClientRect();
     const regions = polygons.map((polygon) => [...polygon.points].map((point) => ({ x: point.x, y: point.y })));
+    const allRegions = allPolygons.map((polygon) => [...polygon.points].map((point) => ({ x: point.x, y: point.y })));
     const left = Math.max(0, Math.floor(Math.min(...regions.flat().map((p) => p.x))));
     const right = Math.min(box.width - 1, Math.ceil(Math.max(...regions.flat().map((p) => p.x))));
     const top = Math.max(0, Math.floor(Math.min(...regions.flat().map((p) => p.y))));
@@ -40,7 +42,7 @@ async function checkMaskPixels(page: Page): Promise<void> {
     const gap: Array<{ x: number; y: number }> = [];
     for (let y = top; y <= bottom && gap.length < 100; y += 20) for (let x = left; x <= right && gap.length < 100; x += 20) {
       const point = { x: Math.round(x), y: Math.round(y) };
-      if (!regions.some((region) => contains(region, x, y))) gap.push(point);
+      if (!allRegions.some((region) => contains(region, x, y))) gap.push(point);
     }
     const overlay = document.createElement('div');
     overlay.id = 'mask-pixel-probe';
@@ -75,8 +77,10 @@ test('air conditioner and ventilation mask only their projected parts and clear 
     await page.evaluate((mapId) => localStorage.setItem(`bunfirvil:review:v1:${mapId}`, JSON.stringify({ selectedOptionIds: [] })), map);
     await page.reload();
     await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 25_000 });
-    await expect(page.locator('#actor-layer')).not.toHaveAttribute('data-ceiling-mask-count');
-    await expect(page.locator('#actor-layer')).not.toHaveAttribute('style', /mask:/);
+    // Wall occlusion may legitimately keep the shared actor-layer mask alive
+    // even after every ceiling appliance is removed.
+    await expect.poll(async () => Number(await page.locator('#actor-layer').getAttribute('data-ceiling-mask-count') || 0)).toBe(0);
+    await expect(page.locator('polygon[data-ceiling-asset-id]')).toHaveCount(0);
   }
 });
 
@@ -139,5 +143,6 @@ test('ceiling appliances fade near the player and return to opaque when the play
   await page.evaluate((mapId) => localStorage.setItem(`bunfirvil:review:v1:${mapId}`, JSON.stringify({ selectedOptionIds: [] })), map);
   await page.reload();
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 25_000 });
-  await expect(layer).not.toHaveAttribute('data-ceiling-mask-count');
+  await expect.poll(async () => Number(await layer.getAttribute('data-ceiling-mask-count') || 0)).toBe(0);
+  await expect(page.locator('polygon[data-ceiling-asset-id]')).toHaveCount(0);
 });

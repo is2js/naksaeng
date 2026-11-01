@@ -7,18 +7,44 @@ import type {
   StaticCharacterEntry,
 } from './types';
 
+// The two selectable player actors share the same transformation atlases.
+// Reuse the in-flight browser decode so mobile startup does not fetch/decode
+// each sheet twice. A failure is removed so a later load can retry.
+const transformationWalkSheetLoads = new Map<string, Promise<void>>();
+function preloadTransformationWalkSheet(url: string): Promise<void> {
+  const existing = transformationWalkSheetLoads.get(url);
+  if (existing) return existing;
+  const pending = new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    const timeout = window.setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      reject(new Error('transformation sheet timed out'));
+    }, 8_000);
+    image.onload = () => { window.clearTimeout(timeout); resolve(); };
+    image.onerror = () => { window.clearTimeout(timeout); reject(new Error('transformation sheet unavailable')); };
+    image.src = url;
+  });
+  transformationWalkSheetLoads.set(url, pending);
+  void pending.catch(() => {
+    if (transformationWalkSheetLoads.get(url) === pending) transformationWalkSheetLoads.delete(url);
+  });
+  return pending;
+}
+
 export class ActorView {
   readonly element: HTMLButtonElement;
   private readonly sprite: HTMLSpanElement;
   private readonly transformationEffect: HTMLSpanElement;
   private manifest: CharacterManifest | null = null;
   private manifestUrl = '';
-  private transformationManifest: CharacterManifest | null = null;
-  private transformationManifestUrl = '';
-  private transformed = false;
-  private pendingTransformation: boolean | null = null;
+  private readonly transformations = new Map<string, { manifest: CharacterManifest; url: string }>();
+  private transformed: string | null = null;
+  // undefined means no pending switch; null is an intentional return to the human sprite.
+  private pendingTransformation: string | null | undefined;
   private transformationStartedAt = 0;
   private transformationEffectReady = false;
+  private transformationEffectRequested = false;
   private lastSheet = '';
 
   constructor(
@@ -55,39 +81,59 @@ export class ActorView {
     }
   }
 
-  async loadTransformation(manifestUrl: string, onAssetLoaded: () => void): Promise<void> {
-    this.transformationManifestUrl = resolveProjectUrl(manifestUrl);
+  async loadTransformation(id: string, manifestUrl: string, onAssetLoaded: () => void): Promise<boolean> {
+    const url = resolveProjectUrl(manifestUrl);
     try {
-      this.transformationManifest = await fetchJson<CharacterManifest>(this.transformationManifestUrl);
+      const manifest = await fetchJson<CharacterManifest>(url);
+      const walk = manifest.motions?.walk;
+      const walkAction = (walk && manifest.defaultActions?.walk && walk.actions?.[manifest.defaultActions.walk])
+        || Object.values(walk?.actions ?? {})[0];
+      if (!walkAction?.sheet) throw new Error('missing transformation walk sheet');
+      // A manifest alone is not enough: a broken sheet would leave an invisible
+      // actor. Only advertise the candidate after the browser loads its walk sheet.
+      await preloadTransformationWalkSheet(resolveReferencedUrl(walkAction.sheet, url));
+      this.transformations.set(id, { manifest, url });
+      this.element.dataset.transformationCandidates = this.availableTransformations().join(',');
       onAssetLoaded();
       // Prepare in the background: a failed or not-yet-loaded visual must
       // never prevent the actual playground transformation.
-      const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
-      const image = new Image();
-      image.onload = () => {
-        this.transformationEffectReady = true;
-        this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;
-      };
-      image.src = effectUrl;
+      if (!this.transformationEffectRequested) {
+        this.transformationEffectRequested = true;
+        const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
+        const image = new Image();
+        image.onload = () => {
+          this.transformationEffectReady = true;
+          this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;
+        };
+        image.src = effectUrl;
+      }
+      return true;
     } catch (error) {
-      console.warn('[bunfirvil] Pigmy transformation uses the base actor fallback.', error);
+      this.transformations.delete(id);
+      this.element.dataset.transformationCandidates = this.availableTransformations().join(',');
+      console.warn(`[bunfirvil] Transformation ${id} is unavailable.`, error);
+      return false;
     }
+  }
+
+  availableTransformations(): string[] {
+    return [...this.transformations.keys()];
   }
 
   setVisible(visible: boolean): void {
     this.element.hidden = !visible;
   }
 
-  setTransformed(transformed: boolean): void {
-    this.pendingTransformation = null;
+  setTransformed(transformed: string | null): void {
+    this.pendingTransformation = undefined;
     this.transformationStartedAt = 0;
     this.element.classList.remove('is-transforming');
     this.applyTransformed(transformed);
   }
 
   /** The state changes immediately; only the visible sprite waits for smoke. */
-  playTransformation(transformed: boolean): void {
-    const next = transformed && Boolean(this.transformationManifest);
+  playTransformation(transformed: string | null): void {
+    const next = transformed && this.transformations.has(transformed) ? transformed : null;
     if (!this.transformationEffectReady || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       this.setTransformed(next);
       return;
@@ -100,13 +146,26 @@ export class ActorView {
     this.element.classList.add('is-transforming');
   }
 
-  private applyTransformed(transformed: boolean): void {
-    const next = transformed && Boolean(this.transformationManifest);
+  private applyTransformed(transformed: string | null): void {
+    const next = transformed && this.transformations.has(transformed) ? transformed : null;
     if (next === this.transformed) return;
     this.transformed = next;
     this.lastSheet = '';
-    this.element.classList.toggle('is-transformed', next);
-    this.element.dataset.transformation = next ? 'pigmy' : '';
+    this.element.classList.toggle('is-transformed', Boolean(next));
+    this.element.dataset.transformation = next ?? '';
+    if (next) {
+      // Sheets have different baked ground rows. Keep each species' actual
+      // foot on the existing pigmy's ground anchor rather than shifting the
+      // actor or altering its world position.
+      const manifest = this.transformations.get(next)!.manifest;
+      const size = Number(manifest.cellSize);
+      const foot = Number(manifest.footY);
+      const footRatio = Number.isFinite(size) && size > 0 && Number.isFinite(foot) && foot >= 0 && foot <= size
+        ? foot / size : 122 / 128;
+      this.sprite.style.top = `${-25 + (122 / 128 - footRatio) * 102}px`;
+    } else {
+      this.sprite.style.removeProperty('top');
+    }
   }
 
   setSelected(selected: boolean): void {
@@ -117,9 +176,9 @@ export class ActorView {
   update(actor: ActorState, point: ProjectedPoint, time: number, worldScale = 1): void {
     if (this.transformationStartedAt) {
       const elapsed = Math.max(0, time - this.transformationStartedAt);
-      if (this.pendingTransformation !== null && elapsed >= 600) {
+      if (this.pendingTransformation !== undefined && elapsed >= 600) {
         this.applyTransformed(this.pendingTransformation);
-        this.pendingTransformation = null;
+        this.pendingTransformation = undefined;
       }
       if (elapsed >= 1920) {
         this.transformationStartedAt = 0;
@@ -142,8 +201,9 @@ export class ActorView {
     this.element.dataset.travelProgress = actor.travel
       ? String(Math.max(0, Math.min(1, (time - actor.travel.startedAt) / Math.max(1, actor.travel.endsAt - actor.travel.startedAt))))
       : '1';
-    const manifest = this.transformed ? this.transformationManifest : this.manifest;
-    const manifestUrl = this.transformed ? this.transformationManifestUrl : this.manifestUrl;
+    const candidate = this.transformed ? this.transformations.get(this.transformed) : undefined;
+    const manifest = candidate?.manifest ?? this.manifest;
+    const manifestUrl = candidate?.url ?? this.manifestUrl;
     if (!manifest) return;
     const motion = manifest.motions?.[actor.motion] || manifest.motions?.idle || manifest.motions?.walk;
     if (!motion?.actions) return;

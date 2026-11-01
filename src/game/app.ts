@@ -93,6 +93,7 @@ import {
   writeSelectedOptions,
 } from './options';
 import { ActorView } from './sprite';
+import { chooseTransformation, TRANSFORMATION_CHOICES } from './transformation-choice';
 import { TouchMovementPad } from './touch-controls';
 import { ChildCompanionView, CHILD_AGE_LABELS, MAX_CHILD_COMPANIONS, type ChildAgeGroup, type ChildCompanionChoice, type ChildGender } from './child-companion';
 import { resetAllBunfirvilLocalData, resetCurrentMapOptionsAndLayout } from '../shared/storage';
@@ -225,7 +226,7 @@ export class ShowcaseApp {
   private threeRenderer: ThreeWorldRendererInstance | null = null;
   private effectPlayer!: ManifestEffectPlayer;
   private activeActor: CharacterKey = '100';
-  private pigmyTransformationActive = false;
+  private transformationId: string | null = null;
   private childCompanionChoices: ChildCompanionChoice[] = [];
   private readonly childCompanionViews: ChildCompanionView[] = [];
   private readonly actors = new Map<CharacterKey, ActorState>();
@@ -410,8 +411,12 @@ export class ShowcaseApp {
 
     await Promise.all([...this.actorViews.values()].map(async (view) => {
       await view.load(() => this.trackAsset());
-      await view.loadTransformation('assets/transformations/pigmy/animation.json', () => this.trackAsset());
+      await view.loadTransformation(TRANSFORMATION_CHOICES[0].id, TRANSFORMATION_CHOICES[0].url, () => this.trackAsset());
     }));
+    // Additional sprites load in the background so mobile users can enter the
+    // playground without waiting for every monster sheet to download.
+    void Promise.all([...this.actorViews.values()].flatMap((view) => TRANSFORMATION_CHOICES.slice(1)
+      .map((item) => view.loadTransformation(item.id, item.url, () => this.trackAsset()))));
     await this.selectMap(this.currentMap.id, false);
     this.paintSharedMapIdentity();
 
@@ -789,7 +794,7 @@ export class ShowcaseApp {
           <p class="touch-help">모바일: 왼쪽 아래 원형 조이스틱을 원하는 방향으로 누르거나 밀면 이동하며 캐릭터 중심으로 화면이 따라옵니다. 손을 떼거나 가운데로 돌아오면 멈춥니다. 맵을 드래그해 둘러본 뒤 조이스틱으로 이동하면 자동 추적이 재개됩니다. 우하단에는 지도만 표시하는 미니맵과 작은 ＋/− 확대·축소 버튼이 있습니다. ‘실측’을 눌러 레이저를 켜고 측정 지점을 탭하며, 같은 버튼의 ‘실측 종료’로 끕니다. 핫바는 탭으로 실행합니다. 선택 옵션·합계·계산기는 맵 아래에 있으며 ‘펼치기’로 목록을 확인합니다. 가구는 위치를 터치·드래그한 뒤 ‘배치 확정’을 누르세요. 가구 편집·실측·설정 중에는 조이스틱이 멈춥니다.</p>
           <div class="help-grid">
             <div><span class="help-icon">⌨</span><b>한 셀 이동·기본 공격</b><p>WASD 또는 방향키로 한 셀씩 이동하며 키 조합으로 8방향을 사용합니다. Space는 기본 공격입니다.</p></div>
-            <div><span class="help-icon">1–5</span><b>놀이터 핫바</b><p>1 텔레포트(또는 휠 클릭)는 2초 간격으로 세대 내부에서만 이동합니다. 2 성별 전환, 3 거실 방향 전환, 4 피그미 변신, 5 자녀 인형 소환을 실행합니다.</p></div>
+            <div><span class="help-icon">1–5</span><b>놀이터 핫바</b><p>1 텔레포트(또는 휠 클릭)는 2초 간격으로 세대 내부에서만 이동합니다. 2 성별 전환, 3 거실 방향 전환, 4 무작위 변신, 5 자녀 인형 소환을 실행합니다.</p></div>
             <div><span class="help-icon">옵션</span><b>옵션 프리뷰</b><p>옵션 선택은 맵 프롭과 견적에 즉시 반영되어 이 브라우저에 저장됩니다. 기본 인테리어와 옵션 구성은 이동·회전·삭제할 수 없습니다.</p></div>
             <div><span class="help-icon">GHOST</span><b>사용자 가구 배치</b><p>가구 카드를 누르면 고스트가 커서를 따라갑니다. 초록은 설치 가능, 빨강은 설치 불가이며 좌클릭으로 확정하고 우클릭 또는 Esc로 취소합니다.</p></div>
             <div><span class="help-icon">L</span><b>화면·가구 조작</b><p>빈 맵을 드래그해 이동하고 Ctrl+휠로 확대·축소합니다. 사용자 가구는 재배치할 수 있고 L은 벽 자석, Shift+휠은 회전, Delete는 삭제입니다.</p></div>
@@ -2705,7 +2710,7 @@ export class ShowcaseApp {
       const active = actorKey === key;
       view.setSelected(active);
       view.setVisible(active);
-      view.setTransformed(active && this.pigmyTransformationActive);
+      view.setTransformed(active ? this.transformationId : null);
     });
     this.mount.querySelectorAll<HTMLElement>('[data-actor-key]').forEach((button) => button.classList.toggle('is-active', button.dataset.actorKey === key));
     const actor = this.actors.get(key);
@@ -2739,7 +2744,7 @@ export class ShowcaseApp {
       { id: 'common-teleport', label: '텔레포트', icon: teleport.iconUrl ? `<img src="${escapeHtml(resolveProjectUrl(teleport.iconUrl))}" alt="" onerror="this.hidden=true" />` : '', glyph: teleport.glyph, state: '', active: false },
       { id: 'showcase-gender-toggle', label: '성별 전환', icon: `<img src="${escapeHtml(resolveProjectUrl('assets/showcase-controls/lk-custom-023.png'))}" alt="" />`, glyph: '↺', state: '', active: this.activeActor === '200' },
       { id: 'showcase-plan-toggle', label: '평면 타입 전환', icon: '', glyph: `${this.planVariant}→${nextPlanVariant}`, state: '', active: planVariantIndex > 0 },
-      { id: 'showcase-pigmy-toggle', label: '변신', icon: '<span class="pigmy-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.pigmyTransformationActive ? 'ON' : '', active: this.pigmyTransformationActive },
+      { id: 'showcase-pigmy-toggle', label: '변신', icon: '<span class="pigmy-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.transformationId ? 'ON' : '', active: Boolean(this.transformationId) },
       { id: 'showcase-children', label: '자녀 인형', icon: '<span class="child-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.childCompanionChoices.length ? String(this.childCompanionChoices.length) : '', active: this.childCompanionChoices.length > 0 },
     ];
     element.innerHTML = controls.map((control, index) => `
@@ -2796,8 +2801,8 @@ export class ShowcaseApp {
       return;
     }
     if (index === 1) {
-      const transformationWasActive = this.pigmyTransformationActive;
-      this.pigmyTransformationActive = false;
+      const transformationWasActive = Boolean(this.transformationId);
+      this.transformationId = null;
       const next: CharacterKey = this.activeActor === '100' ? '200' : '100';
       this.setActiveActor(next);
       this.toast(
@@ -2823,11 +2828,21 @@ export class ShowcaseApp {
       return;
     }
     if (index === 3) {
-      this.pigmyTransformationActive = !this.pigmyTransformationActive;
       const activeView = this.actorViews.get(this.activeActor);
-      activeView?.playTransformation(this.pigmyTransformationActive);
+      if (this.transformationId) {
+        this.transformationId = null;
+      } else {
+        const choice = chooseTransformation(activeView?.availableTransformations() ?? []);
+        if (!choice) {
+          this.toast('준비된 변신 이미지가 없습니다. 이미지 로딩을 기다리거나 새로고침 후 다시 시도해 주세요.', 'notice');
+          return;
+        }
+        this.transformationId = choice.id;
+      }
+      activeView?.playTransformation(this.transformationId);
       this.renderHotbar();
-      this.toast(this.pigmyTransformationActive ? '피그미 변신 ON' : '변신을 해제했습니다.', 'success');
+      const transformation = TRANSFORMATION_CHOICES.find((item) => item.id === this.transformationId);
+      this.toast(transformation ? `${transformation.label} 변신 ON` : '변신을 해제했습니다.', 'success');
       return;
     }
     if (index === 4) {

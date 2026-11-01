@@ -46,7 +46,7 @@ test('authenticated nickname remains literal across appearances, transformation,
   await expect(woman.locator('.actor-name b')).toHaveCount(0);
 
   await transformToggle.click();
-  await expect(woman).toHaveAttribute('data-transformation', 'pigmy');
+  await expect(woman).toHaveAttribute('data-transformation', /^(pigmy|hooded-brute|mummy-king|iron-golem|leopard)$/);
   await page.mouse.move(1, 1);
   await expectNameOnActor(woman, nickname);
   await transformToggle.click();

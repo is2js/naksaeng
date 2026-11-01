@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 3,
+  "assetKind": "lk-monster",
+  "assetKey": "M006-R3",
+  "name": "머미킹 · Sol Ultra",
+  "assetGrade": "standard",
+  "cellSize": 128,
+  "footY": 115,
+  "contentTopY": 31,
+  "displaySize": 128,
+  "directions": [
+    "n",
+    "ne",
+    "e",
+    "se",
+    "s",
+    "sw",
+    "w",
+    "nw"
+  ],
+  "defaultActions": {
+    "walk": "normal",
+    "attack": "normal",
+    "cast": "normal"
+  },
+  "fallbackClips": {
+    "idle": {
+      "motion": "walk",
+      "action": "normal",
+      "frameIndex": 1
+    },
+    "hurt": {
+      "motion": "attack",
+      "action": "normal",
+      "frameIndex": 2
+    },
+    "death": {
+      "motion": "attack",
+      "action": "normal",
+      "frameIndex": 2
+    }
+  },
+  "castAvailable": true,
+  "sourceArchive": {
+    "frameCount": 56
+  },
+  "motions": {
+    "walk": {
+      "loop": true,
+      "durationMs": 450,
+      "actions": {
+        "normal": {
+          "sourceAction": "LK_WALK",
+          "frameCount": 3,
+          "sheet": "sheets/walk/normal.png",
+          "sheetFrameWidth": 128,
+          "sheetFrameHeight": 128,
+          "sheetRows": 8,
+          "sheetColumns": 3,
+          "directions": {
+            "n": {
+              "frames": [
+                "walk/normal/n_00.png",
+                "walk/normal/n_01.png",
+                "walk/normal/n_02.png"
+              ]
+            },
+            "ne": {
+              "frames": [
+                "walk/normal/ne_00.png",
+                "walk/normal/ne_01.png",
+                "walk/normal/ne_02.png"
+              ]
+            },
+            "e": {
+              "frames": [
+                "walk/normal/e_00.png",
+                "walk/normal/e_01.png",
+                "walk/normal/e_02.png"
+              ]
+            },
+            "se": {
+              "frames": [
+                "walk/normal/se_00.png",
+                "walk/normal/se_01.png",
+                "walk/normal/se_02.png"
+              ]
+            },
+            "s": {
+              "frames": [
+                "walk/normal/s_00.png",
+                "walk/normal/s_01.png",
+                "walk/normal/s_02.png"
+              ]
+            },
+            "sw": {
+              "frames": [
+                "walk/normal/sw_00.png",
+                "walk/normal/sw_01.png",
+                "walk/normal/sw_02.png"
+              ]
+            },
+            "w": {
+              "frames": [
+                "walk/normal/w_00.png",
+                "walk/normal/w_01.png",
+                "walk/normal/w_02.png"
+              ]
+            },
+            "nw": {
+              "frames": [
+                "walk/normal/nw_00.png",
+                "walk/normal/nw_01.png",
+                "walk/normal/nw_02.png"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "attack": {
+      "loop": false,
+      "durationMs": 450,
+      "actions": {
+        "normal": {
+          "sourceAction": "LK_ATTACK",
+          "frameCount": 3,
+          "sheet": "sheets/attack/normal.png",
+          "sheetFrameWidth": 128,
+          "sheetFrameHeight": 128,
+          "sheetRows": 8,
+          "sheetColumns": 3,
+          "directions": {
+            "n": {
+              "frames": [
+                "attack/normal/n_00.png",
+                "attack/normal/n_01.png",
+                "attack/normal/n_02.png"
+              ]
+            },
+            "ne": {
+              "frames": [
+                "attack/normal/ne_00.png",
+                "attack/normal/ne_01.png",
+                "attack/normal/ne_02.png"
+              ]
+            },
+            "e": {
+              "frames": [
+                "attack/normal/e_00.png",
+                "attack/normal/e_01.png",
+                "attack/normal/e_02.png"
+              ]
+            },
+            "se": {
+              "frames": [
+                "attack/normal/se_00.png",
+                "attack/normal/se_01.png",
+                "attack/normal/se_02.png"
+              ]
+            },
+            "s": {
+              "frames": [
+                "attack/normal/s_00.png",
+                "attack/normal/s_01.png",
+                "attack/normal/s_02.png"
+              ]
+            },
+            "sw": {
+              "frames": [
+                "attack/normal/sw_00.png",
+                "attack/normal/sw_01.png",
+                "attack/normal/sw_02.png"
+              ]
+            },
+            "w": {
+              "frames": [
+                "attack/normal/w_00.png",
+                "attack/normal/w_01.png",
+                "attack/normal/w_02.png"
+              ]
+            },
+            "nw": {
+              "frames": [
+                "attack/normal/nw_00.png",
+                "attack/normal/nw_01.png",
+                "attack/normal/nw_02.png"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "cast": {
+      "loop": false,
+      "durationMs": 500,
+      "actions": {
+        "normal": {
+          "sourceAction": "LK_CAST",
+          "frameCount": 1,
+          "sheet": "sheets/cast/normal.png",
+          "sheetFrameWidth": 128,
+          "sheetFrameHeight": 128,
+          "sheetRows": 8,
+          "sheetColumns": 1,
+          "directions": {
+            "n": {
+              "frames": [
+                "cast/normal/n_00.png"
+              ]
+            },
+            "ne": {
+              "frames": [
+                "cast/normal/ne_00.png"
+              ]
+            },
+            "e": {
+              "frames": [
+                "cast/normal/e_00.png"
+              ]
+            },
+            "se": {
+              "frames": [
+                "cast/normal/se_00.png"
+              ]
+            },
+            "s": {
+              "frames": [
+                "cast/normal/s_00.png"
+              ]
+            },
+            "sw": {
+              "frames": [
+                "cast/normal/sw_00.png"
+              ]
+            },
+            "w": {
+              "frames": [
+                "cast/normal/w_00.png"
+              ]
+            },
+            "nw": {
+              "frames": [
+                "cast/normal/nw_00.png"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "revision": "lk-sol-ultra-20261014-r3",
+  "hudContentTopY": 51,
+  "generationCategory": "lk_regenerated_gpt_6_1_sol_ultra",
+  "generationCategoryLabel": "LK 재생성-GPT-6.1-Sol Ultra",
+  "generationModel": "gpt-6.1-sol",
+  "reasoningEffort": "ultra",
+  "imageGenerationProvider": "imagegen",
+  "imageGenerationModel": null,
+  "sourceAssetKey": "M006",
+  "sourceName": "머미킹",
+  "provider": "lk_regenerated",
+  "generationRevision": "R3",
+  "alignment": {
+    "schemaVersion": 1,
+    "geometryProfile": "lk-moderate-v1",
+    "root": [
+      64,
+      115
+    ],
+    "commonScale": 0.5,
+    "referenceLayoutSrc": "source/regeneration/reference-layout.json",
+    "nativeGeometrySrc": "source/regeneration/native-geometry.json",
+    "referencePreviewSrc": "source/regeneration/reference-preview.json",
+    "referencePreviewSha256": "ef5ac1d0e5aa59285a89c315b673685f0fecb11d68b202a5b054dc8001f6018b"
+  },
+  "qualityGate": {
+    "status": "pending",
+    "auditSrc": "source/regeneration/alignment-audit.json"
+  }
+}

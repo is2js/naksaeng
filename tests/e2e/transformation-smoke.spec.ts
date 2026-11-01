@@ -16,9 +16,41 @@ test('transformation smoke follows the actor, switches at the covered frame, and
   const smoke = actor.locator('.actor-transformation-effect');
   const toggle = page.locator('[data-hotbar-action="showcase-pigmy-toggle"]');
   await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage)).toContain('transform-violet-r1.png');
+  // Capture the transient effect as soon as the actor enters its animation.
+  // Separate Playwright calls can be delayed past the full 1.92s animation on
+  // a busy CI runner, so inspect its real computed state in the same frame.
+  await actor.evaluate((element) => {
+    const observer = new MutationObserver(() => {
+      if (!element.classList.contains('is-transforming')) return;
+      const effect = element.querySelector<HTMLElement>('.actor-transformation-effect');
+      if (!effect) return;
+      const style = getComputedStyle(effect);
+      const bounds = effect.getBoundingClientRect();
+      (element as HTMLElement).dataset.observedSmoke = JSON.stringify({
+        followsActor: effect.parentElement === element,
+        display: style.display,
+        visibility: style.visibility,
+        opacity: Number(style.opacity),
+        width: bounds.width,
+        height: bounds.height,
+        animation: style.animationName,
+        background: style.backgroundImage,
+      });
+      observer.disconnect();
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ['class'] });
+  });
   await toggle.click();
-  await expect(actor).toHaveClass(/is-transforming/);
-  await expect(smoke).toBeVisible();
+  await expect.poll(() => actor.getAttribute('data-observed-smoke')).not.toBeNull();
+  const observedSmoke = JSON.parse((await actor.getAttribute('data-observed-smoke'))!) as {
+    followsActor: boolean; display: string; visibility: string; opacity: number;
+    width: number; height: number; animation: string; background: string;
+  };
+  expect(observedSmoke).toMatchObject({ followsActor: true, display: 'block', visibility: 'visible', animation: 'actor-transformation-smoke' });
+  expect(observedSmoke.opacity).toBeGreaterThan(0);
+  expect(observedSmoke.width).toBeGreaterThan(0);
+  expect(observedSmoke.height).toBeGreaterThan(0);
+  expect(observedSmoke.background).toContain('transform-violet-r1.png');
   await expect(actor).toHaveAttribute('data-transformation', /^(pigmy|hooded-brute|mummy-king|iron-golem|leopard)$/);
   await expect(smoke).toBeHidden({ timeout: 4_000 });
   // A rapid reversal and actor switch cannot leave an old pending swap behind.

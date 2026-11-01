@@ -23,7 +23,8 @@ for (const width of [320, 390]) {
     await expect(input).toBeVisible();
     expect(await input.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     expect((await page.locator('#household-verify-nickname').boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    expect((await page.locator('#household-request-verification').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // Chromium may report 44 CSS pixels as 43.99997 after fractional transforms.
+    expect((await page.locator('#household-request-verification').boundingBox())!.height).toBeGreaterThanOrEqual(43.99);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
     const request = (await page.locator('#household-request-verification').boundingBox())!;

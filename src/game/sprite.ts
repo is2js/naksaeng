@@ -11,18 +11,18 @@ import type {
 // Reuse the in-flight browser decode so mobile startup does not fetch/decode
 // each sheet twice. A failure is removed so a later load can retry.
 const transformationWalkSheetLoads = new Map<string, Promise<void>>();
-function preloadTransformationWalkSheet(url: string): Promise<void> {
+function preloadTransformationWalkSheet(url: string, timeoutMs: number | null = 8_000): Promise<void> {
   const existing = transformationWalkSheetLoads.get(url);
   if (existing) return existing;
   const pending = new Promise<void>((resolve, reject) => {
     const image = new Image();
-    const timeout = window.setTimeout(() => {
+    const timeout = timeoutMs === null ? null : window.setTimeout(() => {
       image.onload = null;
       image.onerror = null;
       reject(new Error('transformation sheet timed out'));
-    }, 8_000);
-    image.onload = () => { window.clearTimeout(timeout); resolve(); };
-    image.onerror = () => { window.clearTimeout(timeout); reject(new Error('transformation sheet unavailable')); };
+    }, timeoutMs);
+    image.onload = () => { if (timeout !== null) window.clearTimeout(timeout); resolve(); };
+    image.onerror = () => { if (timeout !== null) window.clearTimeout(timeout); reject(new Error('transformation sheet unavailable')); };
     image.src = url;
   });
   transformationWalkSheetLoads.set(url, pending);
@@ -83,7 +83,10 @@ export class ActorView {
     this.transformationEffectWrapper.append(this.transformationEffect);
     effectLayer.append(this.transformationEffectWrapper);
     const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
-    this.transformationEffectLoad = preloadTransformationWalkSheet(effectUrl).then(() => {
+    // The effect is optional and loaded independently. Do not abandon its
+    // onload callback on slow devices: a late download should still enable
+    // smoke on subsequent transformations. Individual clicks remain bounded.
+    this.transformationEffectLoad = preloadTransformationWalkSheet(effectUrl, null).then(() => {
       if (this.disposed) return false;
       this.transformationEffectReady = true;
       this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;

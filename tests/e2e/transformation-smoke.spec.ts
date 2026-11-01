@@ -16,7 +16,7 @@ test('transformation smoke follows the actor, switches at the covered frame, and
   const smoke = page.locator('#effect-layer .actor-transformation-wrapper[data-actor="100"] .actor-transformation-effect');
   const wrapper = smoke.locator('..');
   const toggle = page.locator('[data-hotbar-action="showcase-pigmy-toggle"]');
-  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage)).toContain('transform-violet-r1.png');
+  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage), { timeout: 45_000 }).toContain('transform-violet-r1.png');
   // Capture the transient effect as soon as the actor enters its animation.
   // Separate Playwright calls can be delayed past the full 1.92s animation on
   // a busy CI runner, so inspect its real computed state in the same frame.
@@ -81,7 +81,7 @@ test('reduced motion uses a briefly visible stationary smoke frame', async ({ pa
   const actor = page.locator('.rpg-actor--100');
   const wrapper = page.locator('#effect-layer .actor-transformation-wrapper[data-actor="100"]');
   const smoke = wrapper.locator('.actor-transformation-effect');
-  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage)).toContain('transform-violet-r1.png');
+  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage), { timeout: 45_000 }).toContain('transform-violet-r1.png');
   // Capture the 450ms static effect at the actual rendered frame, including
   // slow CI runners that may miss it between separate Playwright calls.
   await wrapper.evaluate((element) => {
@@ -134,10 +134,49 @@ test('a first tap while smoke is loading still plays it and actor hiding clears 
   const smoke = wrapper.locator('.actor-transformation-effect');
   await page.locator('[data-hotbar-action="showcase-pigmy-toggle"]').evaluate((button) => (button as HTMLButtonElement).click());
   releaseEffect!();
-  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage)).toContain('transform-violet-r1.png');
+  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage), { timeout: 45_000 }).toContain('transform-violet-r1.png');
   await expect(actor).toHaveAttribute('data-transformation', /^(pigmy|hooded-brute|mummy-king|iron-golem|leopard)$/);
   await page.locator('[data-hotbar-action="showcase-gender-toggle"]').click();
   await expect(wrapper).toBeHidden();
+});
+
+test('smoke recovers after an image takes longer than eight seconds to load', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  let releaseEffect: (() => void) | undefined;
+  await page.route('**/assets/effects/transformation/transform-violet-r1.png', async (route) => {
+    await new Promise<void>((resolve) => { releaseEffect = resolve; });
+    await route.continue();
+  });
+  await enterPlayground(page);
+  await expect.poll(() => Boolean(releaseEffect), { timeout: 45_000 }).toBe(true);
+  const actor = page.locator('.rpg-actor--100');
+  const wrapper = page.locator('#effect-layer .actor-transformation-wrapper[data-actor="100"]');
+  const smoke = wrapper.locator('.actor-transformation-effect');
+  const toggle = page.locator('[data-hotbar-action="showcase-pigmy-toggle"]');
+  // An image failure or delay must not stop the first transformation.
+  await toggle.evaluate((button) => (button as HTMLButtonElement).click());
+  await expect(actor).toHaveAttribute('data-transformation', /^(pigmy|hooded-brute|mummy-king|iron-golem|leopard)$/);
+  await page.waitForTimeout(8_500);
+  releaseEffect!();
+  await expect.poll(() => smoke.evaluate((element) => (element as HTMLElement).style.backgroundImage), { timeout: 45_000 }).toContain('transform-violet-r1.png');
+  // Observe the brief static frame synchronously so a busy CI runner cannot
+  // miss it between two browser round trips.
+  await wrapper.evaluate((element) => {
+    const observer = new MutationObserver(() => {
+      if (!element.classList.contains('is-static-smoke')) return;
+      const effect = element.querySelector<HTMLElement>('.actor-transformation-effect');
+      if (!effect) return;
+      (element as HTMLElement).dataset.observedLateSmoke = getComputedStyle(effect).display;
+      observer.disconnect();
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ['class'] });
+  });
+  await toggle.evaluate((button) => (button as HTMLButtonElement).click());
+  await expect(actor).toHaveAttribute('data-transformation', '');
+  await toggle.evaluate((button) => (button as HTMLButtonElement).click());
+  await expect(actor).toHaveAttribute('data-transformation', /^(pigmy|hooded-brute|mummy-king|iron-golem|leopard)$/);
+  await expect.poll(() => wrapper.getAttribute('data-observed-late-smoke'), { timeout: 45_000 }).toBe('block');
 });
 
 test('each loaded species can be selected and returns to the same actor', async ({ page }) => {

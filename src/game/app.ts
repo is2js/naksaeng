@@ -2824,7 +2824,8 @@ export class ShowcaseApp {
     }
     if (index === 3) {
       this.pigmyTransformationActive = !this.pigmyTransformationActive;
-      this.actorViews.forEach((view, key) => view.setTransformed(key === this.activeActor && this.pigmyTransformationActive));
+      const activeView = this.actorViews.get(this.activeActor);
+      activeView?.playTransformation(this.pigmyTransformationActive);
       this.renderHotbar();
       this.toast(this.pigmyTransformationActive ? '피그미 변신 ON' : '변신을 해제했습니다.', 'success');
       return;

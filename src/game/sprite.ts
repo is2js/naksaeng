@@ -10,11 +10,15 @@ import type {
 export class ActorView {
   readonly element: HTMLButtonElement;
   private readonly sprite: HTMLSpanElement;
+  private readonly transformationEffect: HTMLSpanElement;
   private manifest: CharacterManifest | null = null;
   private manifestUrl = '';
   private transformationManifest: CharacterManifest | null = null;
   private transformationManifestUrl = '';
   private transformed = false;
+  private pendingTransformation: boolean | null = null;
+  private transformationStartedAt = 0;
+  private transformationEffectReady = false;
   private lastSheet = '';
 
   constructor(
@@ -30,11 +34,13 @@ export class ActorView {
     element.innerHTML = `
       <span class="actor-shadow" aria-hidden="true"></span>
       <span class="actor-sprite" aria-hidden="true"><span class="actor-fallback">${entry.key}</span></span>
+      <span class="actor-transformation-effect" aria-hidden="true"></span>
       <span class="actor-name"></span>
     `;
     (element.querySelector('.actor-name') as HTMLElement).textContent = entry.label;
     this.element = element;
     this.sprite = element.querySelector<HTMLElement>('.actor-sprite') as HTMLSpanElement;
+    this.transformationEffect = element.querySelector<HTMLElement>('.actor-transformation-effect') as HTMLSpanElement;
     element.addEventListener('click', () => this.onSelect(entry.key));
   }
 
@@ -54,6 +60,15 @@ export class ActorView {
     try {
       this.transformationManifest = await fetchJson<CharacterManifest>(this.transformationManifestUrl);
       onAssetLoaded();
+      // Prepare in the background: a failed or not-yet-loaded visual must
+      // never prevent the actual playground transformation.
+      const effectUrl = resolveProjectUrl('assets/effects/transformation/transform-violet-r1.png');
+      const image = new Image();
+      image.onload = () => {
+        this.transformationEffectReady = true;
+        this.transformationEffect.style.backgroundImage = `url("${effectUrl}")`;
+      };
+      image.src = effectUrl;
     } catch (error) {
       console.warn('[bunfirvil] Pigmy transformation uses the base actor fallback.', error);
     }
@@ -64,6 +79,28 @@ export class ActorView {
   }
 
   setTransformed(transformed: boolean): void {
+    this.pendingTransformation = null;
+    this.transformationStartedAt = 0;
+    this.element.classList.remove('is-transforming');
+    this.applyTransformed(transformed);
+  }
+
+  /** The state changes immediately; only the visible sprite waits for smoke. */
+  playTransformation(transformed: boolean): void {
+    const next = transformed && Boolean(this.transformationManifest);
+    if (!this.transformationEffectReady || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      this.setTransformed(next);
+      return;
+    }
+    this.pendingTransformation = next;
+    this.transformationStartedAt = performance.now();
+    this.element.classList.remove('is-transforming');
+    // A deliberate click can restart the CSS sequence, including rapid toggles.
+    void this.transformationEffect.offsetWidth;
+    this.element.classList.add('is-transforming');
+  }
+
+  private applyTransformed(transformed: boolean): void {
     const next = transformed && Boolean(this.transformationManifest);
     if (next === this.transformed) return;
     this.transformed = next;
@@ -78,6 +115,17 @@ export class ActorView {
   }
 
   update(actor: ActorState, point: ProjectedPoint, time: number, worldScale = 1): void {
+    if (this.transformationStartedAt) {
+      const elapsed = Math.max(0, time - this.transformationStartedAt);
+      if (this.pendingTransformation !== null && elapsed >= 600) {
+        this.applyTransformed(this.pendingTransformation);
+        this.pendingTransformation = null;
+      }
+      if (elapsed >= 1920) {
+        this.transformationStartedAt = 0;
+        this.element.classList.remove('is-transforming');
+      }
+    }
     const scale = Math.max(.65, Math.min(2.8, Number.isFinite(worldScale) ? worldScale : 1));
     this.element.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) scale(${scale})`;
     this.element.dataset.worldScale = scale.toFixed(3);

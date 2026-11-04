@@ -180,7 +180,11 @@ test('smoke recovers after an image takes longer than eight seconds to load', as
 });
 
 test('each loaded species can be selected and returns to the same actor', async ({ page }) => {
-  test.setTimeout(120_000);
+  // This test performs ten transitions across five species. GitHub's software
+  // WebGL renderer can spend over two minutes on those real transitions even
+  // when each individual assertion succeeds; retain all assertions and give
+  // the complete sequence a bounded budget proportional to its workload.
+  test.setTimeout(240_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await enterPlayground(page);
   const actor = page.locator('.rpg-actor--100');

@@ -2022,6 +2022,19 @@ input:focus-visible {
 .system-ac-stepper button:disabled { color: #43504e; cursor: default; }
 .system-ac-stepper output { display: grid; place-items: center; border-inline: 1px solid rgba(225, 185, 99, .14); color: #f0d18b; font: 800 9px ui-monospace, monospace; }
 
+.system-ac-models { grid-column: 1 / -1; color: #c3d5d0; font-size: 11px; line-height: 1.5; }
+.system-ac-models summary { padding: 7px 9px; border: 1px solid rgba(122, 182, 171, .24); border-radius: 4px; color: #a9d6ca; cursor: pointer; }
+.system-ac-models p { margin: 8px 2px 4px; color: #a5bcb5; }
+.system-ac-brand { margin: 8px 0; padding: 9px; border: 1px solid rgba(122, 182, 171, .17); border-radius: 5px; background: rgba(0, 0, 0, .18); }
+.system-ac-brand > b { color: #e9d19b; }
+.system-ac-brand figure { margin: 8px 0; }
+.system-ac-brand figure img { display: block; width: 100%; max-height: 140px; object-fit: cover; border-radius: 4px; background: #e5e8e6; }
+.system-ac-brand figcaption { margin-top: 3px; color: #a5bcb5; font-size: 10px; }
+.system-ac-brand dl { margin: 7px 0 0; }
+.system-ac-brand dl div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.system-ac-brand dt { flex: none; color: #a5bcb5; }
+.system-ac-brand dd { margin: 0; color: #dbe7e4; text-align: right; overflow-wrap: anywhere; }
+
 .option-preview {
   align-self: stretch;
   min-height: 65px;

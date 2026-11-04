@@ -25,6 +25,7 @@ import { FloorPlanMinimap } from './floorplan-minimap';
 import { highlightedMessageParts } from './highlighted-message';
 import { interiorSelectionName } from './interior-selection-name';
 import { optionPropsForSelection, optionSourceIdForProp } from './option-prop-selection';
+import { systemAcModelConfigurations } from './system-ac-models';
 import { centeredScrollTop } from './palette-scroll';
 import { isMapPanDrag } from './pointer-gesture';
 import { BUNDANG_MINUS_OPTION_ID, isBundangMinusOption } from './minus-option';
@@ -3384,17 +3385,34 @@ export class ShowcaseApp {
     const option = allOptions.find((candidate) => candidate.id === (active?.id || choices[0]?.id));
     const count = active?.count || 0;
     const canIncrease = !active || choices.some((choice) => choice.count > active.count);
-    const preview = option?.previewUrl
-      ? `<img src="${escapeHtml(resolveProjectUrl(option.previewUrl))}" alt="" loading="lazy" />`
-      : '';
+    const previewBrand = tier === 'premium' ? 'LG' : '삼성';
+    const previewPath = tier === 'premium' ? 'assets/system-ac/lg-premium.png' : 'assets/system-ac/samsung-general.png';
+    const preview = `<img src="${escapeHtml(resolveProjectUrl(previewPath))}" alt="${previewBrand} 시스템에어컨 형태를 참고한 AI 생성 이미지" loading="lazy" />`;
     const minusOptionLocked = this.selectedOptionIds.includes(BUNDANG_MINUS_OPTION_ID);
     const locked = minusOptionLocked || this.readOnlyShare;
+    const modelCount = active?.count ?? choices[0]?.count ?? 2;
+    const models = systemAcModelConfigurations(this.currentMap.unitType, tier, modelCount);
+    const modelDetails = models.length ? `
+      <details class="system-ac-models">
+        <summary>${modelCount}대 구성 · 모델명 보기</summary>
+        ${tier === 'general' ? '<p>일반형은 삼성 또는 LG 중 계약 시 제조사를 선택합니다. 현재 대수 선택만으로 제조사가 정해지지는 않습니다.</p>' : ''}
+        ${models.map((item) => {
+          const illustration = item.brand === '삼성' ? 'assets/system-ac/samsung-general.png'
+            : tier === 'premium' ? 'assets/system-ac/lg-premium.png' : '';
+          return `<section class="system-ac-brand" data-ac-brand="${escapeHtml(item.brand)}">
+            <b>${escapeHtml(item.brand)} ${tier === 'premium' ? '프리미엄' : '일반형'}</b>
+            ${illustration ? `<figure><img src="${escapeHtml(resolveProjectUrl(illustration))}" alt="${escapeHtml(item.brand)} 시스템에어컨 형태를 참고한 AI 생성 이미지" loading="lazy"><figcaption>AI 참고 이미지 · 실제 제품과 다를 수 있음</figcaption></figure>` : ''}
+            <dl>${item.indoor.map((unit) => `<div><dt>${escapeHtml(unit.room)}</dt><dd>${escapeHtml(unit.model)}</dd></div>`).join('')}<div><dt>실외기</dt><dd>${escapeHtml(item.outdoor)}</dd></div></dl>
+          </section>`;
+        }).join('')}
+        <p>2026년 10월 현장 모델 안내 기준 · 설치 시 동급 모델로 변경될 수 있습니다.</p>
+      </details>` : '';
     return `
       <article class="option-card system-ac-card ${active ? 'is-selected' : ''} ${active?.id === this.selectedStageOptionId ? 'is-world-linked' : ''} ${locked ? 'is-option-locked' : ''}" data-system-ac-tier="${tier}" data-option-card-id="${escapeHtml(active?.id || option?.id || '')}" ${locked ? 'aria-disabled="true"' : ''}>
-        <span class="option-preview ${option?.previewUrl ? '' : 'is-fallback'}">${preview}<i>空</i><em>${active ? '적용됨' : '2대부터'}</em></span>
+        <span class="option-preview">${preview}<i>空</i><em>${active ? '적용됨' : '2대부터'}</em></span>
         <span class="option-copy">
-          <span class="option-category">시스템에어컨</span>
-          <b>시스템에어컨 · ${tier === 'premium' ? '고급형' : '일반형'}</b>
+          <span class="option-category">시스템에어컨 · ${previewBrand} AI 참고 이미지</span>
+          <b>시스템에어컨 · ${tier === 'premium' ? 'LG 프리미엄' : '삼성/LG 일반형'}</b>
           <small>${minusOptionLocked ? '마이너스 옵션과 함께 선택할 수 없습니다.' : '거실 기본 설치 후 침실 순서대로 대수를 추가합니다.'}</small>
           <strong>${active && option ? `+ ${numberFormat.format(option.price)}원` : '2대부터 선택'}</strong>
         </span>
@@ -3403,6 +3421,7 @@ export class ShowcaseApp {
           <output>${count ? `${count}대` : '미적용'}</output>
           <button type="button" data-system-ac-adjust="increase" data-system-ac-tier="${tier}" ${canIncrease && !locked ? '' : 'disabled'} aria-label="설치 대수 1 증가">＋</button>
         </span>
+        ${modelDetails}
       </article>`;
   }
 

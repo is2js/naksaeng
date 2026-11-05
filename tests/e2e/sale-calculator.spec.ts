@@ -331,6 +331,7 @@ test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.contract-booking-note')).toBeVisible();
   await expect(page.locator('.contract-stamp-note')).toBeVisible();
+  await expect(page.locator('#calculator-future-option-contract')).toBeVisible();
   await expect(page.locator('.stamp-settlement-reminder')).toBeVisible();
   await expect(page.locator('.calculator-mobile-jump')).toBeHidden();
 });
@@ -350,7 +351,12 @@ for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre
     const main = plan === 'main-subscription';
     await expect(page.locator('[data-finance-due="계약 시"] .contract-due b')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
     await expect(page.locator('#calculator-contract-cash')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
-    await expect(page.locator('#calculator-future-option-contract')).toContainText(scenario.separate ? (main ? scenario.mainFuture : scenario.preFuture) : '선택 없음');
+    await expect(page.locator('#calculator-future-option-contract b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);
+    await expect(page.locator('#calculator-future-option-contract')).toContainText('별도 계약 · 일정 미정');
+    await expect(page.locator('.account-contract-total + #calculator-future-option-contract')).toHaveCount(1);
+    if (!scenario.separate) await expect(page.locator('#calculator-future-option-contract')).toContainText('선택 없음');
+    const expectedCombined = Number((main ? scenario.mainDeposit : scenario.preDeposit).replace(/[^0-9]/g, '')) + Number((main ? scenario.mainFuture : scenario.preFuture).replace(/[^0-9]/g, ''));
+    await expect(page.locator('.account-contract-overall b')).toHaveText(`${expectedCombined.toLocaleString('ko-KR')}원`);
     await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
     await expect(page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
     if (scenario.separate) await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"] .contract-due b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);

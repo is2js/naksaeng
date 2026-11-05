@@ -50,8 +50,12 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('#calculator-context-header')).toContainText('55A · 5층 이상');
   await expect(page.locator('.context-highlight')).toContainText('55A · 5층 이상 · 본청약 기준');
   await expect(page.getByLabel('본청약(신규신청자)')).toBeChecked();
-  await expect(page.locator('#calculator-contract-cash')).toHaveText('64,706,800원');
-  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('182,361,200원');
+  await expect(page.locator('#calculator-contract-cash')).toHaveText('64,524,800원');
+  await expect(page.locator('#calculator-account-supply')).toContainText('63,651,000원');
+  await expect(page.locator('#calculator-account-balcony')).toContainText('513,800원');
+  await expect(page.locator('#calculator-account-system-ac')).toContainText('360,000원');
+  await expect(page.locator('#calculator-future-option-contract')).toContainText('182,000원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('182,543,200원');
   await expect(page.locator('.calculator-side > :first-child')).toHaveAttribute('id', 'calculator-option-details');
   await expect(page.locator('#calculator-option-details')).not.toHaveAttribute('open', '');
   await page.locator('#calculator-option-details summary').click();
@@ -62,15 +66,16 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('.schedule-table thead')).toContainText('시스템에어컨');
   await expect(page.locator('.schedule-table thead')).toContainText('기타 옵션');
   await expect(page.locator('.schedule-table thead')).toContainText('납부일');
-  await expect(page.locator('.schedule-table tr[data-phase="contract"] .schedule-date')).toContainText('2026.11.04~11.13');
+  await expect(page.locator('.schedule-table [data-finance-due="계약 시"] .schedule-date')).toContainText('2026.11.04~11.13');
   const countdown = (due: string) => page.locator(`.schedule-table [data-payment-due="${due}"] b`);
   await expect(countdown('계약 시')).toHaveText('시작 D-13');
+  await expect(countdown('옵션Ⅲ 계약 시')).toHaveText('일정 미정');
   await expect(countdown('2027-04-12')).toHaveText('D-172');
   await expect(countdown('2028-02-14')).toHaveText('D-480');
   await expect(countdown('별도 안내')).toHaveText('일정 미정');
   await expect(countdown('입주 시')).toHaveText('예정월 D-833');
   await expect(page.locator('#calculator-deadline-today')).toContainText('2026.10.22');
-  await expect(page.locator('.deadline-note')).toContainText('계약일은 별도 안내');
+  await expect(page.locator('.deadline-note')).toContainText('기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내');
   const mainFirstInterim = page.locator('[data-finance-due="2027-04-12"]');
   await expect(mainFirstInterim.locator('[data-flow="loan-draw"]')).toContainText('63,651,000원');
   await expect(mainFirstInterim.locator('[data-flow="deferred-interest"]')).toHaveCount(0);
@@ -87,8 +92,12 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
 
   await page.locator('.plan-switch label').filter({ hasText: '사전청약 당첨자' }).click();
   await expect(page.getByLabel('사전청약 당첨자')).toBeChecked();
-  await expect(page.locator('#calculator-contract-cash')).toHaveText('32,353,400원');
-  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,714,600원');
+  await expect(page.locator('#calculator-contract-cash')).toHaveText('32,262,400원');
+  await expect(page.locator('#calculator-account-supply')).toContainText('31,825,500원');
+  await expect(page.locator('#calculator-account-balcony')).toContainText('256,900원');
+  await expect(page.locator('#calculator-account-system-ac')).toContainText('180,000원');
+  await expect(page.locator('#calculator-future-option-contract')).toContainText('91,000원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,805,600원');
   await expect(page.locator('.context-highlight')).toContainText('사전청약 당첨자 기준');
   await expect(page.locator('.schedule-table tbody')).toContainText('계약금');
   await expect(page.locator('.schedule-table tbody')).toContainText('31,825,500원');
@@ -143,10 +152,12 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('400,000,000원');
   await expect(page.locator('#calculator-pre-mortgage-cash')).toHaveText(preMortgageCash!);
   await expect(page.locator('#calculator-balance-mortgage-info')).toContainText('의무가입 대상');
+  await page.locator('#calculator-balance-ltv').selectOption('60');
+  await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('384,988,800원');
   await page.locator('#calculator-balance-ltv').selectOption('30');
   await expect(page.locator('#calculator-ltv')).toHaveValue('30');
   await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('192,494,400원');
-  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('422,220,200원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('422,311,200원');
   await page.locator('#calculator-balance-ltv').selectOption('70');
   await expect(interimDetails).toHaveAttribute('open', '');
   await expect(interimDetails.locator('.calculation-total')).toContainText('원');
@@ -188,7 +199,7 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await page.locator('#calculator-cost-management').fill('1000000');
   await page.locator('#calculator-cost-management').press('Tab');
   await expect(page.locator('#calculator-extra-cost-total')).toHaveText('1,000,000원');
-  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,714,600원');
+  await expect(page.locator('#calculator-post-contract-base-cash')).toHaveText('214,805,600원');
   await expect(page.locator('.hero-total strong')).toHaveText(unchangedContract!);
   await expect(costs).toHaveAttribute('open', '');
   await page.getByLabel('미납 부대비용 반영', { exact: true }).uncheck();
@@ -220,6 +231,14 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await page.locator('#calculator-move-in-settlement').screenshot({ path: testInfo.outputPath('move-in-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  const mobileCurrentContract = page.locator('[data-mobile-finance-due="계약 시"]');
+  const mobileFutureContract = page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]');
+  await expect(mobileCurrentContract).toBeVisible();
+  await expect(mobileCurrentContract).toContainText('32,262,400원');
+  await expect(mobileFutureContract).toBeVisible();
+  await expect(mobileFutureContract).toContainText('91,000원');
+  await mobileFutureContract.locator('summary').click();
+  await expect(mobileFutureContract).toContainText('별도 계약 시 납부');
   await page.locator('#calculator-move-in-settlement').screenshot({ path: testInfo.outputPath('move-in-mobile.png') });
   await page.locator('#calculator-payments').screenshot({ path: testInfo.outputPath('payment-countdowns-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -317,9 +336,10 @@ test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가
 });
 
 const priceCases = [
-  { name: '별도 옵션 포함', ids: ['system-ac-2-general', 'wide-plank-floor-finish'], total: '647,068,000원', mainDeposit: '64,706,800원', preDeposit: '32,353,400원', mainBalance: '452,405,600원', preBalance: '485,301,000원', separate: true },
-  { name: '별도 기타 옵션 없음', ids: ['system-ac-2-general'], total: '645,248,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainBalance: '451,313,600원', preBalance: '483,936,000원', separate: false },
-  { name: '마이너스 옵션', ids: ['bundang-minus-option-package'], total: '612,388,000원', mainDeposit: '61,238,800원', preDeposit: '30,619,400원', mainBalance: '428,671,600원', preBalance: '459,291,000원', separate: false },
+  { name: '별도 옵션 포함', ids: ['system-ac-2-general', 'wide-plank-floor-finish'], total: '647,068,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainFuture: '182,000원', preFuture: '91,000원', mainBalance: '452,405,600원', preBalance: '485,301,000원', ltv60: '384,988,800원', separate: true },
+  { name: '별도 기타 옵션 없음', ids: ['system-ac-2-general'], total: '645,248,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '451,313,600원', preBalance: '483,936,000원', ltv60: '384,988,800원', separate: false },
+  { name: '옵션 없는 기본형', ids: [], total: '641,648,000원', mainDeposit: '64,164,800원', preDeposit: '32,082,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '449,153,600원', preBalance: '481,236,000원', ltv60: '384,988,800원', separate: false },
+  { name: '마이너스 옵션', ids: ['bundang-minus-option-package'], total: '612,388,000원', mainDeposit: '61,238,800원', preDeposit: '30,619,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '428,671,600원', preBalance: '459,291,000원', ltv60: '367,432,800원', separate: false },
 ];
 
 for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre-subscription'] as const) {
@@ -329,12 +349,21 @@ for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre
     await expect(page.locator('.hero-total strong')).toHaveText(scenario.total);
     const main = plan === 'main-subscription';
     await expect(page.locator('[data-finance-due="계약 시"] .contract-due b')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
+    await expect(page.locator('#calculator-contract-cash')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
+    await expect(page.locator('#calculator-future-option-contract')).toContainText(scenario.separate ? (main ? scenario.mainFuture : scenario.preFuture) : '선택 없음');
+    await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
+    await expect(page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
+    if (scenario.separate) await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"] .contract-due b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);
     await expect(page.locator('[data-finance-due="입주 시"] .contract-due b')).toHaveText(main ? scenario.mainBalance : scenario.preBalance);
     await expect(page.locator('[data-finance-due="별도 안내"]')).toHaveCount(scenario.separate ? 1 : 0);
     await expect(page.locator('[data-finance-due="2027-04-12"]')).toHaveCount(main ? 1 : 0);
     await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="deferred-interest"]')).toHaveCount(0);
     await expect(page.locator('[data-finance-due="입주 시"] [data-flow="deferred-interest"]')).toHaveCount(1);
     await expect(page.locator('[data-flow="interim-repayment"]')).toHaveCount(1);
+    await page.locator('#calculator-balance-ltv').selectOption('60');
+    await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText(scenario.ltv60);
+    await page.locator('#calculator-balance-ltv').selectOption('70');
+    await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('400,000,000원');
     await expect(page.locator('a[href*="joy-papa.github.io"]')).toHaveCount(0);
   });
 }

@@ -49,7 +49,16 @@ describe('Bundang contract and financing timeline', () => {
       expect(result.totalGroupLoanDrawWon).toBe(result.totalInterimRepaymentWon);
       expect(result.totalCashDueWon).toBe(quote.contractTotalWon + 5_432_100 - 400_000_000);
       expect(result.rows.some((row) => row.dueKey === '별도 안내')).toBe(scenario === 'separate-option-contract');
+      expect(result.rows.some((row) => row.dueKey === '옵션Ⅲ 계약 시')).toBe(scenario === 'separate-option-contract');
       if (scenario === 'separate-option-contract') {
+        const initialContract = result.rows.find((row) => row.dueKey === '계약 시')!;
+        const laterContract = result.rows.find((row) => row.dueKey === '옵션Ⅲ 계약 시')!;
+        const initialExpected = quote.paymentSchedules.filter(schedule => schedule.target !== 'option-iii')
+          .flatMap(schedule => schedule.installments).filter(item => item.id === 'contract')
+          .reduce((total, item) => total + item.amountWon, 0);
+        expect(initialContract.contractDueWon).toBe(initialExpected);
+        expect(laterContract.contractDueWon).toBe(1_820_000 * (plan === 'main-subscription' ? 0.1 : 0.05));
+        expect(laterContract.cashDueWon).toBe(laterContract.contractDueWon);
         const separate = result.rows.find((row) => row.dueKey === '별도 안내')!;
         expect(separate.contractDueWon).toBe(1_820_000 * (plan === 'main-subscription' ? 0.3 : 0.2));
         expect(separate.cashDueWon).toBe(separate.contractDueWon);

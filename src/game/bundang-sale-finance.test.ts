@@ -50,6 +50,7 @@ describe('Bundang sale finance', () => {
     expect(pre.installments.reduce((sum, line) => sum + line.amountWon, 0)).toBe(5_213_000);
 
     const main = calculateBundangPaymentSchedule(1_000_001, 'main-subscription', 'option-iii');
+    expect(main.installments[0]?.due).toBe('옵션Ⅲ 계약 시');
     expect(main.installments[1]?.due).toBe('별도 안내');
     expect(main.installments.map((line) => line.rateBps)).toEqual([1_000, 3_000, 6_000]);
     expect(main.installments.reduce((sum, line) => sum + line.amountWon, 0)).toBe(1_000_001);
@@ -164,6 +165,22 @@ describe('Bundang sale finance', () => {
     expect(result.mortgage?.annualRateBps).toBe(130);
     const noBalcony = calculateBundangSaleFinance({ household: { unitType: '55A', floorBand: 5 }, paymentPlanKind: 'main-subscription', includeBalconyExtension: false, mortgage: { termYears: 30, ltvBps: 3_000 } });
     expect(noBalcony.mortgage?.loanBaseWon).toBe(noBalcony.adjustedSupplyPriceWon);
+  });
+
+  it('calculates 60% and 70% mortgage against adjusted housing plus balcony, capped at 4억원, across every type and floor', () => {
+    for (const unitType of ['51A', '55A', '55B', '59A'] as const) for (const floorBand of [1, 2, 3, 4, 5] as const) {
+      for (const ltvBps of [6_000, 7_000]) for (const selectMinusOption of [false, true]) {
+        const result = calculateBundangSaleFinance({
+          household: { unitType, floorBand }, paymentPlanKind: 'main-subscription', selectMinusOption,
+          optionLines: [{ id: 'ac', label: '시스템에어컨', tier: 'option-ii', priceWon: 3_600_000 },
+            { id: 'other', label: '기타 옵션', tier: 'option-iii', priceWon: 1_820_000 }],
+          mortgage: { termYears: 30, ltvBps },
+        });
+        const loanBase = result.adjustedSupplyPriceWon + result.adjustedBalconyExtensionWon;
+        expect(result.mortgage?.loanBaseWon).toBe(loanBase);
+        expect(result.mortgage?.principalWon).toBe(Math.min(400_000_000, Math.round(loanBase * ltvBps / 10_000)));
+      }
+    }
   });
 
   it('applies the notice child-count and settlement-period fund share table', () => {

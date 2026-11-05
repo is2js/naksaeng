@@ -11,6 +11,7 @@ describe('Bundang payment timeline', () => {
     expect(paymentDeadlineForDue('2028-02-14')).toMatchObject({ precision: 'date', startDate: '2028-02-14' });
     expect(paymentDeadlineForDue('입주 시')).toMatchObject({ precision: 'month', startDate: '2029-02-01', endDate: '2029-02-28' });
     expect(paymentDeadlineForDue('별도 안내')).toMatchObject({ precision: 'unknown', dateLabel: '계약 후 별도 안내' });
+    expect(paymentDeadlineForDue('옵션Ⅲ 계약 시')).toMatchObject({ id: 'option-iii-contract', precision: 'unknown', dateLabel: '옵션 계약 시 · 일정 별도 안내' });
   });
 
   it('covers every actual installment due in both application payment plans without inventing dates for option III', () => {
@@ -19,7 +20,7 @@ describe('Bundang payment timeline', () => {
         for (const installment of installments) {
           const deadline = paymentDeadlineForDue(installment.due);
           expect(deadline.id, `Unmapped installment: ${installment.due}`).not.toBe('undetermined');
-          expect(deadline.precision === 'unknown').toBe(installment.due === '별도 안내');
+          expect(deadline.precision === 'unknown').toBe(['별도 안내', '옵션Ⅲ 계약 시'].includes(installment.due));
           if (/^\d{4}-\d{2}-\d{2}$/.test(installment.due)) {
             expect(deadline.startDate).toBe(installment.due);
             expect(deadline.endDate).toBe(installment.due);
@@ -82,7 +83,7 @@ describe('Bundang payment timeline', () => {
   });
 
   it('never fabricates a D-day for separately announced or unknown schedules', () => {
-    for (const due of ['별도 안내', '', 'unrecognized', '2029-02-30', '2027-04-12T00:00:00Z']) {
+    for (const due of ['별도 안내', '옵션Ⅲ 계약 시', '', 'unrecognized', '2029-02-30', '2027-04-12T00:00:00Z']) {
       const deadline = paymentDeadlineForDue(due);
       expect(deadline.precision).toBe('unknown');
       expect(countdownForDeadline(deadline, atSeoulNoon('2026-10-22'))).toMatchObject({ text: '일정 미정', state: 'unknown' });

@@ -323,7 +323,7 @@ const PAYMENT_DEFINITIONS: Record<BundangPaymentPlanKind, Record<BundangPaymentT
       { id: 'balance', label: '잔금', due: '입주 시', rateBps: 7_500 },
     ],
     'option-iii': [
-      { id: 'contract', label: '계약금', due: '계약 시', rateBps: 500 },
+      { id: 'contract', label: '계약금', due: '옵션Ⅲ 계약 시', rateBps: 500 },
       { id: 'interim', label: '중도금', due: '별도 안내', rateBps: 2_000 },
       { id: 'balance', label: '잔금', due: '입주 시', rateBps: 7_500 },
     ],
@@ -346,7 +346,7 @@ const PAYMENT_DEFINITIONS: Record<BundangPaymentPlanKind, Record<BundangPaymentT
       { id: 'balance', label: '잔금', due: '입주 시', rateBps: 6_000 },
     ],
     'option-iii': [
-      { id: 'contract', label: '계약금', due: '계약 시', rateBps: 1_000 },
+      { id: 'contract', label: '계약금', due: '옵션Ⅲ 계약 시', rateBps: 1_000 },
       { id: 'interim', label: '중도금', due: '별도 안내', rateBps: 3_000 },
       { id: 'balance', label: '잔금', due: '입주 시', rateBps: 6_000 },
     ],

@@ -40,6 +40,9 @@ export function paymentDeadlineForDue(due: string): BundangPaymentDeadlineV1 {
     id: 'contract', label: '계약금', precision: 'range',
     startDate: '2026-11-04', endDate: '2026-11-13', dateLabel: '2026.11.04~11.13',
   };
+  if (due === '옵션Ⅲ 계약 시') return {
+    id: 'option-iii-contract', label: '기타 옵션 계약금', precision: 'unknown', dateLabel: '옵션 계약 시 · 일정 별도 안내',
+  };
   if (due === '2027-04-12') return {
     id: 'interim-1', label: '중도금 1차', precision: 'date',
     startDate: due, endDate: due, dateLabel: due,

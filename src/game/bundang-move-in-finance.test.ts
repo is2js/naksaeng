@@ -19,7 +19,10 @@ describe('Bundang move-in settlement', () => {
     'separates contract cash from the remaining purchase price excluding mortgage and extra costs for %s', (plan) => {
       for (const minus of [false, true]) {
         const quote = contract(plan, minus);
-        const expectedContract = quote.paymentSchedules.flatMap((schedule) => schedule.installments)
+        const expectedContract = quote.paymentSchedules.filter((schedule) => schedule.target !== 'option-iii').flatMap((schedule) => schedule.installments)
+          .filter((installment) => installment.id === 'contract')
+          .reduce((sum, installment) => sum + installment.amountWon, 0);
+        const expectedFutureContract = quote.paymentSchedules.filter((schedule) => schedule.target === 'option-iii').flatMap((schedule) => schedule.installments)
           .filter((installment) => installment.id === 'contract')
           .reduce((sum, installment) => sum + installment.amountWon, 0);
         for (const interimFunding of ['cash', 'loan'] as const) {
@@ -30,6 +33,7 @@ describe('Bundang move-in settlement', () => {
               additionalCosts: [{ id: 'moving', amountWon: 1_000_000 }],
             });
             expect(result.contractPaymentsWon).toBe(expectedContract);
+            expect(result.futureOptionContractPaymentsWon).toBe(expectedFutureContract);
             expect(result.postContractBaseCashWon).toBe(quote.contractTotalWon - expectedContract - result.mortgageAppliedWon);
             expect(result.contractPaymentsWon + result.postContractBaseCashWon + result.mortgageAppliedWon).toBe(quote.contractTotalWon);
             expect(result.mortgageAppliedWon).toBe(Math.min(mortgagePrincipalWon, result.housingBalanceWon));

@@ -15,9 +15,11 @@ export interface BundangMoveInSettlementInputV1 {
 }
 
 export interface BundangMoveInSettlementV1 {
-  /** All contract installments; separate contracts may have different due dates. */
+  /** Estimated first contract installments: housing, balcony and system AC only. */
   contractPaymentsWon: number;
-  /** Contract total less contract payments and the mortgage actually applied. Excludes interest, tax and other costs. */
+  /** Future separately contracted option III deposit, not part of the first contract. */
+  futureOptionContractPaymentsWon: number;
+  /** Contract total less first contract installments and the mortgage actually applied. Excludes interest, tax and other costs. */
   postContractBaseCashWon: number;
   balancePaymentsWon: number;
   /** Only the housing and balcony balances are eligible for the final mortgage. */
@@ -61,6 +63,8 @@ function sumWon(values: readonly number[], label: string): number {
  * to existing interim debt, option balances, taxes or ancillary costs. Interim
  * debt and deferred interest are disclosed as a preceding repayment stage.
  * Excess mortgage capacity is disclosed, not treated as available cash.
+ * Contract milestones are estimates, not assertions that any bill was paid.
+ * The later option III deposit remains in the post-first-contract amount.
  * Does not mutate the official payment schedules or persist household details.
  */
 export function calculateBundangMoveInSettlement(
@@ -78,12 +82,15 @@ export function calculateBundangMoveInSettlement(
   const optionBalances: number[] = [];
   const beforeMoveIn: number[] = [];
   const contractPayments: number[] = [];
+  const futureOptionContractPayments: number[] = [];
   const supplyInterims: number[] = [];
   for (const schedule of input.paymentSchedules) {
     checkedWon(schedule.totalWon, '계약 항목 합계');
     for (const installment of schedule.installments) {
       const amount = checkedWon(installment.amountWon, '납부 회차 금액');
-      if (installment.id === 'contract') contractPayments.push(amount);
+      if (installment.id === 'contract') {
+        (schedule.target === 'option-iii' ? futureOptionContractPayments : contractPayments).push(amount);
+      }
       if (installment.id === 'balance') {
         (schedule.target === 'supply' || schedule.target === 'balcony'
           ? housingBalances : optionBalances).push(amount);
@@ -114,6 +121,7 @@ export function calculateBundangMoveInSettlement(
   const mortgageAppliedWon = Math.min(mortgage, housingBalanceWon);
   const mortgageExcessWon = mortgage - mortgageAppliedWon;
   const contractPaymentsWon = sumWon(contractPayments, '계약금 합계');
+  const futureOptionContractPaymentsWon = sumWon(futureOptionContractPayments, '기타 옵션 계약금');
   const postContractBaseCashWon = sumWon([beforeMoveInWon, balancePaymentsWon], '계약 총액') - contractPaymentsWon - mortgageAppliedWon;
   const balanceCashAfterMortgageWon = balancePaymentsWon - mortgageAppliedWon;
   const requiredCashAtMoveInWon = sumWon([
@@ -122,6 +130,7 @@ export function calculateBundangMoveInSettlement(
   const selfFundedBeforeMoveInWon = beforeMoveInWon - interimLoanRepaymentWon;
   return {
     contractPaymentsWon,
+    futureOptionContractPaymentsWon,
     postContractBaseCashWon,
     balancePaymentsWon,
     housingBalanceWon,

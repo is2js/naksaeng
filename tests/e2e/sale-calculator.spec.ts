@@ -332,6 +332,7 @@ test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가
   await expect(page.locator('.contract-booking-note')).toBeVisible();
   await expect(page.locator('.contract-stamp-note')).toBeVisible();
   await expect(page.locator('#calculator-future-option-contract')).toBeVisible();
+  await expect(page.locator('.interim-account-summary')).toBeVisible();
   await expect(page.locator('.stamp-settlement-reminder')).toBeVisible();
   await expect(page.locator('.calculator-mobile-jump')).toBeHidden();
 });
@@ -362,6 +363,19 @@ for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre
     if (scenario.separate) await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"] .contract-due b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);
     await expect(page.locator('[data-finance-due="입주 시"] .contract-due b')).toHaveText(main ? scenario.mainBalance : scenario.preBalance);
     await expect(page.locator('[data-finance-due="별도 안내"]')).toHaveCount(scenario.separate ? 1 : 0);
+    const firstInterim = page.locator(`[data-interim-account-due="${main ? '2027-04-12' : '2028-02-14'}"]`);
+    await expect(firstInterim.locator('[data-interim-account="supply"]')).toContainText('주택 집단대출 가정');
+    await expect(firstInterim.locator('[data-interim-account="balcony"]')).toContainText('자납');
+    await expect(page.locator('[data-interim-account-due="별도 안내"]')).toHaveCount(scenario.separate ? 1 : 0);
+    if (scenario.separate) {
+      await expect(firstInterim.locator('[data-interim-account="system-ac"]')).toContainText('자납');
+      await expect(page.locator('[data-interim-account-due="별도 안내"] [data-interim-account="other"]')).toContainText(main ? '546,000원' : '364,000원');
+      await expect(page.locator('[data-interim-account-due="별도 안내"]')).toContainText('자납');
+    }
+    if (main) {
+      await expect(page.locator('[data-interim-account-due="2028-02-14"] [data-interim-account="balcony"]')).toContainText('해당 회차 납부 없음');
+      await expect(page.locator('[data-interim-account-due="2028-02-14"] [data-interim-account="system-ac"]')).toContainText('해당 회차 납부 없음');
+    }
     await expect(page.locator('[data-finance-due="2027-04-12"]')).toHaveCount(main ? 1 : 0);
     await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="deferred-interest"]')).toHaveCount(0);
     await expect(page.locator('[data-finance-due="입주 시"] [data-flow="deferred-interest"]')).toHaveCount(1);

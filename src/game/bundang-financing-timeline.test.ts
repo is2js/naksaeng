@@ -20,6 +20,34 @@ function contract(plan: BundangPaymentPlanKind, scenario: typeof cases[number]) 
 }
 
 describe('Bundang contract and financing timeline', () => {
+  it.each([
+    { plan: 'main-subscription', first: '2027-04-12', housingLoan: 63_651_000, balcony: 1_027_600, aircon: 1_080_000, other: 546_000 },
+    { plan: 'pre-subscription', first: '2028-02-14', housingLoan: 127_302_000, balcony: 1_027_600, aircon: 720_000, other: 364_000 },
+  ] as const)('$plan lends only housing and leaves each option interim for direct payment', ({ plan, first, housingLoan, balcony, aircon, other }) => {
+    const quote = contract(plan, 'separate-option-contract');
+    const result = buildBundangFinancingTimeline({ paymentSchedules: quote.paymentSchedules, interimFunding: 'loan' });
+    const amountOn = (target: string, due: string) => quote.paymentSchedules
+      .filter((schedule) => schedule.target === target)
+      .flatMap((schedule) => schedule.installments)
+      .filter((installment) => installment.due === due)
+      .reduce((sum, installment) => sum + installment.amountWon, 0);
+    const firstRow = result.rows.find((row) => row.dueKey === first)!;
+    expect(amountOn('supply', first)).toBe(housingLoan);
+    expect(amountOn('balcony', first)).toBe(balcony);
+    expect(amountOn('option-ii', first)).toBe(aircon);
+    expect(firstRow.groupLoanDrawWon).toBe(housingLoan);
+    expect(firstRow.cashDueWon).toBe(balcony + aircon);
+    expect(amountOn('option-iii', '별도 안내')).toBe(other);
+    const otherRow = result.rows.find((row) => row.dueKey === '별도 안내')!;
+    expect(otherRow.groupLoanDrawWon).toBe(0);
+    expect(otherRow.cashDueWon).toBe(other);
+    if (plan === 'main-subscription') {
+      const second = result.rows.find((row) => row.dueKey === '2028-02-14')!;
+      expect(second.groupLoanDrawWon).toBe(63_651_000);
+      expect(second.cashDueWon).toBe(0);
+    }
+  });
+
   for (const plan of plans) for (const scenario of cases) {
     it(`${plan}: ${scenario} borrows on each supply interim date and settles interest only at move-in`, () => {
       const quote = contract(plan, scenario);

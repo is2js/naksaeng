@@ -61,6 +61,22 @@ export function paymentDeadlineForDue(due: string): BundangPaymentDeadlineV1 {
   return { id: 'undetermined', label: '납부 일정', precision: 'unknown', dateLabel: '일정 미정' };
 }
 
+/** Choose one useful disclosure, never treating an unknown option date as a deadline. */
+export function recommendedPaymentDue(rows: readonly { dueKey: string }[], now: Date = new Date()): string | null {
+  const today = calendarDay(seoulDateKey(now))!;
+  const known = rows.flatMap((row) => {
+    const deadline = paymentDeadlineForDue(row.dueKey);
+    const start = calendarDay(deadline.startDate);
+    const end = calendarDay(deadline.endDate ?? deadline.startDate);
+    return deadline.precision !== 'unknown' && start !== null && end !== null && end >= start
+      ? [{ dueKey: row.dueKey, start, end, estimated: deadline.precision === 'month' }] : [];
+  });
+  const current = (estimated: boolean) => known.find((row) => row.estimated === estimated && row.start <= today && row.end >= today);
+  const next = (estimated: boolean) => known.filter((row) => row.estimated === estimated && row.start > today).sort((a, b) => a.start - b.start)[0];
+  return (current(false) ?? next(false) ?? current(true) ?? next(true)
+    ?? known.sort((a, b) => b.end - a.end)[0])?.dueKey ?? null;
+}
+
 const unknownCountdown = (): BundangPaymentCountdownV1 => ({
   text: '일정 미정', state: 'unknown',
   detail: '확정 납부일이 별도 안내되기 전에는 D-day를 계산하지 않습니다.',

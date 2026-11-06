@@ -6,7 +6,7 @@ import { BUNDANG_INTERIM_LOAN_ASSUMED_MOVE_IN_DATE, calculateBundangInterimLoanI
 import { calculateBundangMoveInSettlement } from '../game/bundang-move-in-finance';
 import { buildBundangFinancingTimeline, type BundangFinancingTimelineRowV1 } from '../game/bundang-financing-timeline';
 import { calculateBundangMortgageSettlement } from '../game/bundang-mortgage-settlement';
-import { countdownForDeadline, paymentDeadlineForDue, seoulDateKey } from '../game/bundang-payment-timeline';
+import { countdownForDeadline, paymentDeadlineForDue, recommendedPaymentDue, seoulDateKey } from '../game/bundang-payment-timeline';
 import { clearSaleCalculatorContext, readSaleCalculatorLaunchContext, type SaleCalculatorContextV1 } from '../game/sale-calculator-context';
 import { resolveSaleCalculatorOptionLines, type SaleCalculatorOptionLineV1 } from '../game/sale-calculator-options';
 import { hasOperatorAccess } from '../shared/operator-access';
@@ -112,6 +112,8 @@ function mergeSchedules(schedules: ReturnType<typeof calculateBundangSaleFinance
     .map((row) => ({ ...row, label: labelForDue(row.due), due: paymentDeadlineForDue(row.due).dateLabel }));
 }
 
+const paymentStageId = (due: string) => `calculator-payment-stage-${paymentDeadlineForDue(due).id}`;
+
 class CalculatorApp {
   private readonly context = readSaleCalculatorLaunchContext();
   private readonly verification = readHouseholdVerificationSession();
@@ -132,6 +134,8 @@ class CalculatorApp {
   private salePriceWon: number | null = null;
   private restorePrintState: (() => void) | null = null;
   private scheduleRows: ScheduleRow[] = [];
+  // undefined follows the calendar; null means the user deliberately folded all stages.
+  private selectedPaymentDue: string | null | undefined;
   private countdownTimer: number | undefined;
   private bound = false;
   private readonly pendingInputs = new Set<string>();
@@ -143,7 +147,7 @@ class CalculatorApp {
     // Older session preferences may contain the former optional-off state.
     this.mortgageEnabled = true;
     window.addEventListener('beforeprint', () => this.preparePrint());
-    window.addEventListener('afterprint', () => { this.restorePrintState?.(); this.restorePrintState = null; });
+    window.addEventListener('afterprint', () => { this.restorePrintState?.(); this.restorePrintState = null; this.refreshCountdowns(); });
     document.addEventListener('visibilitychange', this.scheduleCountdownRefresh);
     window.addEventListener('pageshow', this.scheduleCountdownRefresh);
     window.addEventListener('pagehide', () => window.clearTimeout(this.countdownTimer));
@@ -246,7 +250,6 @@ class CalculatorApp {
       <div class="serverless-banner"><span class="banner-pulse"></span><b>브라우저 계산 도구</b><i></i><span>계산 결과는 참고용이며 공식 공고·계약서가 우선합니다.</span></div>
       <main id="calculator-main" class="calculator-main">
         <nav class="calculator-mobile-jump" aria-label="자금 계획 바로가기"><button type="button" data-calculator-jump="calculator-payments">납부 일정</button><button type="button" data-calculator-jump="calculator-move-in-settlement">입주 정산</button><button type="button" data-calculator-jump="calculator-option-details">옵션</button><button type="button" data-calculator-jump="calculator-tax-details">취득세</button><button type="button" data-calculator-jump="calculator-interim-loan-details">중도금 대출</button><button type="button" data-calculator-jump="calculator-mortgage-details">전용 모기지</button></nav>
-        <section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.27 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>
         <section class="calculator-hero"><div><p class="eyebrow">BUNFIRVIL / SALE FINANCE</p><h1>내 자금 계획</h1><p><b class="context-highlight">${this.unitType} · ${floorLabel(this.floor)} · ${planName}</b> 쇼케이스 선택을 기준으로 계산합니다. 동·호·닉네임은 계산 데이터에 저장하지 않습니다.</p><fieldset class="plan-switch hero-plan-switch" aria-label="청약 구분"><legend>청약 구분</legend><label><input id="calculator-plan-main" name="payment-plan" value="main-subscription" type="radio" ${this.plan === 'main-subscription' ? 'checked' : ''}><span>본청약(신규신청자)</span></label><label><input id="calculator-plan-pre" name="payment-plan" value="pre-subscription" type="radio" ${this.plan === 'pre-subscription' ? 'checked' : ''}><span>사전청약 당첨자</span></label></fieldset><p class="source-stamp">기준: 입주자모집공고 2026.05.29 · 자금 정보 검토 ${FINANCE_REVIEWED_AT} · 예정 일정은 변경될 수 있습니다.</p></div><aside class="restore-card"><span>선택 옵션 상태</span><strong>${(this.context!.optionIds ?? []).length}개 불러옴</strong><p>평형·층은 인증된 선택값으로 고정됩니다. 옵션·가구는 이 브라우저의 같은 평형에서 공유됩니다.</p><button id="calculator-return-options" data-action="return-to-showcase" type="button">옵션 다시 선택</button></aside></section>
         <section class="quote-layout"><article class="calculator-card result-card"><div class="section-head result-head"><div><p class="eyebrow">CONTRACT</p><h2>최종 계약 예상 총액</h2></div><button id="calculator-print" data-action="print" class="print-button" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3M7 13h10v8H7z" /></svg><span>인쇄 · PDF 저장</span></button></div><div class="hero-total"><span>공급가 + 발코니 + 선택 옵션 − 마이너스 감액</span><strong>${money(quote.contractTotal)}</strong><p>세금·대출 추정을 펼쳐 선택하면 입주 예산에 별도로 반영됩니다.</p></div><dl class="contract-breakdown"><div><dt>조정 전 공급가</dt><dd>${money(quote.baseSupply)}</dd></div><div><dt>발코니 확장</dt><dd>${money(quote.baseBalcony)}</dd></div><div><dt>선택 옵션 합계</dt><dd>${money(quote.selectedOptions)}</dd></div><div class="discount"><dt>마이너스 감액</dt><dd>−${money(quote.minusDiscount)}</dd></div></dl><p class="fund-note">${quote.optionLines.some((option) => option.tier === 'option-iii') ? '선택한 기타 옵션Ⅲ은 아직 계약하지 않은 예정 금액이며 실제 계약 내용에 따라 달라집니다. ' : ''}공고표의 주택도시기금 55,000,000원은 실제 수령액으로 차감하지 않았습니다.</p><div class="payment-block" id="calculator-payments"><div class="subhead"><h3>납부 일정</h3><span>동일 회차·일자 기준 합산</span></div>${this.scheduleTable(quote.schedule)}<p class="schedule-note">추가선택품목 Ⅲ 중도금은 공고문상 납부일이 <b>별도 안내</b>로 명시되어 공급대금 중도금 1·2차에 합산하지 않습니다.</p></div>${this.moveInMarkup(quote)}${this.paymentGuideMarkup()}</article><aside class="calculator-side"><details id="calculator-option-details" class="calculator-card disclosure option-card"><summary><span class="summary-title">선택 옵션 <b>${this.minus ? 1 : quote.optionLines.length}개</b></span><span>펼치기</span></summary><div class="disclosure-body">${this.optionMarkup(quote)}</div></details>${this.taxDetails(quote)}${this.interimLoanDetails(quote)}${this.mortgageDetails(quote)}${this.costDetails(quote)}${this.resaleDetails(quote)}<article class="calculator-card source-card"><p class="eyebrow">NOTICE</p><h2>계산 전 확인</h2><p>금액·일정·감면·대출 실행은 공고문, 계약서, 관계기관 심사 결과가 우선합니다.</p><a href="../guides/?guide=sale-finance" class="text-link">입주·자금 계산 가이드 보기 →</a></article></aside></section>
       </main><footer class="calculator-footer"><span>BUNFIRVIL · STATIC FRONTEND</span><span>개인정보·인증값은 인쇄물과 계산 URL에 포함하지 않습니다.</span></footer></div>`;
@@ -254,7 +257,7 @@ class CalculatorApp {
     template.innerHTML = markup;
     reconcileChildren(this.mount, template.content);
     for (const node of this.mount.querySelectorAll<HTMLDetailsElement>('details[id]')) {
-      if (disclosureState.has(node.id)) node.open = disclosureState.get(node.id)!;
+      if (!node.classList.contains('payment-stage') && disclosureState.has(node.id)) node.open = disclosureState.get(node.id)!;
     }
     this.refreshCountdowns();
     this.bind();
@@ -276,6 +279,15 @@ class CalculatorApp {
   private scheduleTable(rows: FundedScheduleRow[]): string {
     if (!rows.length) return '<div class="empty-state">납부 일정 데이터를 불러오지 못했습니다.</div>';
     const cell = (value: number) => value ? money(value) : '—';
+    return `<p id="calculator-schedule-scroll-hint" class="schedule-scroll-hint">납부표는 좌우로 스크롤할 수 있습니다. 회차를 누르면 아래에서 해당 납부 상세를 확인할 수 있습니다.</p><div class="schedule-scroll" role="region" aria-label="회차별 납부 일정과 자금 흐름" aria-describedby="calculator-schedule-scroll-hint" tabindex="0"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니</th><th>시스템<br>에어컨</th><th>기타 옵션</th><th>회차 합계<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
+      const total = row.supply + row.balcony + row.systemAc + row.other;
+      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      return `<tr data-phase="${phase}" data-finance-due="${escape(row.dueKey)}"><th scope="row"><button type="button" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><strong>${escape(row.label)}</strong><small>상세 보기 ↓</small></button></th><td class="schedule-date"><span>${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span></td><td>${cell(row.supply)}</td><td>${cell(row.balcony)}</td><td>${cell(row.systemAc)}</td><td>${cell(row.other)}</td><td class="total financing-cell"><span class="contract-due">해당 회차 예정액 <b>${money(total)}</b></span>${this.financingMarkup(row.financing)}</td></tr>`;
+    }).join('')}</tbody></table></div>${this.scheduleCards(rows)}${this.paymentStageDetails(rows)}<p class="financing-note">집단대출 가정은 <b>중도금 납부일에 대출 실행</b>, <b>잔금·입주 시 원금과 후불이자 상환</b>으로 표시합니다. 대출 유입은 현금 부담에서 차감하며 계약 금액 자체를 줄이지 않습니다. 세금·부대비용은 아래 입주 정산에 별도로 포함됩니다.</p>`;
+  }
+
+  private contractAccountSummary(rows: FundedScheduleRow[]): string {
+    if (!rows.length) return '<div class="empty-state">납부 일정 데이터를 불러오지 못했습니다.</div>';
     const mainContract = rows.find((row) => row.dueKey === '계약 시');
     const optionContract = rows.find((row) => row.dueKey === '옵션Ⅲ 계약 시');
     const rateLabel = this.plan === 'main-subscription' ? '10%' : '5%';
@@ -286,16 +298,23 @@ class CalculatorApp {
     ] as const;
     const contractTotal = accountLines.reduce((sum, [, , amount]) => sum + amount, 0);
     const futureOptionContract = optionContract?.other ?? 0;
-    return `<section class="account-contract-summary" aria-labelledby="account-contract-heading"><div class="account-contract-head"><h4 id="account-contract-heading">이번 계약금 · 세 계좌</h4><span>${rateLabel} 기준 · 예상</span></div><div class="account-contract-grid">${accountLines.map(([id, label, amount]) => `<div id="${id}"><span>${label}</span><b>${money(amount)}</b>${id === 'calculator-account-system-ac' && !amount ? '<small>미선택</small>' : ''}</div>`).join('')}</div><p class="account-contract-total">세 계좌 합계 <b>${money(contractTotal)}</b></p><div id="calculator-future-option-contract" class="future-option-contract"><div><span>추후 기타 옵션Ⅲ 계약금 <small>별도 계약 · 일정 미정${!futureOptionContract ? ' · 선택 없음' : ''}</small></span><b>${money(futureOptionContract)}</b></div><p>선택한 기타 옵션에 대한 ${rateLabel} 계약금입니다. 실제 납부 일정과 계좌는 추후 안내를 확인하세요.</p></div><p class="account-contract-total account-contract-overall">현재·추후 계약금 예상 합계 <b>${money(contractTotal + futureOptionContract)}</b></p><p>주택·발코니·시스템에어컨은 각각 안내받은 KB 세대별 가상계좌를 확인하세요. 계좌번호는 이 화면에 표시하지 않으며 실제 납부 여부는 확인하지 않습니다. 기타 옵션 계약은 별도로 진행됩니다.</p></section>${this.interimAccountSummary(rows)}<p id="calculator-schedule-scroll-hint" class="schedule-scroll-hint">납부표는 좌우로 스크롤할 수 있습니다. 키보드에서는 표를 선택한 뒤 방향키를 사용하세요.</p><div class="schedule-scroll" role="region" aria-label="회차별 납부 일정과 자금 흐름" aria-describedby="calculator-schedule-scroll-hint" tabindex="0"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니</th><th>시스템<br>에어컨</th><th>기타 옵션</th><th>회차 합계<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
-      const total = row.supply + row.balcony + row.systemAc + row.other;
-      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      return `<tr data-phase="${phase}" data-finance-due="${escape(row.dueKey)}"><th><strong>${escape(row.label)}</strong></th><td class="schedule-date"><span>${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span></td><td>${cell(row.supply)}</td><td>${cell(row.balcony)}</td><td>${cell(row.systemAc)}</td><td>${cell(row.other)}</td><td class="total financing-cell"><span class="contract-due">해당 회차 예정액 <b>${money(total)}</b></span>${this.financingMarkup(row.financing)}</td></tr>`;
-    }).join('')}</tbody></table></div>${this.scheduleCards(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="financing-note">집단대출 가정은 <b>중도금 납부일에 대출 실행</b>, <b>잔금·입주 시 원금과 후불이자 상환</b>으로 표시합니다. 대출 유입은 현금 부담에서 차감하며 계약 금액 자체를 줄이지 않습니다. 세금·부대비용은 아래 입주 정산에 별도로 포함됩니다.</p><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`;
+    return `<section class="account-contract-summary" aria-labelledby="account-contract-heading"><div class="account-contract-head"><h4 id="account-contract-heading">이번 계약금 · 세 계좌</h4><span>${rateLabel} 기준 · 예상</span></div><div class="account-contract-grid">${accountLines.map(([id, label, amount]) => `<div id="${id}"><span>${label}</span><b>${money(amount)}</b>${id === 'calculator-account-system-ac' && !amount ? '<small>미선택</small>' : ''}</div>`).join('')}</div><p class="account-contract-total">세 계좌 합계 <b>${money(contractTotal)}</b></p><div id="calculator-future-option-contract" class="future-option-contract"><div><span>추후 기타 옵션Ⅲ 계약금 <small>별도 계약 · 일정 미정${!futureOptionContract ? ' · 선택 없음' : ''}</small></span><b>${money(futureOptionContract)}</b></div><p>선택한 기타 옵션에 대한 ${rateLabel} 계약금입니다. 실제 납부 일정과 계좌는 추후 안내를 확인하세요.</p></div><p class="account-contract-total account-contract-overall">현재·추후 계약금 예상 합계 <b>${money(contractTotal + futureOptionContract)}</b></p><p>주택·발코니·시스템에어컨은 각각 안내받은 KB 세대별 가상계좌를 확인하세요. 계좌번호는 이 화면에 표시하지 않으며 실제 납부 여부는 확인하지 않습니다. 기타 옵션 계약은 별도로 진행됩니다.</p></section>`;
   }
 
-  private interimAccountSummary(rows: FundedScheduleRow[]): string {
-    const installments = rows.filter((row) => row.label.includes('중도금'));
-    return `<section class="interim-account-summary" aria-labelledby="interim-account-heading"><div class="account-contract-head"><h4 id="interim-account-heading">중도금 · 항목별 납부</h4><span>공고 기준 · 계약서 확인</span></div><p>회차별 금액은 각 항목의 지정 계좌에 따로 납부합니다. 집단대출은 주택 공급대금만 가정하며, 발코니·시스템에어컨·기타 옵션은 직접 납부할 자금으로 계산합니다. 대출 실행 및 계좌별 실제 납부 방법은 은행과 계약 안내를 확인하세요.</p>${installments.map((row) => {
+  private paymentStageDetails(rows: FundedScheduleRow[]): string {
+    return `<section id="calculator-payment-details" class="payment-stage-details" aria-labelledby="payment-stage-heading"><div class="subhead"><h4 id="payment-stage-heading">회차별 납부 상세</h4><span>한 회차씩 펼쳐보기</span></div><p class="payment-stage-intro">진행 중이거나 다가오는 회차를 먼저 펼칩니다. 다른 회차를 선택하면 기존 상세는 접힙니다.</p>${rows.map(row => {
+      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      const body = row.dueKey === '계약 시' ? `<section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.27 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>${this.contractAccountSummary(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`
+        : row.label.includes('중도금') ? this.interimAccountSummary(row)
+        : `<dl class="payment-stage-amounts">${([['주택', row.supply], ['발코니', row.balcony], ['시스템에어컨', row.systemAc], ['기타 옵션', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}</dl>${row.dueKey === '옵션Ⅲ 계약 시' ? '<p class="stage-note">기타 옵션Ⅲ 계약금은 주택·발코니·시스템에어컨의 이번 계약금과 별개입니다. 실제 계약 일정과 항목별 지정 계좌는 추후 안내를 확인하고 직접 납부할 자금을 준비하세요.</p>' : '<p class="stage-note">잔금·입주 시에는 기존 중도금 대출 원금과 예상 후불이자를 정산하고 승인된 전용 모기지를 충당합니다. 세금·미납 부대비용은 아래 입주 정산에서 별도로 확인하세요. 2029년 2월은 예정월이며 확정 납부일이 아닙니다.</p><button type="button" class="text-link" data-calculator-jump="calculator-move-in-settlement">입주 정산·세부 자금 계획 보기 →</button>'}`;
+      return `<details id="${paymentStageId(row.dueKey)}" class="payment-stage" name="calculator-payment-stage" data-phase="${phase}" data-payment-stage-due="${escape(row.dueKey)}"><summary><span class="payment-stage-title"><strong>${escape(row.label)}</strong><span data-payment-stage-recommendation hidden></span></span><span class="payment-stage-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="payment-stage-body"><div class="payment-stage-timing schedule-countdown" data-payment-due="${escape(row.dueKey)}"></div>${body}<div class="payment-stage-funding"><h5>이 회차의 자금 계획</h5>${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-stage-flow=')}</div></div></details>`;
+    }).join('')}</section>`;
+  }
+
+  private interimAccountSummary(row: FundedScheduleRow): string {
+    const installments = [row];
+    const headingId = `interim-account-heading-${paymentDeadlineForDue(row.dueKey).id}`;
+    return `<section class="interim-account-summary" aria-labelledby="${headingId}"><div class="account-contract-head"><h4 id="${headingId}">${escape(row.label)} · 항목별 납부</h4><span>공고 기준 · 계약서 확인</span></div><p>회차별 금액은 각 항목의 지정 계좌에 따로 납부합니다. 집단대출은 주택 공급대금만 가정하며, 발코니·시스템에어컨·기타 옵션은 직접 납부할 자금으로 계산합니다. 대출 실행 및 계좌별 실제 납부 방법은 은행과 계약 안내를 확인하세요.</p>${installments.map((row) => {
       const optionOnly = row.label === '기타 옵션 중도금';
       const accounts = optionOnly
         ? [['other', '기타 옵션Ⅲ 계좌', row.other, '별도 계약 · 자납']] as const
@@ -308,11 +327,11 @@ class CalculatorApp {
     }).join('')}<p>납부일과 가상계좌는 실제 계약서·별도 안내가 우선하며, 금액을 합산하거나 다른 항목 계좌로 교차 입금하지 마세요. 옵션Ⅲ의 중도금은 별도 안내 1회로 표시합니다.</p></section>`;
   }
 
+
   private scheduleCards(rows: FundedScheduleRow[]): string {
-    return `<div class="schedule-cards" aria-label="회차별 납부 요약">${rows.map((row, index) => {
+    return `<div class="schedule-cards" aria-label="회차별 납부 요약">${rows.map(row => {
       const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      const total = row.supply + row.balcony + row.systemAc + row.other;
-      return `<details id="calculator-installment-${index}" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}"><summary><span class="installment-heading"><b>${escape(row.label)}</b><span>내 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="installment-breakdown"><dl>${([['주택', row.supply], ['발코니', row.balcony], ['시스템에어컨', row.systemAc], ['기타 옵션', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}<div class="installment-contract-total"><dt>해당 회차 예정액</dt><dd>${money(total)}</dd></div></dl>${row.dueKey === '계약 시' ? '<p class="stage-note">주택·발코니·시스템에어컨은 세대별 별도 가상계좌를 확인하세요.</p>' : row.dueKey === '옵션Ⅲ 계약 시' ? '<p class="stage-note">기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다.</p>' : ''}${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-mobile-flow=')}</div></details>`;
+      return `<button type="button" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><span class="installment-heading"><b>${escape(row.label)}</b><span>내 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">상세 보기</span></button>`;
     }).join('')}</div>`;
   }
 
@@ -320,6 +339,30 @@ class CalculatorApp {
     const line = (kind: string, label: string, value: number, sign: string) => value
       ? `<span class="financing-line" data-flow="${kind}"><span>${label}</span><b>${sign}${money(value)}</b></span>` : '';
     return `<div class="financing-lines">${line('loan-draw', '집단대출 실행 · 유입', row.groupLoanDrawWon, '−')}${line('interim-repayment', '중도금 원금 상환', row.interimRepaymentWon, '＋')}${line('deferred-interest', '예상 후불이자 상환', row.deferredInterestWon, '＋')}${line('mortgage', '잔금 모기지 · 유입', row.mortgageAppliedWon, '−')}<span class="financing-cash" data-flow="cash-due"><span>내 현금</span><b>${money(row.cashDueWon)}</b></span></div>`;
+  }
+
+  private syncPaymentStageSelection(now = new Date()): void {
+    if (this.restorePrintState) return;
+    const recommended = recommendedPaymentDue(this.scheduleRows, now);
+    if (this.selectedPaymentDue && !this.scheduleRows.some(row => row.dueKey === this.selectedPaymentDue)) {
+      this.selectedPaymentDue = undefined;
+    }
+    const selected = this.selectedPaymentDue === undefined ? recommended : this.selectedPaymentDue;
+    for (const stage of this.mount.querySelectorAll<HTMLDetailsElement>('.payment-stage')) {
+      stage.open = stage.dataset.paymentStageDue === selected;
+      const badge = stage.querySelector<HTMLElement>('[data-payment-stage-recommendation]');
+      if (badge) {
+        const isRecommended = stage.dataset.paymentStageDue === recommended;
+        badge.hidden = !isRecommended;
+        const countdown = countdownForDeadline(paymentDeadlineForDue(stage.dataset.paymentStageDue!), now);
+        badge.textContent = countdown.state === 'active' || countdown.state === 'today' ? '현재 회차'
+          : countdown.state === 'elapsed' ? '최근 회차' : '다가오는 회차';
+      }
+    }
+    for (const button of this.mount.querySelectorAll<HTMLButtonElement>('[data-payment-stage-target]')) {
+      button.setAttribute('aria-expanded', String(button.dataset.paymentStageTarget === selected));
+    }
+    this.syncDisclosureLabels();
   }
 
   private refreshCountdowns(): void {
@@ -349,6 +392,7 @@ class CalculatorApp {
     }
     const next = upcoming ? countdownForDeadline(paymentDeadlineForDue(upcoming.dueKey), now) : null;
     summary.innerHTML = `<div><span>다가오는 주택 납부 일정</span><strong>${upcoming ? escape(upcoming.label) : '확정된 다음 납부일 없음'}</strong><small>${upcoming ? escape(upcoming.due) : '입주·기타 옵션은 별도 확정 안내를 확인하세요.'}</small></div>${next ? `<b class="deadline-next" data-state="${next.state}">${escape(next.text)}</b>` : ''}<p id="calculator-deadline-today">D-day 기준 <time datetime="${today}">${today.replaceAll('-', '.')}</time> · 한국시간(KST)<small>입주 예정월은 2월 1일 기준 참고값 · 실제 잔금일 미정</small></p>`;
+    this.syncPaymentStageSelection(now);
   }
 
   private readonly scheduleCountdownRefresh = (): void => {
@@ -541,8 +585,24 @@ class CalculatorApp {
       this.render();
     });
     this.mount.addEventListener('click', event => {
+      const summary = event.target instanceof Element ? event.target.closest('summary') : null;
+      const stage = summary?.parentElement;
+      if (stage instanceof HTMLDetailsElement && stage.classList.contains('payment-stage')) {
+        event.preventDefault();
+        this.selectedPaymentDue = stage.open ? null : stage.dataset.paymentStageDue;
+        this.syncPaymentStageSelection();
+        return;
+      }
       const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
       if (!target || target.disabled) return;
+      if (target.dataset.paymentStageTarget) {
+        this.selectedPaymentDue = target.dataset.paymentStageTarget;
+        this.syncPaymentStageSelection();
+        const destination = this.mount.querySelector<HTMLDetailsElement>(`#${paymentStageId(target.dataset.paymentStageTarget)}`);
+        destination?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+        destination?.querySelector<HTMLElement>(':scope > summary')?.focus({ preventScroll: true });
+        return;
+      }
       if (target.id === 'calculator-return-options') { window.location.assign(this.context!.returnUrl!); return; }
       if (target.dataset.calculatorJump) {
         const destination = this.mount.querySelector<HTMLElement>(`#${target.dataset.calculatorJump}`);
@@ -664,6 +724,7 @@ class CalculatorApp {
     this.render();
     this.refreshCountdowns();
     const ids = ['calculator-option-details', 'calculator-payment-guide'];
+    ids.push(...[...this.mount.querySelectorAll<HTMLDetailsElement>('.payment-stage')].map(node => node.id));
     if (this.taxEnabled) ids.push('calculator-tax-details');
     if (this.interimFunding === 'loan') ids.push('calculator-interim-loan-details');
     if (this.mortgageEnabled) ids.push('calculator-mortgage-details');
@@ -671,8 +732,16 @@ class CalculatorApp {
     if (this.mortgageEnabled && this.salePriceWon !== null) ids.push('calculator-resale-details');
     const nodes = ids.map(id => this.mount.querySelector<HTMLDetailsElement>(`#${id}`)).filter((node): node is HTMLDetailsElement => Boolean(node));
     const states = nodes.map(node => node.open);
+    // Native details[name] enforces one-open-at-a-time even during printing.
+    // Temporarily detach that group so every payment plan is included in the PDF.
+    const groups = nodes.filter(node => node.hasAttribute('name')).map(node => ({ node, name: node.getAttribute('name')! }));
+    groups.forEach(({ node }) => node.removeAttribute('name'));
     nodes.forEach(node => { node.open = true; });
-    this.restorePrintState = () => nodes.forEach((node, index) => { node.open = states[index]; });
+    this.restorePrintState = () => {
+      nodes.forEach((node, index) => { node.open = states[index]; });
+      groups.forEach(({ node, name }) => node.setAttribute('name', name));
+      this.syncDisclosureLabels();
+    };
   }
 }
 

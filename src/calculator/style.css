@@ -318,3 +318,63 @@ input[aria-invalid="true"]{outline:2px solid #e79296!important;outline-offset:2p
 .future-option-contract>div{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#e7f3ee;font-size:13px;font-weight:700}.future-option-contract small{display:block;margin-top:3px;color:#aabeb5;font-size:11px;font-weight:400}.future-option-contract b{font-size:15px;white-space:nowrap}.account-contract-summary .future-option-contract p{margin-top:5px}.account-contract-summary .account-contract-overall{padding-top:10px;border-top:1px solid var(--line)}
 @media(max-width:600px){.account-contract-grid{grid-template-columns:1fr}.account-contract-grid>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.account-contract-grid b,.account-contract-grid small{margin:0}.account-contract-head{align-items:flex-start}}
 @media print{.account-contract-summary,.interim-account-summary,.interim-account-round,.account-contract-grid>div,.future-option-contract{background:#fff!important;border-color:#a7bcb3!important}.account-contract-summary,.account-contract-summary h4,.account-contract-summary span,.account-contract-summary b,.account-contract-summary small,.account-contract-summary p,.interim-account-summary,.interim-account-summary h4,.interim-account-summary h5,.interim-account-summary span,.interim-account-summary b,.interim-account-summary small,.interim-account-summary p{color:#253f34!important}.account-contract-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Compare the schedule first, then focus on one installment's payment plan. */
+.schedule-table th>button{width:100%;min-height:44px;padding:3px 0;border:0;background:none;text-align:left;font:inherit;cursor:pointer}
+.schedule-table th>button small{display:block;margin-top:6px;font-size:10px}
+.schedule-table th>button:hover strong,.schedule-table th>button[aria-expanded="true"] strong{color:var(--gold)}
+.schedule-table th>button:focus-visible,.payment-stage>summary:focus-visible,.installment-card:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+.payment-stage-details{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.payment-stage-details .subhead h4{margin:0;color:#e7f3ee;font-size:17px}
+.payment-stage-intro{margin:8px 0 14px;color:#aabeb5;font-size:12px;line-height:1.7}
+.payment-stage{margin-top:9px;overflow:hidden;border:1px solid var(--line);border-left:3px solid #5cd3bd;border-radius:10px;background:rgba(7,20,24,.45);scroll-margin-top:22px}
+.payment-stage[data-phase="contract"]{border-left-color:#e0878d}
+.payment-stage[data-phase="balance"]{border-left-color:var(--gold)}
+.payment-stage[open]{border-top-color:rgba(92,211,189,.4);border-right-color:rgba(92,211,189,.4);border-bottom-color:rgba(92,211,189,.4);background:linear-gradient(125deg,rgba(92,211,189,.055),rgba(7,20,24,.7))}
+.payment-stage>summary{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:7px 16px;min-height:70px;padding:15px 17px;cursor:pointer;list-style:none}
+.payment-stage>summary::-webkit-details-marker{display:none}
+.payment-stage>summary:hover{background:rgba(92,211,189,.05)}
+.payment-stage-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px;grid-column:1;grid-row:1}
+.payment-stage-title strong{color:#edf9f3;font-size:16px}
+.payment-stage[data-phase="contract"] .payment-stage-title strong{color:#ffd1d5}
+.payment-stage[data-phase="balance"] .payment-stage-title strong{color:#f0d18b}
+[data-payment-stage-recommendation]{padding:3px 7px;border:1px solid rgba(92,211,189,.3);border-radius:5px;background:rgba(92,211,189,.08);color:#9aead6;font-size:10px;font-weight:750}
+.payment-stage-date{grid-column:1;grid-row:2;color:#c5d7cf;font-size:12px;line-height:1.5}
+.payment-stage>summary>.schedule-countdown{grid-column:2;grid-row:1/3;margin:0;max-width:none}
+.payment-stage>summary>.schedule-countdown small{display:none}
+.payment-stage>summary>.disclosure-action{grid-column:3;grid-row:1/3}
+.payment-stage-body{padding:4px 17px 17px;border-top:1px solid var(--line)}
+.payment-stage-body>.account-contract-summary,.payment-stage-body>.interim-account-summary{padding:0;border:0;border-radius:0;background:none}
+.payment-stage-timing{max-width:none;margin:12px 0!important}
+.payment-stage-timing small{font-size:12px;line-height:1.6}
+.payment-stage-body .stage-note{color:#b8cbc2;font-size:13px;line-height:1.8}
+.payment-stage-amounts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:15px 0}
+.payment-stage-amounts>div{padding:12px;border:1px solid var(--line);border-radius:7px;background:rgba(4,17,20,.3)}
+.payment-stage-amounts dt{color:#adc2b9;font-size:12px}.payment-stage-amounts dd{margin:6px 0 0;color:#eff8f3;font-size:15px;font-weight:750}
+.payment-stage-funding{margin-top:16px;padding:14px;border:1px solid rgba(225,185,99,.22);border-radius:8px;background:rgba(225,185,99,.035)}
+.payment-stage-funding h5{margin:0 0 9px;color:#e7d4a6;font-size:14px}
+.payment-stage-funding .financing-line,.payment-stage-funding .financing-cash{display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.8}
+.payment-stage-funding .financing-cash{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.payment-stage-funding .financing-cash b{color:var(--gold);font-size:18px}
+.payment-stage-body .contract-booking-note{margin-top:12px}
+@media(max-width:760px){
+  button.installment-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 10px;width:100%;padding:12px 14px;text-align:left;font:inherit;cursor:pointer}
+  button.installment-card:hover,button.installment-card[aria-expanded="true"]{border-color:var(--mint);background:rgba(92,211,189,.1)}
+  button.installment-card .schedule-countdown small{display:none}
+  button.installment-card .installment-heading{align-items:center}
+  button.installment-card .installment-date{font-size:12px}
+  button.installment-card .disclosure-action{justify-self:end}
+  .payment-stage>summary{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:13px}
+  .payment-stage>summary>.schedule-countdown{grid-column:2;grid-row:1}
+  .payment-stage>summary>.disclosure-action{grid-column:2;grid-row:2}
+  .payment-stage-title strong{font-size:15px}.payment-stage-date{font-size:12px}
+  .payment-stage-body{padding:3px 13px 14px}.payment-stage-amounts{grid-template-columns:1fr}
+  .payment-stage-funding .financing-line{font-size:12px}.payment-stage-funding .financing-line b{white-space:nowrap}
+}
+@media print{
+  .payment-stage-details,.payment-stage,.payment-stage[open],.payment-stage-body,.payment-stage-funding,.payment-stage-amounts>div{background:#fff!important;color:#253f34!important;border-color:#a7bcb3!important;overflow:visible!important}
+  .payment-stage{break-inside:auto;margin-top:5mm}.payment-stage>summary{break-after:avoid;min-height:0;padding:10px 12px}
+  .payment-stage-title strong,.payment-stage-date,.payment-stage-body p,.payment-stage-amounts dt,.payment-stage-amounts dd,.payment-stage-funding h5,.payment-stage-funding b{color:#253f34!important}
+  .payment-stage-intro,[data-payment-stage-recommendation],.schedule-table th>button small,.payment-stage-body>button{display:none!important}
+  .payment-stage-body{padding:0 12px 12px}.payment-stage-funding,.payment-stage-amounts{break-inside:avoid}
+}

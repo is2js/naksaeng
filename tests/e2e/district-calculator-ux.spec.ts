@@ -91,10 +91,11 @@ test('낙생지구 진입과 계산기 입력·복원·모바일·인쇄 동작�
   await expect(page.locator('.schedule-scroll')).toBeHidden();
   const card = page.locator('.installment-card[data-mobile-finance-due="입주 시"]');
   await expect(card).toBeVisible();
-  await expect(card.locator('summary')).toContainText('내 현금');
-  await card.locator('summary').click();
-  await expect(card).toHaveAttribute('open', '');
-  await expect(card.locator('[data-mobile-flow="deferred-interest"]')).toBeVisible();
+  await expect(card).toContainText('내 현금');
+  await card.click();
+  const balanceStage = page.locator('details.payment-stage[data-payment-stage-due="입주 시"]');
+  await expect(balanceStage).toHaveAttribute('open', '');
+  await expect(balanceStage.locator('[data-stage-flow="deferred-interest"]')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.locator('#calculator-payments').screenshot({ path: testInfo.outputPath('installment-cards-390.png') });
 

@@ -237,8 +237,10 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(mobileCurrentContract).toContainText('32,262,400원');
   await expect(mobileFutureContract).toBeVisible();
   await expect(mobileFutureContract).toContainText('91,000원');
-  await mobileFutureContract.locator('summary').click();
-  await expect(mobileFutureContract).toContainText('별도 계약 시 납부');
+  await mobileFutureContract.click();
+  const mobileFutureDetails = page.locator('details.payment-stage[data-payment-stage-due="옵션Ⅲ 계약 시"]');
+  await expect(mobileFutureDetails).toHaveAttribute('open', '');
+  await expect(mobileFutureDetails).toContainText('일정 미정');
   await page.locator('#calculator-move-in-settlement').screenshot({ path: testInfo.outputPath('move-in-mobile.png') });
   await page.locator('#calculator-payments').screenshot({ path: testInfo.outputPath('payment-countdowns-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -328,13 +330,18 @@ test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가
   await expect(page.locator('#calculator-tax-enabled')).not.toBeChecked();
   await expect(page.locator('#calculator-plan-main')).toBeChecked();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.contract-booking-note')).toBeVisible();
   await expect(page.locator('.contract-stamp-note')).toBeVisible();
   await expect(page.locator('#calculator-future-option-contract')).toBeVisible();
-  await expect(page.locator('.interim-account-summary')).toBeVisible();
+  for (const installment of await page.locator('.interim-account-summary').all()) {
+    await expect(installment).toBeVisible();
+  }
   await expect(page.locator('.stamp-settlement-reminder')).toBeVisible();
   await expect(page.locator('.calculator-mobile-jump')).toBeHidden();
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
 });
 
 const priceCases = [
@@ -343,6 +350,89 @@ const priceCases = [
   { name: '옵션 없는 기본형', ids: [], total: '641,648,000원', mainDeposit: '64,164,800원', preDeposit: '32,082,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '449,153,600원', preBalance: '481,236,000원', ltv60: '384,988,800원', separate: false },
   { name: '마이너스 옵션', ids: ['bundang-minus-option-package'], total: '612,388,000원', mainDeposit: '61,238,800원', preDeposit: '30,619,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '428,671,600원', preBalance: '459,291,000원', ltv60: '367,432,800원', separate: false },
 ];
+
+test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바일·인쇄 후에도 선택을 보존한다', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.clock.install({ time: new Date('2026-11-07T03:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-07T03:00:00Z'));
+  await seedCalculatorSession(page, {
+    schemaVersion: 1, unitType: '55A', priceFloorBand: '5+', applicantRoute: 'main-subscription',
+    optionIds: ['system-ac-2-general', 'wide-plank-floor-finish'], returnUrl: RETURN_URL,
+  });
+  await page.goto('calculator/');
+
+  const group = page.locator('#calculator-payment-details');
+  const stages = group.locator('details.payment-stage');
+  const stage = (due: string) => group.locator(`details.payment-stage[data-payment-stage-due="${due}"]`);
+  const openStages = () => group.locator('details.payment-stage[open]');
+  await expect(stage('계약 시')).toHaveAttribute('open', '');
+  await expect(openStages()).toHaveCount(1);
+  await expect(stage('옵션Ⅲ 계약 시')).not.toHaveAttribute('open', '');
+  await expect(stage('별도 안내')).not.toHaveAttribute('open', '');
+  const ids = await page.locator('[id]').evaluateAll(nodes => nodes.map(node => node.id));
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(await group.evaluate(node => Boolean(document.querySelector('.schedule-scroll')!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  await expect(page.locator('#calculator-account-supply')).toBeVisible();
+  await expect(page.locator('#calculator-account-supply')).toContainText('63,651,000원');
+
+  await stage('2027-04-12').locator('summary').click();
+  await expect(stage('2027-04-12')).toHaveAttribute('open', '');
+  await expect(openStages()).toHaveCount(1);
+  await expect(page.locator('#calculator-account-supply')).toBeHidden();
+  await expect(stage('2027-04-12').locator('[data-interim-account="supply"]')).toBeVisible();
+  await page.locator('#calculator-settlement-rate-up').click();
+  await expect(stage('2027-04-12')).toHaveAttribute('open', '');
+  await expect(openStages()).toHaveCount(1);
+
+  await stage('2028-02-14').locator('summary').click();
+  await page.locator('.plan-switch label').filter({ hasText: '사전청약 당첨자' }).click();
+  await expect(stage('2028-02-14')).toHaveAttribute('open', '');
+  await expect(stage('2027-04-12')).toHaveCount(0);
+  await expect(openStages()).toHaveCount(1);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await group.screenshot({ path: testInfo.outputPath('payment-detail-desktop.png'), animations: 'disabled' });
+
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.schedule-scroll')).toBeVisible();
+  for (const detail of await stages.all()) {
+    await expect(detail).toHaveAttribute('open', '');
+  }
+  await expect(page.locator('#calculator-account-supply')).toBeVisible();
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await expect(stage('2028-02-14')).toHaveAttribute('open', '');
+  await expect(openStages()).toHaveCount(1);
+
+  // Unknown option deadlines never supersede the next dated installment.
+  await page.locator('.plan-switch label').filter({ hasText: '본청약(신규신청자)' }).click();
+  for (const [now, expected] of [
+    ['2026-11-14T03:00:00Z', '2027-04-12'],
+    ['2027-04-13T03:00:00Z', '2028-02-14'],
+  ]) {
+    await page.clock.setFixedTime(new Date(now));
+    await page.reload();
+    await expect(stage(expected)).toHaveAttribute('open', '');
+    await expect(openStages()).toHaveCount(1);
+    await expect(stage('옵션Ⅲ 계약 시')).not.toHaveAttribute('open', '');
+    await expect(stage('별도 안내')).not.toHaveAttribute('open', '');
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.schedule-scroll')).toBeHidden();
+  await expect(group).toBeVisible();
+  await stage('계약 시').locator('summary').click();
+  await expect(stage('계약 시')).toHaveAttribute('open', '');
+  await expect(openStages()).toHaveCount(1);
+  await expect(page.locator('#calculator-account-supply')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await group.screenshot({ path: testInfo.outputPath('payment-detail-mobile.png'), animations: 'disabled' });
+  expect(errors).toEqual([]);
+});
 
 for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre-subscription'] as const) {
   test(`납부 사례: ${scenario.name} · ${plan}`, async ({ page }) => {

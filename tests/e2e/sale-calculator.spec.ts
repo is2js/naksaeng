@@ -396,6 +396,9 @@ test('계약서 대조 금액·항목명과 잔금·융자금 설명은 화면�
   await expect(split.locator('[data-contract-balance="fund"]')).toHaveText('55,000,000원');
   await expect(split.locator('[data-contract-balance="total"]')).toHaveText('445,403,000원');
   await expect(split).toContainText('별도 수령액으로 차감하거나 모기지에 다시 더하지 않습니다');
+  await expect(split).toContainText('시행사가 받은 이후 상환 예정이므로 계약자가 받을 수 없다고 명시');
+  await expect(split).toContainText('계약자 본인의 추가 대출이나 별도 기금 상환금으로 계산하지 않습니다');
+  await expect(stage('입주 시').locator('.contract-payment-terms')).toContainText('금융기관 휴무일이면 다음 영업일');
 
   const unchanged = async () => ({
     total: await page.locator('.hero-total strong').textContent(),

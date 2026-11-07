@@ -314,13 +314,13 @@ class CalculatorApp {
 
   private supplyContractBalanceMarkup(totalBalanceWon: number): string {
     const balance = contractSupplyBalanceBreakdown(totalBalanceWon, BUNDANG_SALE_FINANCE_CATALOG_V1.housingCityFundWon);
-    return `<section id="calculator-contract-balance-breakdown" class="payment-stage-funding" aria-labelledby="contract-balance-heading"><h5 id="contract-balance-heading">아파트 계약서의 잔금·융자금 구분</h5><dl class="payment-stage-amounts"><div><dt>계약서 표의 잔금</dt><dd data-contract-balance="balance">${money(balance.contractBalanceWon)}</dd></div><div><dt>융자금 · 주택도시기금</dt><dd data-contract-balance="fund">${money(balance.housingCityFundWon)}</dd></div><div><dt>입주 시 주택 납부 합계</dt><dd data-contract-balance="total">${money(balance.totalBalanceWon)}</dd></div></dl><p class="stage-note">위 두 항목의 합계가 납부표의 <b>주택 잔금</b>입니다. 융자금 ${money(balance.housingCityFundWon)}은 이미 합계에 포함되어 있으며 별도 수령액으로 차감하거나 모기지에 다시 더하지 않습니다. 제공 계약서는 전용 모기지 이용 시 기존 주택도시기금 융자금을 상환하도록 명시하므로, 실제 전환·상환 절차는 은행에 확인하세요.</p></section>`;
+    return `<section id="calculator-contract-balance-breakdown" class="payment-stage-funding" aria-labelledby="contract-balance-heading"><h5 id="contract-balance-heading">아파트 계약서의 잔금·융자금 구분</h5><dl class="payment-stage-amounts"><div><dt>계약서 표의 잔금</dt><dd data-contract-balance="balance">${money(balance.contractBalanceWon)}</dd></div><div><dt>융자금 · 주택도시기금</dt><dd data-contract-balance="fund">${money(balance.housingCityFundWon)}</dd></div><div><dt>입주 시 주택 납부 합계</dt><dd data-contract-balance="total">${money(balance.totalBalanceWon)}</dd></div></dl><p class="stage-note">위 두 항목의 합계가 납부표의 <b>주택 잔금</b>입니다. 융자금 ${money(balance.housingCityFundWon)}은 이미 합계에 포함되어 있으며 별도 수령액으로 차감하거나 모기지에 다시 더하지 않습니다. <b>계약서 제1조 제6항은 이 기금을 시행사가 받은 이후 상환 예정이므로 계약자가 받을 수 없다고 명시합니다.</b> 계약자 본인의 추가 대출이나 별도 기금 상환금으로 계산하지 않습니다. 전용 모기지의 실제 승인·실행 절차는 은행에 확인하세요.</p></section>`;
   }
 
   private contractPaymentTerms(row: FundedScheduleRow): string {
     if (row.dueKey === '별도 안내') return '';
     const hasOptions = row.balcony > 0 || row.systemAc > 0;
-    return `<p class="stage-note contract-payment-terms">아파트·추가선택품목Ⅰ·Ⅱ 계약서상 중도금·잔금 납부일이 <b>공휴일이면 다음 영업일</b>이 납부일입니다. 실제 납부 고지와 변경 안내를 확인하세요.${hasOptions ? ' 발코니·시스템에어컨 계약서의 선납할인율은 연 5%, 연체이율은 연 7.5%이며 변경될 수 있습니다. 이 할인·연체료는 현재 계산에 자동 반영하지 않습니다. 중도금 대출 이자 추정 금리와는 별개입니다.' : ''}</p>`;
+    return `<p class="stage-note contract-payment-terms">아파트·추가선택품목Ⅰ·Ⅱ 계약서상 중도금·잔금 납부일이 <b>금융기관 휴무일이면 다음 영업일</b>이 납부일입니다. 실제 납부 고지와 변경 안내를 확인하세요.${hasOptions ? ' 발코니·시스템에어컨 계약서의 선납할인율은 연 5%, 연체이율은 연 7.5%이며 변경될 수 있습니다. 이 할인·연체료는 현재 계산에 자동 반영하지 않습니다. 중도금 대출 이자 추정 금리와는 별개입니다.' : ''}</p>`;
   }
 
   private interimAccountSummary(row: FundedScheduleRow): string {

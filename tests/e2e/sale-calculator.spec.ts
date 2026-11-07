@@ -6,7 +6,7 @@ const RETURN_URL = '/naksaeng/bunfirvil/?map=bundang-first-village-55a-prototype
 
 type CalculatorContext = {
   schemaVersion: 1;
-  unitType: '55A';
+  unitType: '55A' | '55B';
   priceFloorBand: '5+';
   applicantRoute: 'pre-subscription' | 'main-subscription';
   optionIds: string[];
@@ -350,6 +350,88 @@ const priceCases = [
   { name: '옵션 없는 기본형', ids: [], total: '641,648,000원', mainDeposit: '64,164,800원', preDeposit: '32,082,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '449,153,600원', preBalance: '481,236,000원', ltv60: '384,988,800원', separate: false },
   { name: '마이너스 옵션', ids: ['bundang-minus-option-package'], total: '612,388,000원', mainDeposit: '61,238,800원', preDeposit: '30,619,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '428,671,600원', preBalance: '459,291,000원', ltv60: '367,432,800원', separate: false },
 ];
+
+test('계약서 대조 금액·항목명과 잔금·융자금 설명은 화면과 인쇄에서 총액을 바꾸지 않는다', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.clock.install({ time: new Date('2026-11-07T03:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-07T03:00:00Z'));
+  await seedCalculatorSession(page, {
+    schemaVersion: 1, unitType: '55B', priceFloorBand: '5+', applicantRoute: 'main-subscription',
+    optionIds: ['system-ac-4-general'],
+    returnUrl: '/naksaeng/bunfirvil/?map=bundang-first-village-55b-prototype&actor=200&variant=A',
+  });
+  await page.goto('calculator/');
+
+  const details = page.locator('#calculator-payment-details');
+  const stage = (due: string) => details.locator(`[data-payment-stage-due="${due}"]`);
+  const split = page.locator('#calculator-contract-balance-breakdown');
+  const balanceRow = page.locator('.schedule-table [data-finance-due="입주 시"]');
+  await expect(page.locator('#calculator-contract-review')).toContainText('2026.11.07');
+  await expect(page.locator('#calculator-contract-review')).toContainText('사전청약·다른 평형·다른 에어컨 구성·기타 옵션Ⅲ은 기존 공고 기준');
+  await expect(page.locator('.hero-total strong')).toHaveText('647,446,000원');
+  await expect(page.locator('#calculator-contract-cash')).toHaveText('64,744,600원');
+  await expect(stage('계약 시')).toHaveAttribute('open', '');
+  await expect(details.locator('.payment-stage[open]')).toHaveCount(1);
+  for (const [id, label, amount] of [
+    ['calculator-account-supply', '아파트 공급대금', '63,629,000원'],
+    ['calculator-account-balcony', '추가선택품목Ⅰ · 발코니 확장', '455,600원'],
+    ['calculator-account-system-ac', '추가선택품목Ⅱ · 천장형 시스템에어컨', '660,000원'],
+  ]) {
+    await expect(page.locator(`#${id}`)).toContainText(label);
+    await expect(page.locator(`#${id} b`)).toHaveText(amount);
+  }
+  await expect(page.locator('.schedule-table [data-finance-due="2027-04-12"] .schedule-date')).toContainText('2027-04-12');
+  await expect(page.locator('.schedule-table [data-finance-due="2028-02-14"] .schedule-date')).toContainText('2028-02-14');
+  await expect(page.locator('.schedule-table [data-finance-due="2027-04-12"] [data-flow="loan-draw"] b')).toHaveText('−63,629,000원');
+  await expect(page.locator('.schedule-table [data-finance-due="2028-02-14"] [data-flow="loan-draw"] b')).toHaveText('−63,629,000원');
+  await expect(balanceRow.locator('.contract-due b')).toHaveText('452,552,200원');
+  await expect(balanceRow.locator('[data-flow="interim-repayment"] b')).toHaveText('＋127,258,000원');
+  await expect(balanceRow.locator('[data-flow="mortgage"] b')).toHaveText('−400,000,000원');
+  await expect(page.locator('#calculator-balance-mortgage-principal')).toHaveText('400,000,000원');
+
+  await stage('입주 시').locator('summary').click();
+  await expect(details.locator('.payment-stage[open]')).toHaveCount(1);
+  await expect(split).toBeVisible();
+  await expect(split.locator('[data-contract-balance="balance"]')).toHaveText('390,403,000원');
+  await expect(split.locator('[data-contract-balance="fund"]')).toHaveText('55,000,000원');
+  await expect(split.locator('[data-contract-balance="total"]')).toHaveText('445,403,000원');
+  await expect(split).toContainText('별도 수령액으로 차감하거나 모기지에 다시 더하지 않습니다');
+
+  const unchanged = async () => ({
+    total: await page.locator('.hero-total strong').textContent(),
+    deposit: await page.locator('#calculator-contract-cash').textContent(),
+    balance: await balanceRow.locator('.contract-due b').textContent(),
+    loan: await page.locator('#calculator-balance-mortgage-principal').textContent(),
+    funding: await balanceRow.locator('.financing-lines').textContent(),
+  });
+  const beforePrint = await unchanged();
+  await page.locator('#calculator-print').click();
+  await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await page.emulateMedia({ media: 'print' });
+  await expect(details.locator('.payment-stage[open]')).toHaveCount(4);
+  await expect(split).toBeVisible();
+  await expect(split.locator('[data-contract-balance="total"]')).toHaveText('445,403,000원');
+  expect(await unchanged()).toEqual(beforePrint);
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await expect(details.locator('.payment-stage[open]')).toHaveCount(1);
+  await expect(stage('입주 시')).toHaveAttribute('open', '');
+  expect(await unchanged()).toEqual(beforePrint);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stage('계약 시').locator('summary').click();
+  await expect(details.locator('.payment-stage[open]')).toHaveCount(1);
+  for (const id of ['calculator-account-supply', 'calculator-account-balcony', 'calculator-account-system-ac']) {
+    const label = page.locator(`#${id} > span`);
+    await expect(label).toBeVisible();
+    expect(await label.evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
+    await expect(page.locator(`#${id} > b`)).toHaveCSS('white-space', 'nowrap');
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await stage('계약 시').screenshot({ path: testInfo.outputPath('executed-contract-mobile.png'), animations: 'disabled' });
+});
 
 test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바일·인쇄 후에도 선택을 보존한다', async ({ page }, testInfo) => {
   test.setTimeout(90_000);

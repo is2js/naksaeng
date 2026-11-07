@@ -305,6 +305,9 @@ interface PaymentDefinition {
   rateBps: number;
 }
 
+// New-applicant 55B supply / balcony I / selected AC II were cross-checked
+// against the executed contracts on 2026-11-07. Dates, prices and percentages
+// agree. Other unit types and the pre-subscription plan retain notice values.
 const PAYMENT_DEFINITIONS: Record<BundangPaymentPlanKind, Record<BundangPaymentTarget, readonly PaymentDefinition[]>> = {
   'pre-subscription': {
     supply: [

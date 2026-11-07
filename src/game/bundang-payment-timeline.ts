@@ -1,3 +1,5 @@
+import { BUNDANG_EXECUTED_CONTRACT_REVIEW_V1 } from './bundang-executed-contract';
+
 export interface BundangPaymentDeadlineV1 {
   id: string;
   label: string;
@@ -19,6 +21,7 @@ export const BUNDANG_PAYMENT_SCHEDULE_SOURCE = {
   revision: '2026-07-02',
   url: 'https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_260702.pdf',
   contractPages: [1, 3, 25],
+  executedContractReview: BUNDANG_EXECUTED_CONTRACT_REVIEW_V1,
 } as const;
 
 /** A Seoul calendar day, independent of the visitor's device time zone. */

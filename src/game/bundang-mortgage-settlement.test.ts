@@ -51,6 +51,88 @@ describe('dedicated mortgage sale/appraisal scenario', () => {
     expect(bucketRounding.effectiveLtvPercent).toBe(70);
   });
 
+  it.each([
+    [570_000_000, 399_000_000, 70, 38, 163_400_000],
+    [700_000_000, 400_000_000, 57, 31.5, 94_500_000],
+    [572_000_000, 400_000_000, 69, 37.5, 160_500_000],
+  ])('matches the supplied product explanation example for a %i won acquisition', (loanBaseWon, principalWon, effectiveLtvPercent, fundSharePercent, fundSettlementWon) => {
+    const result = calculateBundangMortgageSettlement({ ...scenario, loanBaseWon, principalWon,
+      termYears: 20, holdingYears: 10, childCount: 1, salePriceWon: 1_000_000_000 });
+    expect(result).toMatchObject({ effectiveLtvPercent, fundSharePercent, fundSettlementWon });
+  });
+
+  it('matches every column and yearly row in the supplied product settlement table', () => {
+    const rows = [
+      [9,  [50,40,30,45,35,25,40,30,20,35,25,15,30,20,10]],
+      [10, [48,38,28,43,33,23,38,28,18,33,23,13,28,18,10]],
+      [11, [46,36,26,41,31,21,36,26,16,31,21,10,26,15,10]],
+      [12, [44,34,24,39,29,19,34,24,14,29,19,10,24,15,10]],
+      [13, [42,32,22,37,27,17,32,22,12,27,17,10,22,15,10]],
+      [14, [40,30,20,35,25,15,30,20,10,25,15,10,20,15,10]],
+      [15, [38,28,18,33,23,13,28,18,10,23,15,10,20,15,10]],
+      [16, [36,26,16,31,21,10,26,15,10,20,15,10,20,15,10]],
+      [17, [34,24,14,29,19,10,24,15,10,20,15,10,20,15,10]],
+      [18, [32,22,12,27,17,10,22,15,10,20,15,10,20,15,10]],
+      [19, [30,20,10,25,15,10,20,15,10,20,15,10,20,15,10]],
+      [20, [28,18,10,23,15,10,20,15,10,20,15,10,20,15,10]],
+      [21, [26,15,10,20,15,10,20,15,10,20,15,10,20,15,10]],
+      [22, [24,15,10,20,15,10,20,15,10,20,15,10,20,15,10]],
+      [23, [22,15,10,20,15,10,20,15,10,20,15,10,20,15,10]],
+      [24, [20,15,10,20,15,10,20,15,10,20,15,10,20,15,10]],
+    ] as const;
+    for (const [holdingYears, shares] of rows) {
+      for (const [column, expected] of shares.entries()) {
+        const ltv = [70, 60, 50, 40, 30][Math.floor(column / 3)]!;
+        const result = calculateBundangMortgageSettlement({ ...scenario, holdingYears,
+          principalWon: scenario.loanBaseWon * ltv / 100, childCount: column % 3 });
+        expect(result.fundSharePercent, `${holdingYears} years / ${ltv}% / ${column % 3} children`).toBe(expected);
+      }
+    }
+    for (const holdingYears of [25, 26, 27, 28, 29, 30]) {
+      expect(calculateBundangMortgageSettlement({ ...scenario, holdingYears, childCount: 1 }).fundSharePercent).toBe(15);
+    }
+  });
+
+  it.each([
+    [899_999_999, 1_000_000_000, 'below-appraisal-threshold'],
+    [900_000_000, 1_000_000_000, 'below-appraisal-threshold'],
+    [900_000_001, 900_000_001, 'sale-price'],
+    [1_100_000_000, 1_100_000_000, 'sale-price'],
+  ])('uses the exact ten-percent appraisal safeguard for a notified %i won sale', (salePriceWon, settlementBasisWon, settlementBasisReason) => {
+    const result = calculateBundangMortgageSettlement({ ...scenario, salePriceWon, appraisedPriceWon: 1_000_000_000 });
+    expect(result).toMatchObject({ settlementKind: 'sale', settlementBasisWon, settlementBasisReason, appraisalRequired: false });
+    expect(result.appreciationWon).toBe(settlementBasisWon - scenario.loanBaseWon);
+    expect(result.netSaleProceedsWon).toBe(salePriceWon - result.remainingPrincipalWon - result.fundSettlementWon);
+  });
+
+  it.each([
+    [950_000_000, 1_000_000_000],
+    [1_100_000_000, 1_100_000_000],
+  ])('uses the higher sale/appraisal value for an unnotified %i won sale', (salePriceWon, settlementBasisWon) => {
+    const result = calculateBundangMortgageSettlement({ ...scenario, salePriceWon,
+      appraisedPriceWon: 1_000_000_000, salePlanNotified: false });
+    expect(result).toMatchObject({ settlementBasisWon, settlementBasisReason: 'unnotified-sale-or-appraisal', appraisalRequired: false });
+    expect(result.netSaleProceedsWon).toBe(salePriceWon - result.remainingPrincipalWon - result.fundSettlementWon);
+  });
+
+  it('keeps legacy sale estimates but flags missing appraisal instead of implying a verified settlement', () => {
+    const result = calculateBundangMortgageSettlement(scenario);
+    expect(result).toMatchObject({ settlementKind: 'sale', settlementBasisWon: scenario.salePriceWon,
+      settlementBasisReason: 'sale-estimate', appraisalRequired: true });
+    expect(result.totalLoanSettlementWon).toBe(result.remainingPrincipalWon + result.fundSettlementWon);
+    expect(calculateBundangMortgageSettlement({ ...scenario, salePlanNotified: false }).appraisalRequired).toBe(true);
+  });
+
+  it('values full repayment without sale using appraisal and does not invent sale cash', () => {
+    const result = calculateBundangMortgageSettlement({ ...scenario, settlementKind: 'repayment',
+      appraisedPriceWon: 800_000_000, salePriceWon: 0 });
+    expect(result).toMatchObject({ settlementKind: 'repayment', settlementBasisWon: 800_000_000,
+      settlementBasisReason: 'repayment-appraisal', appraisalRequired: false,
+      appreciationWon: 300_000_000, fundSettlementWon: 144_000_000, netSaleProceedsWon: 0 });
+    expect(result.totalLoanSettlementWon).toBe(result.remainingPrincipalWon + 144_000_000);
+    expect(() => calculateBundangMortgageSettlement({ ...scenario, settlementKind: 'repayment' })).toThrow('시세감정가격');
+  });
+
   it('uses supply plus balcony as acquisition base, with zero sharing on losses', () => {
     const result = calculateBundangMortgageSettlement(scenario);
     expect(result.appreciationWon).toBe(300_000_000);
@@ -86,12 +168,18 @@ describe('dedicated mortgage sale/appraisal scenario', () => {
 
   it('retains official provenance and rejects impossible or nonfinite scenarios', () => {
     expect(BUNDANG_MORTGAGE_SETTLEMENT_SOURCE_V1.agreementRevisedAt).toBe('2025-12-01');
+    expect(BUNDANG_MORTGAGE_SETTLEMENT_SOURCE_V1.checkedAt).toBe('2026-11-07');
+    expect(BUNDANG_MORTGAGE_SETTLEMENT_SOURCE_V1.productExplanationUrl).toBe('documents/shinhui-mortgage-product-20261107.pdf');
     const invalid: Partial<BundangMortgageSettlementInputV1>[] = [
       { loanBaseWon: 0 }, { loanBaseWon: NaN }, { principalWon: -1 }, { principalWon: 0 },
       { principalWon: 149_000_000 }, { principalWon: 351_000_000 }, { principalWon: 401_000_000, loanBaseWon: 700_000_000 },
       { principalWon: 310_000_000 }, { holdingYears: 2 }, { holdingYears: 31 }, { holdingYears: 3.5 },
       { annualRateBps: -1 }, { annualRateBps: NaN }, { childCount: -1 }, { childCount: 1.5 },
       { salePriceWon: -1 }, { salePriceWon: Infinity }, { salePriceWon: 10.5 },
+      { appraisedPriceWon: -1 }, { appraisedPriceWon: NaN }, { appraisedPriceWon: Infinity }, { appraisedPriceWon: 0.5 },
+      { appraisedPriceWon: Number.MAX_SAFE_INTEGER + 1 },
+      { settlementKind: 'gift' as BundangMortgageSettlementInputV1['settlementKind'] },
+      { salePlanNotified: 'false' as unknown as boolean },
     ];
     for (const input of invalid) expect(() => calculateBundangMortgageSettlement({ ...scenario, ...input })).toThrow();
     expect(() => calculateBundangMortgageSettlement({ ...scenario, termYears: 25 as 20 })).toThrow();

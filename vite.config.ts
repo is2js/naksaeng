@@ -19,6 +19,7 @@ export default defineConfig({
         guides: resolve(__dirname, "guides/index.html"),
         households: resolve(__dirname, "households/index.html"),
         calculator: resolve(__dirname, "calculator/index.html"),
+        documents: resolve(__dirname, "documents/index.html"),
       },
     },
   },

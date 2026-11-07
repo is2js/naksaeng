@@ -22,6 +22,10 @@ export interface SaleCalculatorScenarioPreferencesV1 {
   costsEnabled: boolean;
   costs: { stamp: number; bond: number; registration: number; guarantee: number; management: number; moving: number };
   salePriceWon: number | null;
+  /** Optional additions retain compatibility with earlier current-tab records. */
+  settlementKind?: 'sale' | 'repayment';
+  appraisedPriceWon?: number | null;
+  salePlanNotified?: boolean;
 }
 
 type SessionStoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -67,7 +71,10 @@ function normalizedScenario(value: unknown): SaleCalculatorScenarioPreferencesV1
     || (value.interimFunding !== 'cash' && value.interimFunding !== 'loan')
     || !validDate(value.assumedMoveInDate) || typeof value.costsEnabled !== 'boolean' || !record(value.costs)
     || COST_IDS.some((id) => !integerBetween((value.costs as Record<string, unknown>)[id], 0, 10_000_000_000))
-    || (value.salePriceWon !== null && !integerBetween(value.salePriceWon, 1, 100_000_000_000))) return null;
+    || (value.salePriceWon !== null && !integerBetween(value.salePriceWon, 1, 100_000_000_000))
+    || (value.settlementKind !== undefined && value.settlementKind !== 'sale' && value.settlementKind !== 'repayment')
+    || (value.appraisedPriceWon !== undefined && value.appraisedPriceWon !== null && !integerBetween(value.appraisedPriceWon, 1, 100_000_000_000))
+    || (value.salePlanNotified !== undefined && typeof value.salePlanNotified !== 'boolean')) return null;
   // Copy the exact preference whitelist. Caller/context/address fields never enter this record.
   return {
     plan: value.plan,
@@ -84,6 +91,9 @@ function normalizedScenario(value: unknown): SaleCalculatorScenarioPreferencesV1
     costsEnabled: value.costsEnabled,
     costs: Object.fromEntries(COST_IDS.map((id) => [id, (value.costs as Record<string, number>)[id]])) as SaleCalculatorScenarioPreferencesV1['costs'],
     salePriceWon: value.salePriceWon as number | null,
+    ...(value.settlementKind !== undefined ? { settlementKind: value.settlementKind as 'sale' | 'repayment' } : {}),
+    ...(value.appraisedPriceWon !== undefined ? { appraisedPriceWon: value.appraisedPriceWon as number | null } : {}),
+    ...(value.salePlanNotified !== undefined ? { salePlanNotified: value.salePlanNotified } : {}),
   };
 }
 

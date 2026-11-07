@@ -151,6 +151,10 @@ function isBundangMinusSuppressedProp(prop: ApartmentInteriorProp): boolean {
 }
 
 export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<Pick<BOptionEntry, 'label' | 'description' | 'previewUrl'>>>> = Object.freeze({
+  'entry-pantry-system-shelf': Object.freeze({
+    description: 'L자 라운드 선반과 벽쪽 지지판을 유지하고, 현관 입구쪽 끝은 막힌 측판 없이 열린 시스템 선반입니다.',
+    previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v3.webp',
+  }),
   [OPEN_PREMIUM_SHOE_CABINET_OPTION_ID]: Object.freeze({
     label: '오픈형 프리미엄 신발장',
     description: '오픈형 신발장(PET)과 신발살균기·에어브러시·가구 조명·엔지니어드 스톤 구성입니다.',

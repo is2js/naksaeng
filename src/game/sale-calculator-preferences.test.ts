@@ -77,6 +77,34 @@ describe('current-tab calculator scenario preferences', () => {
     expect(readSaleCalculatorPreferences(scope, storage)).toEqual(scenario());
   });
 
+  it('round-trips optional mortgage appraisal and settlement controls without adding them to legacy records', () => {
+    const storage = new MemoryStorage();
+    expect(writeSaleCalculatorPreferences(scope, scenario(), storage)).toEqual(scenario());
+    expect(readSaleCalculatorPreferences(scope, storage)).not.toHaveProperty('settlementKind');
+    const updated = { ...scenario(), settlementKind: 'repayment' as const, appraisedPriceWon: 1_000_000_000, salePlanNotified: false };
+    expect(writeSaleCalculatorPreferences(scope, updated, storage)).toEqual(updated);
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(updated);
+    // An incomplete, optional scenario must not invalidate the main payment plan.
+    const awaitingAppraisal = { ...updated, appraisedPriceWon: null };
+    expect(writeSaleCalculatorPreferences(scope, awaitingAppraisal, storage)).toEqual(awaitingAppraisal);
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(awaitingAppraisal);
+    expect(writeSaleCalculatorPreferences(scope, { ...updated, appraisedPriceWon: 100_000_000_000 }, storage)?.appraisedPriceWon).toBe(100_000_000_000);
+  });
+
+  it.each([
+    { settlementKind: 'gift' }, { settlementKind: null },
+    { appraisedPriceWon: 0 }, { appraisedPriceWon: -1 }, { appraisedPriceWon: 0.5 },
+    { appraisedPriceWon: 100_000_000_001 }, { appraisedPriceWon: '1000000000' },
+    { salePlanNotified: 'false' }, { salePlanNotified: null },
+  ])('rejects malformed optional mortgage controls without replacing accepted preferences (%j)', (override) => {
+    const storage = new MemoryStorage();
+    writeSaleCalculatorPreferences(scope, scenario(), storage);
+    expect(writeSaleCalculatorPreferences(scope, { ...scenario(), ...override } as SaleCalculatorScenarioPreferencesV1, storage)).toBeNull();
+    expect(readSaleCalculatorPreferences(scope, storage)).toEqual(scenario());
+    storage.setItem(SALE_CALCULATOR_PREFERENCES_SESSION_KEY, JSON.stringify({ schemaVersion: 1, scope, scenario: { ...scenario(), ...override } }));
+    expect(readSaleCalculatorPreferences(scope, storage)).toBeNull();
+  });
+
   it('keeps valid preferences in memory if sessionStorage is unavailable or quota-limited', () => {
     const unavailable = {
       getItem(): never { throw new Error('blocked'); },

@@ -15,8 +15,9 @@
     "sync:assets": "pwsh -NoProfile -File scripts/sync-from-pvp.ps1",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:document-archive": "node --test scripts/document-archive-policy.test.mjs",
     "test:smoke": "playwright test",
-    "test:smoke:ci": "playwright test tests/e2e/ci-smoke.spec.ts tests/e2e/sale-calculator.spec.ts tests/e2e/district-calculator-ux.spec.ts tests/e2e/mobile-readability.spec.ts tests/e2e/sharing-and-basic-quote.spec.ts tests/e2e/actor-nickname.spec.ts tests/e2e/transformation-smoke.spec.ts tests/e2e/actor-occlusion-transparency.spec.ts tests/e2e/system-ac-models.spec.ts",
+    "test:smoke:ci": "playwright test tests/e2e/ci-smoke.spec.ts tests/e2e/sale-calculator.spec.ts tests/e2e/district-calculator-ux.spec.ts tests/e2e/mobile-readability.spec.ts tests/e2e/sharing-and-basic-quote.spec.ts tests/e2e/actor-nickname.spec.ts tests/e2e/transformation-smoke.spec.ts tests/e2e/actor-occlusion-transparency.spec.ts tests/e2e/system-ac-models.spec.ts tests/e2e/documents.spec.ts tests/e2e/mortgage-product.spec.ts tests/e2e/documents-real-archive.spec.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
     "validate": "npm run test:unit && npm run build && npm run verify:dist"
   },

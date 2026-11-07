@@ -141,6 +141,24 @@ const DEFAULT_VARIANTS: Record<string, Record<string, string>> = {
 // 아닌 샤워부스/기본 주방 마감도 일반 박스 fallback으로 뭉개지지 않게 한다.
 export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
   {
+    assetId: 'entry-pantry-rounded-system-cabinet',
+    rendererKind: 'procedural',
+    mountingKind: 'floor',
+    defaultMountHeightMeters: .018,
+    // The exported cabinet's +X full-height end panel closes the entry side.
+    // Keep the wall-side L backing, every rounded shelf and the low plinth;
+    // leave the opposite/entrance end open instead of adding another door.
+    parts: [
+      { shape: 'box', scale: [1, .055, .96], offset: [0, -.4725, .48], materialRole: 'secondary' },
+      { shape: 'box', scale: [.055, 1, .96], offset: [-.4725, 0, .48], materialRole: 'secondary' },
+      ...[.08, .30, .52, .74, .96].map((height): RuntimePart => ({
+        shape: 'rounded-l-shelf', scale: [1, 1, .035], offset: [0, 0, height], materialRole: 'primary',
+      })),
+      { shape: 'box', scale: [.66, .08, .055], offset: [.16, -.34, .025], materialRole: 'accent' },
+      { shape: 'box', scale: [.08, .7, .055], offset: [-.39, .05, .025], materialRole: 'accent' },
+    ],
+  },
+  {
     assetId: 'shower-booth-glass-corner',
     rendererKind: 'procedural',
     mountingKind: 'floor',

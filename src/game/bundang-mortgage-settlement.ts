@@ -4,11 +4,17 @@
  * but not option II/III. This is not a lender decision or an actual appraisal.
  */
 export const BUNDANG_MORTGAGE_SETTLEMENT_SOURCE_V1 = Object.freeze({
-  checkedAt: '2026-10-22',
+  checkedAt: '2026-11-07',
   agreementRevisedAt: '2025-12-01',
   agreementUrl: 'https://img2.kbstar.com/obj/ocommon/251201_Contract_6.pdf',
   productUrl: 'https://obank.kbstar.com/quics?cc=b032425%3Ab033525&isNew=N&page=C020709&prcode=LN40001026',
+  productExplanationUrl: 'documents/shinhui-mortgage-product-20261107.pdf',
+  productExplanationVersion: '제공 스캔에 개정일 미표기 · 2026-11-07 대조',
 });
+
+export type BundangMortgageSettlementKind = 'sale' | 'repayment';
+export type BundangMortgageSettlementBasisReason = 'sale-estimate' | 'sale-price'
+  | 'below-appraisal-threshold' | 'unnotified-sale-or-appraisal' | 'repayment-appraisal';
 
 export interface BundangMortgageSettlementInputV1 {
   /** Adjusted supply price + adjusted balcony extension; excludes option II/III. */
@@ -20,19 +26,33 @@ export interface BundangMortgageSettlementInputV1 {
   holdingYears: number;
   /** Eligible children under the agreement; any count >= 2 uses the final column. */
   childCount: number;
-  /** Hypothetical sale/appraisal price, before any tax or selling costs. */
+  /** Hypothetical sale price, before tax/costs. Ignored as cash in repayment mode. */
   salePriceWon: number;
+  /** No sale: full early/maturity repayment is valued at the lender's appraisal. */
+  settlementKind?: BundangMortgageSettlementKind;
+  /** A planning assumption, not an actual lender appraisal. Required for repayment mode. */
+  appraisedPriceWon?: number;
+  /** Whether the sale plan was notified; the product requires notice one month before registration. */
+  salePlanNotified?: boolean;
 }
 
 export interface BundangMortgageSettlementQuoteV1 {
+  settlementKind: BundangMortgageSettlementKind;
+  /** Price used for profit sharing; may differ from the actual sale cash. */
+  settlementBasisWon: number;
+  settlementBasisReason: BundangMortgageSettlementBasisReason;
+  /** Missing appraisal means a simple estimate, not a verified settlement amount. */
+  appraisalRequired: boolean;
   /** Original contractual LTV, or truncated actual LTV when the 4억원 cap applies. */
   effectiveLtvPercent: number;
   fundSharePercent: number;
   appreciationWon: number;
   fundSettlementWon: number;
   remainingPrincipalWon: number;
-  /** Sale price - remaining loan principal - fund settlement. NOT net profit. */
+  /** Sale price - remaining loan principal - fund settlement. NOT net profit. Zero when there is no sale. */
   netSaleProceedsWon: number;
+  /** Debt principal plus fund share at settlement; excludes final accrued interest, tax and fees. */
+  totalLoanSettlementWon: number;
   repaidPrincipalWon: number;
   paidInterestWon: number;
 }
@@ -96,6 +116,36 @@ function sharePercent(ltv: number, holdingYears: number, childCount: number): nu
   return lowerShare + (upperShare - lowerShare) * (ltv - lowerLtv) / 10;
 }
 
+function settlementBasis(input: BundangMortgageSettlementInputV1): Pick<BundangMortgageSettlementQuoteV1,
+  'settlementKind' | 'settlementBasisWon' | 'settlementBasisReason' | 'appraisalRequired'> {
+  const settlementKind = input.settlementKind ?? 'sale';
+  if (settlementKind !== 'sale' && settlementKind !== 'repayment') throw new Error('정산 방식은 매각 또는 매각 없는 전액 상환이어야 합니다.');
+  if (input.salePlanNotified !== undefined && typeof input.salePlanNotified !== 'boolean') {
+    throw new Error('매각계획 통보 여부를 확인하세요.');
+  }
+  if (input.appraisedPriceWon !== undefined) requireWon(input.appraisedPriceWon, '가정 시세감정가격');
+  if (settlementKind === 'repayment') {
+    if (input.appraisedPriceWon === undefined) throw new Error('매각 없는 전액 상환은 가정 시세감정가격을 입력해야 합니다.');
+    return { settlementKind, settlementBasisWon: input.appraisedPriceWon, settlementBasisReason: 'repayment-appraisal', appraisalRequired: false };
+  }
+  if (input.appraisedPriceWon === undefined) {
+    return { settlementKind, settlementBasisWon: input.salePriceWon, settlementBasisReason: 'sale-estimate', appraisalRequired: true };
+  }
+  // Product sections 6–7: an unnotified sale uses the higher of reported sale
+  // and appraisal. A notified sale priced >=10% below appraisal uses appraisal.
+  // BigInt retains the exact 90% boundary even for safe-integer won inputs.
+  const unnotified = input.salePlanNotified === false;
+  const belowThreshold = BigInt(input.salePriceWon) * 10n <= BigInt(input.appraisedPriceWon) * 9n;
+  return {
+    settlementKind,
+    settlementBasisWon: unnotified ? Math.max(input.salePriceWon, input.appraisedPriceWon)
+      : belowThreshold ? input.appraisedPriceWon : input.salePriceWon,
+    settlementBasisReason: unnotified ? 'unnotified-sale-or-appraisal'
+      : belowThreshold ? 'below-appraisal-threshold' : 'sale-price',
+    appraisalRequired: false,
+  };
+}
+
 /**
  * Amounts are estimates rounded to the nearest won after an unrounded monthly
  * amortization schedule (12 interest-only months, then level installments).
@@ -109,6 +159,7 @@ export function calculateBundangMortgageSettlement(
   requireWon(input.loanBaseWon, '주택가격', true);
   requireWon(input.principalWon, '대출 원금', true);
   requireWon(input.salePriceWon, '가정 매각가격');
+  const basis = settlementBasis(input);
   const annualRateBps = input.annualRateBps ?? 130;
   if (!Number.isInteger(annualRateBps) || annualRateBps < 0 || annualRateBps > 10_000) {
     throw new Error('연 이율은 0~100% 범위의 유효한 basis point 정수여야 합니다.');
@@ -138,15 +189,18 @@ export function calculateBundangMortgageSettlement(
     }
   }
   const remainingPrincipalWon = input.holdingYears === input.termYears ? 0 : Math.round(balance);
-  const appreciationWon = Math.max(0, input.salePriceWon - input.loanBaseWon);
+  const appreciationWon = Math.max(0, basis.settlementBasisWon - input.loanBaseWon);
   const fundSettlementWon = Math.round(appreciationWon * fundSharePercent / 100);
   return {
+    ...basis,
     effectiveLtvPercent,
     fundSharePercent,
     appreciationWon,
     fundSettlementWon,
     remainingPrincipalWon,
-    netSaleProceedsWon: input.salePriceWon - remainingPrincipalWon - fundSettlementWon,
+    netSaleProceedsWon: basis.settlementKind === 'sale'
+      ? input.salePriceWon - remainingPrincipalWon - fundSettlementWon : 0,
+    totalLoanSettlementWon: remainingPrincipalWon + fundSettlementWon,
     repaidPrincipalWon: input.principalWon - remainingPrincipalWon,
     paidInterestWon: Math.round(accruedInterest),
   };

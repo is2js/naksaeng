@@ -5,6 +5,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { verifyDocumentArchive } from "./document-archive-policy.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_DIST_BYTES = 50 * 1024 * 1024;
@@ -564,11 +565,17 @@ async function main() {
 
   const files = await walkFiles(distRoot);
   const failures = [];
+  const appRoot = path.join(distRoot, "bunfirvil");
+  const documentArchive = await verifyDocumentArchive(appRoot);
+  failures.push(...documentArchive.failures);
   let totalBytes = 0;
   for (const file of files) {
     const relative = slash(path.relative(distRoot, file));
     const fileInfo = await stat(file);
     totalBytes += fileInfo.size;
+    if (path.extname(file).toLowerCase() === ".pdf" && !documentArchive.files.has(file)) {
+      failures.push(`${relative}: 공개 PDF는 검토된 문서 자료실에만 둘 수 있습니다.`);
+    }
     const forbiddenPathClass = forbiddenArtifactPath(relative);
     if (forbiddenPathClass) failures.push(`${relative}: ${forbiddenPathClass} 파일은 배포할 수 없습니다.`);
     if (!TEXT_EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
@@ -576,17 +583,24 @@ async function main() {
     if (violation) failures.push(violation);
   }
 
-  if (totalBytes > MAX_DIST_BYTES) {
-    failures.push(`dist 크기 ${(totalBytes / 1024 / 1024).toFixed(2)} MiB가 50 MiB 제한을 초과했습니다.`);
+  const applicationBytes = totalBytes - documentArchive.bytes;
+  if (applicationBytes > MAX_DIST_BYTES) {
+    failures.push(`문서 PDF를 제외한 앱 크기 ${(applicationBytes / 1024 / 1024).toFixed(2)} MiB가 50 MiB 제한을 초과했습니다.`);
   }
   // The portal owns the root; the existing, single-copy app export stays nested.
-  const appRoot = path.join(distRoot, "bunfirvil");
   await requireFile(path.join(distRoot, "index.html"), "district portal", failures);
-  for (const page of ["", "calculator", "guides", "households", "manage", "building-admin", "interior-admin"]) {
+  for (const page of ["", "calculator", "guides", "documents", "households", "manage", "building-admin", "interior-admin"]) {
     await requireFile(path.join(appRoot, page, "index.html"), `A1 ${page || "showcase"}`, failures);
   }
   await verifyCatalog(appRoot, failures);
   await verifyHouseholdVerificationConfig(appRoot, failures);
+  const previewProvenance = await readJson(path.join(appRoot, "assets/options/previews/provenance.v1.json"), "local preview provenance", failures);
+  const pantryPreview = previewProvenance?.files?.find(row => row.file === "assets/options/previews/entry-pantry-system-shelf-v3.webp");
+  const pantryPreviewPath = path.join(appRoot, "assets/options/previews/entry-pantry-system-shelf-v3.webp");
+  if (!pantryPreview || pantryPreview.width !== 512 || pantryPreview.height !== 512 || pantryPreview.bytes !== 4566
+    || pantryPreview.sha256 !== await sha256File(pantryPreviewPath).catch(() => "")) {
+    failures.push("현관 팬트리 새 미리보기의 provenance·크기·해시가 일치하지 않습니다.");
+  }
   const portalHtml = await readFile(path.join(distRoot, "index.html"), "utf8").catch(() => "");
   if (!portalHtml.includes("https://is2js.github.io/naksaeng/")) failures.push("district portal: canonical 낙생지구 URL이 없습니다.");
   const appHtml = await readFile(path.join(appRoot, "index.html"), "utf8").catch(() => "");
@@ -599,7 +613,11 @@ async function main() {
     files: files.length,
     bytes: totalBytes,
     mebibytes: Number((totalBytes / 1024 / 1024).toFixed(2)),
-    limitMebibytes: 50,
+    applicationMebibytes: Number((applicationBytes / 1024 / 1024).toFixed(2)),
+    applicationLimitMebibytes: 50,
+    documentMebibytes: Number((documentArchive.bytes / 1024 / 1024).toFixed(2)),
+    documentLimitMebibytes: 50,
+    limitMebibytes: 100,
     failures: failures.length,
   };
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

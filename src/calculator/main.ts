@@ -6,7 +6,7 @@ import { BUNDANG_SALE_FINANCE_CATALOG_V1, BUNDANG_INTERIM_LOAN_ASSUMED_MOVE_IN_D
 import { BUNDANG_EXECUTED_CONTRACT_REVIEW_V1, BUNDANG_PAYMENT_ITEM_LABELS, contractSupplyBalanceBreakdown } from '../game/bundang-executed-contract';
 import { calculateBundangMoveInSettlement } from '../game/bundang-move-in-finance';
 import { buildBundangFinancingTimeline, type BundangFinancingTimelineRowV1 } from '../game/bundang-financing-timeline';
-import { calculateBundangMortgageSettlement } from '../game/bundang-mortgage-settlement';
+import { calculateBundangMortgageSettlement, type BundangMortgageSettlementKind } from '../game/bundang-mortgage-settlement';
 import { countdownForDeadline, paymentDeadlineForDue, recommendedPaymentDue, seoulDateKey } from '../game/bundang-payment-timeline';
 import { clearSaleCalculatorContext, readSaleCalculatorLaunchContext, type SaleCalculatorContextV1 } from '../game/sale-calculator-context';
 import { resolveSaleCalculatorOptionLines, type SaleCalculatorOptionLineV1 } from '../game/sale-calculator-options';
@@ -27,7 +27,7 @@ type Quote = {
     settlement: ReturnType<typeof calculateBundangMortgageSettlement> };
 };
 const COST_ITEMS = [
-  ['stamp', '인지세 등 미납 계약비', '계약서별 세액·분담액을 확인하고 이미 낸 금액은 제외하세요.'],
+  ['stamp', '인지세 등 미납 계약비', '주택 계약 인지세와 대출 인지세는 별개입니다. 모기지 인지세 고객 50% 등 실제 분담액을 확인하고 기납부액은 제외하세요.'],
   ['bond', '국민주택채권 할인손실', '시가표준액·지분·지역·당일 할인율로 별도 확인합니다.'],
   ['registration', '등기·법무사 비용', '등기 수수료·법무사 보수 등 실제 견적을 입력합니다.'],
   ['guarantee', '대출 보증·담보 비용', '은행의 보증료·근저당 등 부담 항목을 확인합니다.'],
@@ -37,7 +37,7 @@ const COST_ITEMS = [
 type CostId = typeof COST_ITEMS[number][0];
 const FINANCE_REVIEWED_AT = BUNDANG_EXECUTED_CONTRACT_REVIEW_V1.reviewedAt.replaceAll('-', '.');
 const SALE_NOTICE_URL = 'https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_260702.pdf';
-const CONTRACT_NOTICE_URL = 'https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_01_261027.pdf';
+const CONTRACT_NOTICE_URL = 'https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_01_261028.pdf';
 const STAMP_NOTICE_URL = 'https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_02_261027.pdf';
 const MORTGAGE_SOURCE = 'https://obank.kbstar.com/quics?cc=b032425%3Ab033525&isNew=N&page=C020709&prcode=LN40001026';
 const MORTGAGE_CONTRACT = 'https://img2.kbstar.com/obj/ocommon/251201_Contract_6.pdf';
@@ -133,6 +133,9 @@ class CalculatorApp {
   private costsEnabled = false;
   private costs: Record<CostId, number> = { stamp: 0, bond: 0, registration: 0, guarantee: 0, management: 0, moving: 0 };
   private salePriceWon: number | null = null;
+  private settlementKind: BundangMortgageSettlementKind = 'sale';
+  private appraisedPriceWon: number | null = null;
+  private salePlanNotified = true;
   private restorePrintState: (() => void) | null = null;
   private scheduleRows: ScheduleRow[] = [];
   // undefined follows the calendar; null means the user deliberately folded all stages.
@@ -228,6 +231,11 @@ class CalculatorApp {
           loanBaseWon: result.mortgage.loanBaseWon, principalWon: result.mortgage.principalWon,
           annualRateBps: result.mortgage.annualRateBps, termYears: this.term, holdingYears: this.holdingYears,
           childCount: this.childCount, salePriceWon: this.salePriceWon ?? result.mortgage.loanBaseWon,
+          // Keep the general mortgage estimate available while a repayment
+          // scenario waits for its required appraisal. resaleDetails hides it.
+          settlementKind: this.settlementKind === 'repayment' && this.appraisedPriceWon === null ? 'sale' : this.settlementKind,
+          ...(this.appraisedPriceWon === null ? {} : { appraisedPriceWon: this.appraisedPriceWon }),
+          salePlanNotified: this.salePlanNotified,
         }),
       } } : {}),
     };
@@ -274,6 +282,7 @@ class CalculatorApp {
       ltv: this.ltv, term: this.term, childCount: this.childCount, holdingYears: this.holdingYears,
       interimFunding: this.interimFunding, assumedMoveInDate: this.assumedMoveInDate,
       costsEnabled: this.costsEnabled, costs: { ...this.costs }, salePriceWon: this.salePriceWon,
+      settlementKind: this.settlementKind, appraisedPriceWon: this.appraisedPriceWon, salePlanNotified: this.salePlanNotified,
     });
   }
 
@@ -305,7 +314,7 @@ class CalculatorApp {
   private paymentStageDetails(rows: FundedScheduleRow[]): string {
     return `<section id="calculator-payment-details" class="payment-stage-details" aria-labelledby="payment-stage-heading"><div class="subhead"><h4 id="payment-stage-heading">회차별 납부 상세</h4><span>한 회차씩 펼쳐보기</span></div><p class="payment-stage-intro">진행 중이거나 다가오는 회차를 먼저 펼칩니다. 다른 회차를 선택하면 기존 상세는 접힙니다.</p><p id="calculator-contract-review" class="payment-stage-intro">${FINANCE_REVIEWED_AT} 아파트·추가선택품목Ⅰ·Ⅱ 계약서 대조: 신규 본청약 55B의 공급가·발코니·선택한 에어컨 가격과 중도금 날짜·비율이 기존 계산과 일치합니다. 사전청약·다른 평형·다른 에어컨 구성·기타 옵션Ⅲ은 기존 공고 기준을 유지합니다. 개인 계약서와 계좌번호는 공개하지 않습니다.</p>${rows.map(row => {
       const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      const body = row.dueKey === '계약 시' ? `<section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.27 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>${this.contractAccountSummary(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`
+      const body = row.dueKey === '계약 시' ? `<section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.28 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>${this.contractAccountSummary(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.28 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`
         : row.label.includes('중도금') ? this.interimAccountSummary(row)
         : `<dl class="payment-stage-amounts">${([['주택', row.supply], ['발코니', row.balcony], ['시스템에어컨', row.systemAc], ['기타 옵션', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}</dl>${row.dueKey === '옵션Ⅲ 계약 시' ? '<p class="stage-note">기타 옵션Ⅲ 계약금은 주택·발코니·시스템에어컨의 이번 계약금과 별개입니다. 실제 계약 일정과 항목별 지정 계좌는 추후 안내를 확인하고 직접 납부할 자금을 준비하세요.</p>' : '<p class="stage-note">잔금·입주 시에는 기존 중도금 대출 원금과 예상 후불이자를 정산하고 승인된 전용 모기지를 충당합니다. 세금·미납 부대비용은 아래 입주 정산에서 별도로 확인하세요. 2029년 2월은 예정월이며 확정 납부일이 아닙니다.</p><button type="button" class="text-link" data-calculator-jump="calculator-move-in-settlement">입주 정산·세부 자금 계획 보기 →</button>'}`;
       return `<details id="${paymentStageId(row.dueKey)}" class="payment-stage" name="calculator-payment-stage" data-phase="${phase}" data-payment-stage-due="${escape(row.dueKey)}"><summary><span class="payment-stage-title"><strong>${escape(row.label)}</strong><span data-payment-stage-recommendation hidden></span></span><span class="payment-stage-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="payment-stage-body"><div class="payment-stage-timing schedule-countdown" data-payment-due="${escape(row.dueKey)}"></div>${body}${row.dueKey === '입주 시' ? this.supplyContractBalanceMarkup(row.supply) : ''}${phase !== 'contract' ? this.contractPaymentTerms(row) : ''}<div class="payment-stage-funding"><h5>이 회차의 자금 계획</h5>${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-stage-flow=')}</div></div></details>`;
@@ -462,7 +471,7 @@ class CalculatorApp {
         <label>정산 시 대출 유지기간<select id="calculator-settlement-period" ${this.mortgageEnabled ? '' : 'disabled'}>${Array.from({ length: this.term - 2 }, (_, i) => i + 3).map(year => `<option value="${year}" ${year === this.holdingYears ? 'selected' : ''}>${year}년</option>`).join('')}</select></label>
       </div>
       ${result ? `<dl><dt>대출 기준액 · 공급가+발코니</dt><dd>${money(result.loanBase)}</dd><dt>선택 LTV / 정산용 실효 LTV</dt><dd>${result.ltvPercent}% / ${result.settlement.effectiveLtvPercent}%</dd><dt>공고문 기준 연 이율</dt><dd>${result.annualRatePercent}% 고정</dd><dt>대출 가능 상한</dt><dd>${money(result.eligibleMaximum)}</dd><dt>대출 원금</dt><dd>${money(result.principal)}</dd><dt>입주 시 필요 현금 · 정산표 기준</dt><dd>${money(result.moveInCash)}</dd><dt>1년 거치 월 이자</dt><dd>${money(result.graceInterest)}</dd><dt>거치 후 ${result.repaymentMonths / 12}년 월 원리금</dt><dd>${money(result.repayment)}</dd><dt>향후 매각차익 기금 정산비율</dt><dd>${result.settlement.fundSharePercent}%</dd></dl>` : '<p class="muted-copy">활성화 시 단지 공고 기준 연 1.3%, 1년 거치 후 원리금균등상환을 추정합니다.</p>'}
-      <p class="legal-copy">기준액은 <b>감액 후 공급가 + 발코니 확장비</b>이며 시스템에어컨·기타 옵션·세금은 제외합니다. 선택 LTV를 합산 기준액에 한 번 적용하며 4억원 한도 중 작은 금액을 추정합니다. 이는 계좌별 대출이 두 건이라는 뜻이 아니며, 실제 은행의 주택·발코니 계좌별 대출금 배분은 확인이 필요합니다. 4억원 상한 적용 시 실제 LTV를 절사한 뒤 공식 표를 보간합니다. 자녀 수는 계약 이후 가족관계등록부에 등재되거나 등재됐던 만19세 이하 자녀로 출산·입양·사망 포함, 파양 제외입니다. 이 단지는 공고의 연 1.3%를 기준으로 하며 실행 시 기금 조건·심사가 우선합니다. <a href="${SALE_NOTICE_URL}" target="_blank" rel="noreferrer">이 단지 정정공고 ↗</a> · <a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 상품 참고 ↗</a></p>
+      <p class="legal-copy">기준액은 <b>감액 후 공급가 + 발코니 확장비</b>이며 시스템에어컨·기타 옵션·세금은 제외합니다. 선택 LTV를 합산 기준액에 한 번 적용하며 4억원 한도 중 작은 금액을 추정합니다. 이는 계좌별 대출이 두 건이라는 뜻이 아니며, 실제 은행의 주택·발코니 계좌별 대출금 배분은 확인이 필요합니다. 4억원 상한 적용 시 실제 LTV를 절사한 뒤 공식 표를 보간합니다. 자녀 수는 분양계약일부터 상환·만기까지 해당 주택에서 동거하고 가족관계등록부에 등재되거나 등재됐던 만19세 이하 자녀로 출산·입양·사망 포함, 파양 제외입니다. 이 단지는 공고의 연 1.3%를 기준으로 하며 실행 시 기금 조건·심사가 우선합니다. <a href="${SALE_NOTICE_URL}" target="_blank" rel="noreferrer">이 단지 정정공고 ↗</a> · <a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 상품 참고 ↗</a></p>
     </div></details>`;
   }
 
@@ -521,7 +530,7 @@ class CalculatorApp {
   }
 
   private paymentGuideMarkup(): string {
-    return `<details id="calculator-payment-guide" class="payment-explainer"><summary>납부·대출·입주 순서와 확인할 정보</summary><ol><li><b>계약부터 입주 전</b>: 계약금과 발코니·Ⅱ·Ⅲ 중도금은 자금 준비가 필요합니다. 집단대출 가정에서는 주택 중도금 납부일에 대출이 실행되며, 후불이자를 그때 현금 납부하지 않습니다. Ⅲ 중도금 납부일은 별도 통지입니다.</li><li><b>잔금·입주 정산</b>: 기존 집단대출 원금과 전체 예상 후불이자를 상환합니다. 전용 모기지는 승인·실행된 금액만 주택·발코니 잔금에 한 번 충당합니다.</li><li><b>입주 이후</b>: 거치기간 이자와 이후 월 원리금이 발생합니다. 매각·전액 상환·만기에는 별도의 수익공유 정산이 있습니다.</li></ol><p><span class="assumption-chip">공고 기준</span> 공급가·납부 비율 <span class="assumption-chip">미정</span> 단지 은행·실제 금리·입주지정일 <span class="assumption-chip">가정</span> 4.0%·정산 기준일·부대비용</p><p><a href="../guides/?guide=sale-finance">분퍼빌 입주·자금 계산 가이드</a></p></details>`;
+    return `<details id="calculator-payment-guide" class="payment-explainer"><summary>납부·대출·입주 순서와 확인할 정보</summary><ol><li><b>계약부터 입주 전</b>: 계약금과 발코니·Ⅱ·Ⅲ 중도금은 자금 준비가 필요합니다. 집단대출 가정에서는 주택 중도금 납부일에 대출이 실행되며, 후불이자를 그때 현금 납부하지 않습니다. Ⅲ 중도금 납부일은 별도 통지입니다.</li><li><b>잔금·입주 정산</b>: 기존 집단대출 원금과 전체 예상 후불이자를 상환합니다. 전용 모기지는 승인·실행된 금액만 주택·발코니 잔금에 한 번 충당합니다.</li><li><b>입주 이후</b>: 거치기간 이자와 이후 월 원리금이 발생합니다. 매각·전액 상환·만기에는 별도의 수익공유 정산이 있습니다.</li></ol><p><span class="assumption-chip">공고 기준</span> 공급가·납부 비율 <span class="assumption-chip">미정</span> 단지 은행·실제 금리·입주지정일 <span class="assumption-chip">가정</span> 4.0%·정산 기준일·부대비용</p><p><a href="../guides/?guide=sale-finance">분퍼빌 입주·자금 계산 가이드</a> · <a href="../documents/">공식 문서·PDF 자료실</a></p></details>`;
   }
 
   private costDetails(quote: Quote): string {
@@ -536,12 +545,25 @@ class CalculatorApp {
   }
 
   private resaleDetails(quote: Quote): string {
-    const value = this.salePriceWon === null ? undefined : quote.mortgage?.settlement;
-    return `<details id="calculator-resale-details" class="calculator-card disclosure"><summary>향후 매각·수익공유 정산 <span>펼치기</span></summary><div class="disclosure-body">
-      <p>모기지 추정의 자녀 수·대출 유지기간을 사용합니다. 매도가 예상액을 넣어 보는 시나리오이며 시세·세금·매각 승인을 예측하지 않습니다.</p>
-      <label class="money-field" for="calculator-sale-price">예상 매도가 · 원<input id="calculator-sale-price" type="number" min="1" max="100000000000" step="1" inputmode="numeric" placeholder="예: 900000000" value="${this.salePriceWon ?? ''}" ${this.mortgageEnabled ? '' : 'disabled'}></label>
-      ${value && quote.mortgage ? `<dl><dt>가정한 매도가</dt><dd>${money(this.salePriceWon!)}</dd><dt>대출 유지기간 / 자녀 수</dt><dd>${this.holdingYears}년 / ${this.childCount === 2 ? '2명 이상' : this.childCount + '명'}</dd><dt>취득 기준액 · 공급가+발코니</dt><dd>${money(quote.mortgage.loanBase)}</dd><dt>양(+)의 평가차익</dt><dd>${money(value.appreciationWon)}</dd><dt>기금 정산비율</dt><dd>${value.fundSharePercent}%</dd><dt>− 기금 수익공유 정산액</dt><dd>${money(value.fundSettlementWon)}</dd><dt>− 남은 대출 원금</dt><dd>${money(value.remainingPrincipalWon)}</dd><dt class="calculation-total-label">세금·매각비용 전 회수액</dt><dd id="calculator-resale-proceeds" class="calculation-total">${money(value.netSaleProceedsWon)}</dd></dl>` : '<p class="muted-copy">모기지 추정 활성화 후 예상 매도가를 입력하세요. 매도가를 임의로 채우지 않습니다.</p>'}
-      <p class="legal-copy"><b>회수액은 순이익이 아닙니다.</b> 기존 자기자금·기납부 원리금·취득/양도세·중개/등기 비용 등을 빼지 않았습니다. 손실이면 기금 수익공유금은 0원이지만 손실을 기금이 보전하지 않습니다. 중도상환은 원칙적으로 실행 3년 경과 후 전액이며 부분상환은 불가합니다. 만기 이후로 정산을 미뤄 유리한 비율을 적용하지 않습니다. <b>실제 정산가격은 은행 감정·약정 검증으로 매도가와 달라질 수 있으며, 매각 없는 전액상환·만기는 감정가격을 사용합니다.</b> <a href="${MORTGAGE_CONTRACT}" target="_blank" rel="noreferrer">KB 추가약정·정산표 ↗</a></p>
+    const repayment = this.settlementKind === 'repayment';
+    const ready = repayment ? this.appraisedPriceWon !== null : this.salePriceWon !== null;
+    const value = ready ? quote.mortgage?.settlement : undefined;
+    const reasons = {
+      'sale-estimate': '감정가격 미입력 · 매도가만 사용한 단순 추정입니다. 은행 정산 확정액이 아닙니다.',
+      'sale-price': '가정 매도가를 기준으로 정산합니다. 실제 은행의 감정·신고가격 검증이 우선합니다.',
+      'below-appraisal-threshold': '가정 매도가가 감정가격보다 10% 이상 낮아 감정가격을 정산 기준으로 사용합니다.',
+      'unnotified-sale-or-appraisal': '매각계획 미통보 가정 · 매도가와 감정가격 중 큰 금액을 정산 기준으로 사용합니다.',
+      'repayment-appraisal': '매각 없는 전액 상환 · 감정가격의 평가차익을 정산합니다. 매각 현금이 발생하는 것은 아닙니다.',
+    };
+    return `<details id="calculator-resale-details" class="calculator-card disclosure"><summary>향후 매각·상환·수익공유 정산 <span>펼치기</span></summary><div class="disclosure-body">
+      <p>모기지 추정의 자녀 수·대출 유지기간을 사용합니다. 아래 가격은 모두 가정값이며 실제 시세감정·세금·은행 승인 결과가 아닙니다.</p>
+      <div class="mini-controls"><label>정산 방식<select id="calculator-settlement-kind"><option value="sale" ${repayment ? '' : 'selected'}>주택 매각</option><option value="repayment" ${repayment ? 'selected' : ''}>매각 없이 전액 상환·만기</option></select></label></div>
+      ${repayment ? '' : `<label class="money-field" for="calculator-sale-price">예상 매도가 · 원<input id="calculator-sale-price" type="number" min="1" max="100000000000" step="1" inputmode="numeric" placeholder="예: 900000000" value="${this.salePriceWon ?? ''}" ${this.mortgageEnabled ? '' : 'disabled'}></label>`}
+      <label class="money-field" for="calculator-appraised-price">가정 시세감정가격 · 원${repayment ? ' (필수)' : ' (선택)'}<input id="calculator-appraised-price" type="number" min="1" max="100000000000" step="1" inputmode="numeric" placeholder="예: 1000000000" value="${this.appraisedPriceWon ?? ''}" ${this.mortgageEnabled ? '' : 'disabled'}></label>
+      ${repayment ? '' : `<label class="enable-row"><input id="calculator-sale-plan-notified" type="checkbox" ${this.salePlanNotified ? 'checked' : ''}> 매각계획을 은행에 통보한 것으로 가정</label>`}
+      <p class="legal-copy">실제 매각계획서는 <b>소유권 이전등기 1개월 전까지</b> 은행에 제출해야 합니다. 모기지 대출 인지세는 은행·고객 각 50%이며, 주택 공급계약 인지세와 별개입니다. <a href="../documents/shinhui-mortgage-product-20261107.pdf" target="_blank" rel="noreferrer">상품설명서 PDF ↗</a> · <a href="../guides/?guide=mortgage-product">핵심·계산 요약 →</a></p>
+      ${value && quote.mortgage ? `<p id="calculator-settlement-basis-note" class="legal-copy"><b>${reasons[value.settlementBasisReason]}</b></p><dl>${repayment ? '' : `<dt>가정한 매도가 · 실제 매각 현금</dt><dd>${money(this.salePriceWon!)}</dd>`}<dt>수익공유 정산 기준가격</dt><dd id="calculator-settlement-basis">${money(value.settlementBasisWon)}</dd><dt>대출 유지기간 / 자녀 수</dt><dd>${this.holdingYears}년 / ${this.childCount === 2 ? '2명 이상' : this.childCount + '명'}</dd><dt>취득 기준액 · 공급가+발코니</dt><dd>${money(quote.mortgage.loanBase)}</dd><dt>양(+)의 평가차익</dt><dd>${money(value.appreciationWon)}</dd><dt>기금 정산비율</dt><dd>${value.fundSharePercent}%</dd><dt>${repayment ? '기금 수익공유 정산액' : '− 기금 수익공유 정산액'}</dt><dd id="calculator-fund-settlement">${money(value.fundSettlementWon)}</dd><dt>${repayment ? '남은 대출 원금' : '− 남은 대출 원금'}</dt><dd>${money(value.remainingPrincipalWon)}</dd><dt class="calculation-total-label">${repayment ? '원금 + 기금 정산 준비금' : '세금·매각비용 전 회수액'}</dt><dd id="${repayment ? 'calculator-full-repayment' : 'calculator-resale-proceeds'}" class="calculation-total">${money(repayment ? value.totalLoanSettlementWon : value.netSaleProceedsWon)}</dd></dl>` : `<p id="calculator-settlement-waiting" class="muted-copy">${repayment ? '가정 시세감정가격을 입력하면 전액 상환 준비금을 계산합니다. 일반 모기지·납부 일정 계산은 그대로 유지됩니다.' : '예상 매도가를 입력하세요. 감정가격을 비우면 매도가만 사용한 단순 추정이며 은행 정산 확정액이 아닙니다.'}</p>`}
+      <p class="legal-copy"><b>${repayment ? '전액 상환 준비금에는 마지막 미납 이자·세금·감정·말소 비용 등이 포함되지 않습니다.' : '회수액은 순이익이 아닙니다.'}</b> 기존 자기자금·기납부 원리금·취득/양도세·중개/등기 비용 등을 빼지 않았습니다. 손실이면 기금 수익공유금은 0원이지만 손실을 기금이 보전하지 않습니다. 중도상환은 원칙적으로 실행 3년 경과 후 전액이며 부분상환은 불가합니다. 만기 이후로 정산을 미뤄 유리한 비율을 적용하지 않습니다. <b>감정가격이 매도가를 대체하더라도 실제 매각 현금을 늘려 계산하지 않습니다.</b> <a href="${MORTGAGE_CONTRACT}" target="_blank" rel="noreferrer">KB 추가약정·정산표 ↗</a></p>
     </div></details>`;
   }
 
@@ -578,8 +600,9 @@ class CalculatorApp {
         if (control.id === 'calculator-costs-enabled' && !control.checked) this.discardPendingInputs('input[data-cost-id]');
         if ((control.id === 'calculator-interim-loan-enabled' && !control.checked)
           || (control.name === 'interim-funding' && control.value === 'cash')) this.discardPendingInputs('[data-interim-rate-input],#calculator-move-in-date');
-        if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id) && !control.checked) this.discardPendingInputs('#calculator-sale-price');
+        if (['calculator-mortgage-enabled', 'calculator-balance-mortgage-enabled'].includes(control.id) && !control.checked) this.discardPendingInputs('#calculator-sale-price,#calculator-appraised-price');
       }
+      if (control.id === 'calculator-settlement-kind' && control.value === 'repayment') this.discardPendingInputs('#calculator-sale-price');
       if (control instanceof HTMLInputElement && control.matches('input[type="number"],input[type="date"]')) this.pendingInputs.add(control.id);
       if (!this.commitPendingInputs()) { this.render(); return; }
       const checked = control instanceof HTMLInputElement && control.checked;
@@ -594,6 +617,8 @@ class CalculatorApp {
       else if (control.id === 'calculator-term') { this.term = Number(control.value) as 20 | 30; this.holdingYears = Math.min(this.holdingYears, this.term); }
       else if (control.id === 'calculator-children') this.childCount = Number(control.value) as BundangMortgageChildCount;
       else if (control.id === 'calculator-settlement-period') this.holdingYears = Number(control.value);
+      else if (control.id === 'calculator-settlement-kind') this.settlementKind = control.value as BundangMortgageSettlementKind;
+      else if (control.id === 'calculator-sale-plan-notified') this.salePlanNotified = checked;
       this.render();
     });
     this.mount.addEventListener('click', event => {
@@ -654,10 +679,12 @@ class CalculatorApp {
     if (input.disabled) return null;
     if (input.type === 'date') return input.value && input.validity.valid ? null : '2028-02-15~2099-12-31 사이의 유효한 날짜를 입력하세요.';
     if (input.dataset.costId && input.value === '') return null;
-    if (input.id === 'calculator-sale-price' && input.value === '') return null;
+    if (['calculator-sale-price', 'calculator-appraised-price'].includes(input.id) && input.value === '') return null;
     if (!input.value || !input.validity.valid || !Number.isFinite(input.valueAsNumber)) {
       if (input.hasAttribute('data-interim-rate-input')) return '금리는 0~15% 범위에서 0.1% 단위로 입력하세요.';
-      return input.dataset.costId ? '비용은 0~100억원 범위의 정수로 입력하세요.' : '매도가는 1원~1,000억원 범위의 정수로 입력하세요.';
+      return input.dataset.costId ? '비용은 0~100억원 범위의 정수로 입력하세요.'
+        : input.id === 'calculator-appraised-price' ? '감정가격은 1원~1,000억원 범위의 정수로 입력하거나 비워 두세요.'
+        : '매도가는 1원~1,000억원 범위의 정수로 입력하세요.';
     }
     return null;
   }
@@ -670,6 +697,7 @@ class CalculatorApp {
       else if (input.hasAttribute('data-interim-rate-input')) input.value = this.interimRatePercent.toFixed(1);
       else if (input.id === 'calculator-move-in-date') input.value = this.assumedMoveInDate;
       else if (input.id === 'calculator-sale-price') input.value = String(this.salePriceWon ?? '');
+      else if (input.id === 'calculator-appraised-price') input.value = String(this.appraisedPriceWon ?? '');
     }
   }
 
@@ -691,6 +719,7 @@ class CalculatorApp {
       else if (input.id === 'calculator-move-in-date') this.assumedMoveInDate = input.value;
       else if (input.dataset.costId) this.costs[input.dataset.costId as CostId] = input.value ? input.valueAsNumber : 0;
       else if (input.id === 'calculator-sale-price') this.salePriceWon = input.value ? input.valueAsNumber : null;
+      else if (input.id === 'calculator-appraised-price') this.appraisedPriceWon = input.value ? input.valueAsNumber : null;
     }
     this.pendingInputs.clear();
     return true;
@@ -741,7 +770,7 @@ class CalculatorApp {
     if (this.interimFunding === 'loan') ids.push('calculator-interim-loan-details');
     if (this.mortgageEnabled) ids.push('calculator-mortgage-details');
     if (this.costsEnabled) ids.push('calculator-cost-details');
-    if (this.mortgageEnabled && this.salePriceWon !== null) ids.push('calculator-resale-details');
+    if (this.mortgageEnabled && (this.salePriceWon !== null || this.appraisedPriceWon !== null || this.settlementKind === 'repayment')) ids.push('calculator-resale-details');
     const nodes = ids.map(id => this.mount.querySelector<HTMLDetailsElement>(`#${id}`)).filter((node): node is HTMLDetailsElement => Boolean(node));
     const states = nodes.map(node => node.open);
     // Native details[name] enforces one-open-at-a-time even during printing.

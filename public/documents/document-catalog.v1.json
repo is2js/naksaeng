@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-07",
+  "documents": [
+    {
+      "id": "mortgage-product",
+      "title": "신혼희망타운 전용 모기지 상품설명서",
+      "description": "대출한도·금리·감정가 검증·수익공유 정산표와 예시를 포함한 7쪽 스캔 보관본입니다.",
+      "category": "mortgage",
+      "file": "documents/shinhui-mortgage-product-20261107.pdf",
+      "sourceUrl": "https://obank.kbstar.com/quics?cc=b032425%3Ab033525&isNew=N&page=C020709&prcode=LN40001026",
+      "sourceLabel": "사용자 제공 스캔 · KB 공식 상품 참고",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 7,
+      "bytes": 9834081,
+      "sha256": "80aabd1cdfe876e452f876b5fa7ff1d78d6a9528e0dd83e3c92ff14196edfa0b",
+      "summaryGuideId": "mortgage-product",
+      "notice": "공개용 비식별 보관본: 4쪽 하단 개인 고객확인란만 복구 불가능하게 제거했습니다. 금융 조항·별표·순서는 유지했습니다. 원본은 로컬에만 보관하며 개인 계약서는 공개하지 않습니다. 스캔에 개정일은 미표기이고 실제 대출 신청 시 조건이 우선합니다. 출처 버튼은 개인 원본 공유 링크가 아닌 공식 상품 참고 페이지입니다."
+    },
+    {
+      "id": "sale-notice",
+      "title": "분당퍼스트빌리지 입주자모집 정정공고",
+      "description": "2026-07-02 정정공고 보관본입니다. 공급가격·납부 일정·청약 및 입주 조건은 실제 계약서와 이후 변경 안내를 함께 확인하세요.",
+      "category": "official",
+      "file": "documents/sale-notice-20260702.pdf",
+      "sourceUrl": "https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_260702.pdf",
+      "sourceLabel": "e편한세상 공식 정정공고",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 46,
+      "bytes": 1914094,
+      "sha256": "11c1af7198247591eb969148a7470137606d5c4eb6e7539d923a6f4ff69d2a93",
+      "summaryGuideId": "sale-finance"
+    },
+    {
+      "id": "supply-guide",
+      "title": "분당퍼스트빌리지 공급안내문",
+      "description": "단지·동호 배치도·평면도·공급가격·발코니 납부표를 포함한 A3 8쪽 안내문입니다. 기타 추가선택품목Ⅲ 전체 상세 안내서와는 다른 문서입니다.",
+      "category": "official",
+      "file": "documents/supply-guide-20260707.pdf",
+      "sourceUrl": "https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_02_260707.pdf",
+      "sourceLabel": "e편한세상 공식 공급안내문 원본",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 8,
+      "bytes": 32345321,
+      "sha256": "a232dbe9f64f5cdafab26ec553a2ce70a5bc773043280f8850df0865c06390a8",
+      "notice": "웹 최적화 보관본입니다. 약 189MiB 원문에서 Illustrator 편집 원본·썸네일 데이터만 제외했으며 본문 글자·벡터·이미지·8쪽 순서는 변경하지 않았습니다. 파일이 약 31MiB이므로 모바일 데이터 사용량에 유의하세요. 최적화하지 않은 원본은 출처에서 확인할 수 있습니다."
+    },
+    {
+      "id": "contract-procedure",
+      "title": "당첨자 계약 절차·제출서류 안내",
+      "description": "2026-10-28 공식 안내입니다. 방문 예약·계약 기간·준비서류를 확인하는 공개 안내문이며 개인 공급계약서가 아닙니다.",
+      "category": "official",
+      "file": "documents/contract-procedure-20261028.pdf",
+      "sourceUrl": "https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_01_261028.pdf",
+      "sourceLabel": "e편한세상 공식 당첨자 계약 안내",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 1,
+      "bytes": 65479,
+      "sha256": "cf58da5466eb7ad4a7bfa9df434752a44e07be298ee5eafb508ec22c8c4c4e9d",
+      "notice": "이전 2026-10-27 안내에서 제출서류 발급 기준 문구가 일부 정리됐습니다. 예약·계약 날짜와 운영시간은 같습니다. 실제 제출서류는 항목별 발급 기준을 확인하세요."
+    },
+    {
+      "id": "stamp-tax-notice",
+      "title": "아파트 계약 인지세 납부 안내",
+      "description": "2026-10-27 공식 인지세 안내입니다. 주택 공급계약의 수입인지 선납·사업주체 분담 방식이며 모기지 대출 인지세와 구분합니다.",
+      "category": "official",
+      "file": "documents/stamp-tax-notice-20261027.pdf",
+      "sourceUrl": "https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_02_261027.pdf",
+      "sourceLabel": "e편한세상 공식 인지세 납부 안내",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 1,
+      "bytes": 450137,
+      "sha256": "997d32eefdc269919195c7d6593e268f5178970243882c2df90117a1312e2ab2",
+      "summaryGuideId": "sale-finance"
+    },
+    {
+      "id": "funding-plan-notice",
+      "title": "주택취득자금 조달·입주계획서 작성 안내",
+      "description": "공식 사이트에서 배포하는 빈 서식과 작성·증빙 예시 7쪽입니다. 실제 회원이나 계약자의 작성 자료는 포함하지 않습니다.",
+      "category": "official",
+      "file": "documents/funding-plan-notice-20261027.pdf",
+      "sourceUrl": "https://www.elife.co.kr/jsp/front/po/210114/static/pdf/210114_notice_03_261027.pdf",
+      "sourceLabel": "e편한세상 공식 자금조달계획서 안내",
+      "retrievedAt": "2026-11-07",
+      "pageCount": 7,
+      "bytes": 125419,
+      "sha256": "17f122d0d67cdb742e887175f0885da9330168a1533fe8f42ddd18eea4376c62",
+      "notice": "공개 예시·빈 서식이며 세무·금융 승인 판단을 대신하지 않습니다. 개인이 작성한 자금·소득·신분 자료는 업로드하지 마세요."
+    }
+  ]
+}

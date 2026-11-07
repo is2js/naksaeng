@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="분당퍼스트빌리지 공식 공고와 모기지 상품설명서의 보관 PDF 및 계산 안내" />
+    <meta name="color-scheme" content="dark" />
+    <title>공식 문서 · PDF 자료실 · 분당퍼스트빌리지</title>
+  </head>
+  <body class="documents-page">
+    <a class="skip-link" href="#documentContent">본문으로 이동</a>
+    <header class="guide-topbar">
+      <a class="brand" href="../" aria-label="분당퍼스트빌리지 놀이터">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><b>e편한세상 분당퍼스트빌리지</b><small>돌아온범생의 놀이터 개발 연구실</small></span>
+      </a>
+      <nav class="topnav" aria-label="주요 메뉴">
+        <a href="../">놀이터</a><a href="../guides/">가이드</a>
+        <a class="is-active" href="./" aria-current="page">공식 문서 · PDF</a>
+      </nav>
+      <span class="documents-header-label">DOCUMENT ARCHIVE</span>
+    </header>
+    <main class="documents-main" id="documentContent">
+      <header class="documents-intro"><p class="documents-eyebrow">BUNFIRVIL / DOCUMENTS</p>
+        <h1>공식 문서 · PDF 자료실</h1>
+        <p>공고·안내와 모기지 상품설명서를 보관한 자료실입니다. 필요한 내용을 읽거나 PDF를 내려받아 확인하세요.</p>
+        <p class="documents-privacy">개인 공급계약서·서명 문서·가상계좌는 공개하지 않습니다. 보관본 이후의 정정 공고와 실제 은행 심사·계약 조건을 함께 확인하세요.</p>
+      </header>
+      <p id="documentsStatus" class="documents-status" role="status">보관 문서를 불러오는 중입니다.</p>
+      <div class="documents-layout" id="documentsLayout" hidden>
+        <nav class="documents-list" id="documentsList" aria-label="보관 문서 목록"></nav>
+        <article id="documentReader" class="document-reader" aria-live="polite"></article>
+      </div>
+      <div id="documentsError" class="documents-error" role="alert" hidden><p></p><button type="button" id="documentsRetry">다시 불러오기</button></div>
+      <noscript><p class="documents-error">자료실 목록을 보려면 JavaScript를 허용해 주세요. 공식 공고는 사업주체 홈페이지에서도 확인할 수 있습니다.</p></noscript>
+      <footer class="documents-footer"><a href="../guides/?guide=sale-finance">입주·자금 계산 가이드</a><a href="../">놀이터로 돌아가기</a><span>보관 문서는 참고용이며 최신 공식 안내와 실제 계약이 우선합니다.</span></footer>
+    </main>
+    <script type="module" src="/src/documents.ts"></script>
+  </body>
+</html>

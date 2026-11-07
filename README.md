@@ -13,6 +13,16 @@
 - 세대 인증: 비공개 Google Sheet의 가입요청·인증명단을 분리하고, 운영자는 별도 코드도 확인합니다. 현재 탭에 역할·공유용 닉네임·인증 범위를 저장하며 코드는 저장하지 않습니다.
 - 자체 서버 기능: 없음 — DB, Socket.IO, 전투 판정, 원본 게시 기능을 포함하지 않습니다.
 
+## 공식 문서·PDF 보관
+
+- 자료실: <https://is2js.github.io/naksaeng/bunfirvil/documents/>. 공개 가이드와 계산기의 납부 안내에서 연결하며 PDF는 보기·다운로드 버튼을 누를 때만 불러옵니다.
+- `public/documents/document-catalog.v1.json`에 검토한 6종의 파일명·공식 출처·보관일·쪽수·바이트·SHA-256을 기록합니다. 개인 공급계약서, 회원 명단, 고객 계좌와 원본 스캔 ZIP은 넣지 않습니다.
+- 모기지 설명서 7쪽은 원래 금융 조항·별표를 유지하고 4쪽 개인 고객확인란만 실제 픽셀을 제거한 공개본입니다. 서명 포함 원본 PDF는 저장소 밖 로컬에만 보관합니다. 공개 출처 링크도 개인 원본 공유 URL이 아닌 공식 상품 참고 페이지입니다.
+- 공급안내문은 약 189MiB 원본의 Illustrator 편집용 데이터·썸네일만 제외한 약 31MiB 최적화본입니다. 글자·벡터·이미지·쪽 순서는 유지했고 미최적화 공식 원문 링크도 제공합니다. 옵션Ⅲ 상세 안내서로 잘못 표기하지 않습니다.
+- 기존 앱은 **50MiB 제한을 그대로** 유지하고, 별도 문서 보관 한도 **50MiB / PDF 한 개 35MiB**를 둡니다. 자료실 HTML은 앱 예산에 포함합니다. `scripts/document-archive-policy.mjs`가 승인 ID·출처 호스트·파일 형식·해시·누락/초과 파일을 검사하므로 단순히 폴더에 PDF를 넣는 것만으로 공개 승인되지 않습니다.
+- 검사: `npm run test:document-archive`, `npm run build`, `npm run verify:dist`. 새 문서는 사람이 개인정보·서명·문서 종류를 검토한 뒤 정책과 카탈로그를 함께 갱신합니다. 자동 해시 검증은 개인정보 검토를 대신하지 않습니다.
+- 재보관 도구는 `scripts/archive-mortgage-product.py`(원본 ZIP → 로컬 원본·비식별 공개 PDF), `scripts/optimize-public-pdf.py`(공급안내문 편집 데이터 제거)입니다. Python의 `reportlab`, `Pillow`, `pypdf`, `PyMuPDF==1.26.7`을 사용하며 사이트 빌드에는 Python이 필요 없습니다. 입력·비공개 출력은 저장소 밖 경로를 지정하세요. 고객확인란 위치가 다른 문서에 동일 가림 좌표를 재사용하면 안 됩니다.
+
 ## 놀이터 일러스트 재생성 스킬
 
 두 프로젝트에서 `$bunfirvil-playground-illustration`을 사용하면 승인된 네이비·민트·골드 표지 분위기를 재사용할 수 있습니다. [스킬](.agents/skills/bunfirvil-playground-illustration/SKILL.md)에 실제 생성 프롬프트, 원래 표지·놀이터 화면·승인 이미지, 1200×630 JPEG 준비 스크립트와 프로젝트별 반영 기준을 함께 보관합니다. 새 생성 결과는 달라질 수 있으며, 스킬 사용 자체가 기존 이미지 교체나 운영 배포를 의미하지는 않습니다.
@@ -141,7 +151,7 @@ GitHub Pages에 포함된 파일은 누구나 내려받을 수 있습니다. `op
 
 ## 배포
 
-정본 저장소는 [`is2js/naksaeng`](https://github.com/is2js/naksaeng)입니다. `main`에 push하면 GitHub Actions가 단위 테스트, 정적 빌드, 누출 검사와 Chromium 스모크를 한 번 수행한 뒤 Pages artifact를 배포합니다. 포털은 `/naksaeng/`, A1 앱은 `/naksaeng/bunfirvil/`을 각각 독립 base로 빌드하고 하나의 `dist`로 묶습니다. 생성 snapshot·이미지·폰트는 A1 아래에 한 번만 포함하며 전체 50MiB 예산을 검사합니다.
+정본 저장소는 [`is2js/naksaeng`](https://github.com/is2js/naksaeng)입니다. `main`에 push하면 GitHub Actions가 단위 테스트, 정적 빌드, 누출 검사와 Chromium 스모크를 한 번 수행한 뒤 Pages artifact를 배포합니다. 포털은 `/naksaeng/`, A1 앱은 `/naksaeng/bunfirvil/`을 각각 독립 base로 빌드하고 하나의 `dist`로 묶습니다. 생성 snapshot·이미지·폰트는 A1 아래에 한 번만 포함하며 앱 50MiB와 검토된 문서 보관 50MiB 예산을 각각 검사합니다.
 
 기존 `is2js/bunfirvil` 저장소는 주소 호환용으로 보존합니다. 새 Pages가 정상 배포된 뒤에만 기존 진입 HTML을 전환하며 기존 정적 자산은 유지합니다. 기존 루트·관리·가이드·계산기 경로의 query와 공유 fragment를 새 A1 주소로 그대로 전달합니다. 두 주소는 같은 `is2js.github.io` origin이므로 기존 브라우저 저장 키를 복사하거나 바꾸지 않습니다. 이전 계산기 복귀 경로는 승인된 map·actor·variant만 새 경로로 정규화합니다. 문제 발생 시 이전 커밋을 revert하여 복구하며 저장 데이터나 Git 이력을 초기화하지 않습니다.
 

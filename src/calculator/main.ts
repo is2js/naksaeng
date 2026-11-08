@@ -324,7 +324,7 @@ class CalculatorApp {
   private scheduleCards(rows: FundedScheduleRow[]): string {
     return `<div class="schedule-cards" aria-label="회차별 납부 요약">${rows.map(row => {
       const phase = row.dueKey === '계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      return `<button type="button" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><span class="installment-heading"><b>${escape(row.label)}</b><span>준비 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span>${this.optionIiiTiming(row)}<span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">상세 보기</span></button>`;
+      return `<button type="button" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><span class="installment-heading"><b>${escape(row.label)}</b><span>내 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span>${this.optionIiiTiming(row)}<span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">상세 보기</span></button>`;
     }).join('')}</div>`;
   }
 

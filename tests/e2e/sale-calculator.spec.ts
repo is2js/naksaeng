@@ -64,21 +64,25 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('[data-option-tier="option-iii"]')).toContainText('광폭 강마루');
   await expect(page.locator('[data-option-tier="option-iii"]')).toContainText('1,820,000원');
   await expect(page.locator('.schedule-table thead')).toContainText('시스템에어컨');
-  await expect(page.locator('.schedule-table thead')).toContainText('기타 옵션');
+  await expect(page.locator('.schedule-table thead')).toContainText('추가선택품목 Ⅲ');
   await expect(page.locator('.schedule-table thead')).toContainText('납부일');
   await expect(page.locator('.schedule-table [data-finance-due="계약 시"] .schedule-date')).toContainText('2026.11.04~11.13');
   const countdown = (due: string) => page.locator(`.schedule-table [data-payment-due="${due}"] b`);
   await expect(countdown('계약 시')).toHaveText('시작 D-13');
-  await expect(countdown('옵션Ⅲ 계약 시')).toHaveText('일정 미정');
+  await expect(countdown('옵션Ⅲ 계약 시')).toHaveCount(0);
   await expect(countdown('2027-04-12')).toHaveText('D-172');
   await expect(countdown('2028-02-14')).toHaveText('D-480');
-  await expect(countdown('별도 안내')).toHaveText('일정 미정');
+  await expect(countdown('별도 안내')).toHaveCount(0);
+  await expect(page.locator('.schedule-table tbody tr')).toHaveCount(4);
+  await expect(page.locator('.schedule-table [data-finance-due="계약 시"] [data-option-iii-timing]')).toContainText('별도');
+  await expect(page.locator('.schedule-table [data-finance-due="2027-04-12"] [data-option-iii-timing]')).toContainText('미정');
   await expect(countdown('입주 시')).toHaveText('예정월 D-833');
   await expect(page.locator('#calculator-deadline-today')).toContainText('2026.10.22');
-  await expect(page.locator('.deadline-note')).toContainText('기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내');
+  await expect(page.locator('.deadline-note')).toContainText('추가선택품목 Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내');
   const mainFirstInterim = page.locator('[data-finance-due="2027-04-12"]');
   await expect(mainFirstInterim.locator('[data-flow="loan-draw"]')).toContainText('63,651,000원');
   await expect(mainFirstInterim.locator('[data-flow="deferred-interest"]')).toHaveCount(0);
+  await expect(mainFirstInterim.locator('[data-flow="cash-due"] b')).toHaveText('2,653,600원');
   await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="cash-due"] b')).toHaveText('0원');
   await expect(page.locator('[data-finance-due="입주 시"] [data-flow="interim-repayment"]')).toContainText('127,302,000원');
   await expect(page.locator('[data-finance-due="입주 시"] [data-flow="deferred-interest"]')).toContainText('7,073,109원');
@@ -104,8 +108,10 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.locator('.schedule-table tbody')).toContainText('중도금');
   await expect(page.locator('.schedule-table tbody')).not.toContainText('중도금 2차');
   await expect(page.locator('.schedule-table [data-payment-due="2027-04-12"]')).toHaveCount(0);
+  await expect(page.locator('.schedule-table tbody tr')).toHaveCount(3);
   await expect(countdown('2028-02-14')).toHaveText('D-479');
   await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="loan-draw"]')).toContainText('127,302,000원');
+  await expect(page.locator('[data-finance-due="2028-02-14"] [data-flow="cash-due"] b')).toHaveText('2,111,600원');
   await expect(page.locator('[data-finance-due="입주 시"] [data-flow="deferred-interest"]')).toContainText('4,924,669원');
 
   const taxDetails = page.locator('#calculator-tax-details');
@@ -139,7 +145,7 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(page.getByLabel('집단대출 가정 · 후불이자 반영', { exact: true })).toBeChecked();
   await expect(interimDetails).toContainText('4.0%');
   await expect(interimDetails).toContainText('주택 공급대금 중도금 20%');
-  await expect(interimDetails).toContainText('기타 옵션 중도금 · 자납');
+  await expect(interimDetails).toContainText('추가선택품목 Ⅲ 중도금 · 자납');
   await page.locator('#calculator-interim-rate-up').click();
   await expect(page.locator('#calculator-interim-rate-input')).toHaveValue('4.4');
   await expect(page.locator('#calculator-settlement-rate-input')).toHaveValue('4.4');
@@ -232,15 +238,17 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   const mobileCurrentContract = page.locator('[data-mobile-finance-due="계약 시"]');
-  const mobileFutureContract = page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]');
   await expect(mobileCurrentContract).toBeVisible();
-  await expect(mobileCurrentContract).toContainText('32,262,400원');
-  await expect(mobileFutureContract).toBeVisible();
-  await expect(mobileFutureContract).toContainText('91,000원');
-  await mobileFutureContract.click();
-  const mobileFutureDetails = page.locator('details.payment-stage[data-payment-stage-due="옵션Ⅲ 계약 시"]');
-  await expect(mobileFutureDetails).toHaveAttribute('open', '');
-  await expect(mobileFutureDetails).toContainText('일정 미정');
+  await expect(mobileCurrentContract).toContainText('32,353,400원');
+  await expect(mobileCurrentContract.locator('[data-option-iii-timing]')).toContainText('별도');
+  await expect(page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(0);
+  await expect(page.locator('[data-mobile-finance-due="별도 안내"]')).toHaveCount(0);
+  await expect(page.locator('.installment-card')).toHaveCount(3);
+  await mobileCurrentContract.click();
+  const mobileContractDetails = page.locator('details.payment-stage[data-payment-stage-due="계약 시"]');
+  await expect(mobileContractDetails).toHaveAttribute('open', '');
+  await expect(mobileContractDetails.locator('#calculator-future-option-contract')).toContainText('91,000원');
+  await expect(mobileContractDetails).toContainText('일정 미정');
   await page.locator('#calculator-move-in-settlement').screenshot({ path: testInfo.outputPath('move-in-mobile.png') });
   await page.locator('#calculator-payments').screenshot({ path: testInfo.outputPath('payment-countdowns-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -268,6 +276,10 @@ test('인증 세대의 옵션·청약·감액 계산 흐름은 개인정보 없�
   await expect(countdown('2028-02-14')).toBeVisible();
   await expect(page.locator('#calculator-non-balance-cash')).toBeVisible();
   await expect(page.locator('#calculator-pre-mortgage-cash')).toBeVisible();
+  await expect(page.locator('.payment-stage[open]')).toHaveCount(3);
+  await expect(page.locator('#calculator-future-option-contract')).toBeVisible();
+  await expect(page.locator('[data-interim-account-due="2028-02-14"] [data-interim-account="other"]')).toBeVisible();
+  await expect(page.locator('[data-interim-account-due="2028-02-14"] [data-interim-account="other"]')).toContainText('364,000원');
   await page.emulateMedia({ media: 'screen' });
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await expect(taxDetails).not.toHaveAttribute('open', '');
@@ -346,7 +358,7 @@ test('옵션 없는 기본형과 모바일 바로가기·최신 계약 안내가
 
 const priceCases = [
   { name: '별도 옵션 포함', ids: ['system-ac-2-general', 'wide-plank-floor-finish'], total: '647,068,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainFuture: '182,000원', preFuture: '91,000원', mainBalance: '452,405,600원', preBalance: '485,301,000원', ltv60: '384,988,800원', separate: true },
-  { name: '별도 기타 옵션 없음', ids: ['system-ac-2-general'], total: '645,248,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '451,313,600원', preBalance: '483,936,000원', ltv60: '384,988,800원', separate: false },
+  { name: '추가선택품목 Ⅲ 없음', ids: ['system-ac-2-general'], total: '645,248,000원', mainDeposit: '64,524,800원', preDeposit: '32,262,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '451,313,600원', preBalance: '483,936,000원', ltv60: '384,988,800원', separate: false },
   { name: '옵션 없는 기본형', ids: [], total: '641,648,000원', mainDeposit: '64,164,800원', preDeposit: '32,082,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '449,153,600원', preBalance: '481,236,000원', ltv60: '384,988,800원', separate: false },
   { name: '마이너스 옵션', ids: ['bundang-minus-option-package'], total: '612,388,000원', mainDeposit: '61,238,800원', preDeposit: '30,619,400원', mainFuture: '0원', preFuture: '0원', mainBalance: '428,671,600원', preBalance: '459,291,000원', ltv60: '367,432,800원', separate: false },
 ];
@@ -367,7 +379,7 @@ test('계약서 대조 금액·항목명과 잔금·융자금 설명은 화면�
   const split = page.locator('#calculator-contract-balance-breakdown');
   const balanceRow = page.locator('.schedule-table [data-finance-due="입주 시"]');
   await expect(page.locator('#calculator-contract-review')).toContainText('2026.11.07');
-  await expect(page.locator('#calculator-contract-review')).toContainText('사전청약·다른 평형·다른 에어컨 구성·기타 옵션Ⅲ은 기존 공고 기준');
+  await expect(page.locator('#calculator-contract-review')).toContainText('사전청약·다른 평형·다른 에어컨 구성·추가선택품목 Ⅲ은 기존 공고 기준');
   await expect(page.locator('.hero-total strong')).toHaveText('647,446,000원');
   await expect(page.locator('#calculator-contract-cash')).toHaveText('64,744,600원');
   await expect(stage('계약 시')).toHaveAttribute('open', '');
@@ -455,8 +467,9 @@ test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바�
   const openStages = () => group.locator('details.payment-stage[open]');
   await expect(stage('계약 시')).toHaveAttribute('open', '');
   await expect(openStages()).toHaveCount(1);
-  await expect(stage('옵션Ⅲ 계약 시')).not.toHaveAttribute('open', '');
-  await expect(stage('별도 안내')).not.toHaveAttribute('open', '');
+  await expect(stage('옵션Ⅲ 계약 시')).toHaveCount(0);
+  await expect(stage('별도 안내')).toHaveCount(0);
+  await expect(stages).toHaveCount(4);
   const ids = await page.locator('[id]').evaluateAll(nodes => nodes.map(node => node.id));
   expect(new Set(ids).size).toBe(ids.length);
   expect(await group.evaluate(node => Boolean(document.querySelector('.schedule-scroll')!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
@@ -468,6 +481,9 @@ test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바�
   await expect(openStages()).toHaveCount(1);
   await expect(page.locator('#calculator-account-supply')).toBeHidden();
   await expect(stage('2027-04-12').locator('[data-interim-account="supply"]')).toBeVisible();
+  await expect(stage('2027-04-12').locator('[data-interim-account="other"]')).toContainText('546,000원');
+  await expect(stage('2027-04-12').locator('[data-interim-account="other"]')).toContainText('자납');
+  await expect(stage('2027-04-12')).toContainText('납부일 미정');
   await page.locator('#calculator-settlement-rate-up').click();
   await expect(stage('2027-04-12')).toHaveAttribute('open', '');
   await expect(openStages()).toHaveCount(1);
@@ -476,6 +492,7 @@ test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바�
   await page.locator('.plan-switch label').filter({ hasText: '사전청약 당첨자' }).click();
   await expect(stage('2028-02-14')).toHaveAttribute('open', '');
   await expect(stage('2027-04-12')).toHaveCount(0);
+  await expect(stages).toHaveCount(3);
   await expect(openStages()).toHaveCount(1);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await group.screenshot({ path: testInfo.outputPath('payment-detail-desktop.png'), animations: 'disabled' });
@@ -487,6 +504,10 @@ test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바�
     await expect(detail).toHaveAttribute('open', '');
   }
   await expect(page.locator('#calculator-account-supply')).toBeVisible();
+  await expect(page.locator('#calculator-future-option-contract')).toBeVisible();
+  await expect(stage('2028-02-14').locator('[data-interim-account="other"]')).toBeVisible();
+  await expect(stage('2028-02-14').locator('[data-interim-account="other"]')).toContainText('364,000원');
+  await expect(stage('2028-02-14')).toContainText('납부일 미정');
   await page.emulateMedia({ media: 'screen' });
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await expect(stage('2028-02-14')).toHaveAttribute('open', '');
@@ -502,8 +523,9 @@ test('납부표 아래 가까운 회차 상세 하나만 열고 변경·모바�
     await page.reload();
     await expect(stage(expected)).toHaveAttribute('open', '');
     await expect(openStages()).toHaveCount(1);
-    await expect(stage('옵션Ⅲ 계약 시')).not.toHaveAttribute('open', '');
-    await expect(stage('별도 안내')).not.toHaveAttribute('open', '');
+    await expect(stage('옵션Ⅲ 계약 시')).toHaveCount(0);
+    await expect(stage('별도 안내')).toHaveCount(0);
+    await expect(stages).toHaveCount(4);
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -525,27 +547,39 @@ for (const scenario of priceCases) for (const plan of ['main-subscription', 'pre
     await page.goto('calculator/');
     await expect(page.locator('.hero-total strong')).toHaveText(scenario.total);
     const main = plan === 'main-subscription';
-    await expect(page.locator('[data-finance-due="계약 시"] .contract-due b')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
+    const expectedCombined = Number((main ? scenario.mainDeposit : scenario.preDeposit).replace(/[^0-9]/g, '')) + Number((main ? scenario.mainFuture : scenario.preFuture).replace(/[^0-9]/g, ''));
+    const expectedCombinedLabel = `${expectedCombined.toLocaleString('ko-KR')}원`;
+    await expect(page.locator('[data-finance-due="계약 시"] .contract-due b')).toHaveText(expectedCombinedLabel);
+    await expect(page.locator('[data-finance-due="계약 시"] [data-flow="cash-due"] b')).toHaveText(expectedCombinedLabel);
     await expect(page.locator('#calculator-contract-cash')).toHaveText(main ? scenario.mainDeposit : scenario.preDeposit);
     await expect(page.locator('#calculator-future-option-contract b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);
     await expect(page.locator('#calculator-future-option-contract')).toContainText('별도 계약 · 일정 미정');
     await expect(page.locator('.account-contract-total + #calculator-future-option-contract')).toHaveCount(1);
     if (!scenario.separate) await expect(page.locator('#calculator-future-option-contract')).toContainText('선택 없음');
-    const expectedCombined = Number((main ? scenario.mainDeposit : scenario.preDeposit).replace(/[^0-9]/g, '')) + Number((main ? scenario.mainFuture : scenario.preFuture).replace(/[^0-9]/g, ''));
-    await expect(page.locator('.account-contract-overall b')).toHaveText(`${expectedCombined.toLocaleString('ko-KR')}원`);
-    await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
-    await expect(page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(scenario.separate ? 1 : 0);
-    if (scenario.separate) await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"] .contract-due b')).toHaveText(main ? scenario.mainFuture : scenario.preFuture);
+    await expect(page.locator('.account-contract-overall b')).toHaveText(expectedCombinedLabel);
+    await expect(page.locator('.schedule-table tbody tr')).toHaveCount(main ? 4 : 3);
+    await expect(page.locator('.installment-card')).toHaveCount(main ? 4 : 3);
+    await expect(page.locator('.payment-stage')).toHaveCount(main ? 4 : 3);
+    await expect(page.locator('[data-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(0);
+    await expect(page.locator('[data-mobile-finance-due="옵션Ⅲ 계약 시"]')).toHaveCount(0);
+    await expect(page.locator('[data-payment-stage-due="옵션Ⅲ 계약 시"]')).toHaveCount(0);
     await expect(page.locator('[data-finance-due="입주 시"] .contract-due b')).toHaveText(main ? scenario.mainBalance : scenario.preBalance);
-    await expect(page.locator('[data-finance-due="별도 안내"]')).toHaveCount(scenario.separate ? 1 : 0);
+    await expect(page.locator('[data-finance-due="별도 안내"]')).toHaveCount(0);
+    await expect(page.locator('[data-mobile-finance-due="별도 안내"]')).toHaveCount(0);
+    await expect(page.locator('[data-payment-stage-due="별도 안내"]')).toHaveCount(0);
     const firstInterim = page.locator(`[data-interim-account-due="${main ? '2027-04-12' : '2028-02-14'}"]`);
     await expect(firstInterim.locator('[data-interim-account="supply"]')).toContainText('주택 집단대출 가정');
     await expect(firstInterim.locator('[data-interim-account="balcony"]')).toContainText('자납');
-    await expect(page.locator('[data-interim-account-due="별도 안내"]')).toHaveCount(scenario.separate ? 1 : 0);
+    await expect(page.locator('[data-interim-account-due="별도 안내"]')).toHaveCount(0);
     if (scenario.separate) {
       await expect(firstInterim.locator('[data-interim-account="system-ac"]')).toContainText('자납');
-      await expect(page.locator('[data-interim-account-due="별도 안내"] [data-interim-account="other"]')).toContainText(main ? '546,000원' : '364,000원');
-      await expect(page.locator('[data-interim-account-due="별도 안내"]')).toContainText('자납');
+      await expect(firstInterim.locator('[data-interim-account="other"]')).toContainText(main ? '546,000원' : '364,000원');
+      await expect(firstInterim.locator('[data-interim-account="other"]')).toContainText('자납');
+      await expect(firstInterim).toContainText('납부일 미정');
+      const firstDue = main ? '2027-04-12' : '2028-02-14';
+      await expect(page.locator(`[data-finance-due="${firstDue}"] [data-option-iii-timing]`)).toContainText('미정');
+      await expect(page.locator(`[data-mobile-finance-due="${firstDue}"] [data-option-iii-timing]`)).toContainText('미정');
+      await expect(page.locator('[data-finance-due="계약 시"] [data-option-iii-timing]')).toContainText('별도');
     }
     if (main) {
       await expect(page.locator('[data-interim-account-due="2028-02-14"] [data-interim-account="balcony"]')).toContainText('해당 회차 납부 없음');

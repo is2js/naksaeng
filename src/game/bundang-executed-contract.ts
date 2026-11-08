@@ -12,7 +12,7 @@ export const BUNDANG_PAYMENT_ITEM_LABELS: Readonly<Record<BundangPaymentTarget, 
   supply: '아파트 공급대금',
   balcony: '추가선택품목Ⅰ · 발코니 확장',
   'option-ii': '추가선택품목Ⅱ · 천장형 시스템에어컨',
-  'option-iii': '추가선택품목Ⅲ · 기타 옵션',
+  'option-iii': '추가선택품목 Ⅲ',
 });
 
 /**

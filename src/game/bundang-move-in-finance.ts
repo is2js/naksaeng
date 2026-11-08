@@ -121,7 +121,7 @@ export function calculateBundangMoveInSettlement(
   const mortgageAppliedWon = Math.min(mortgage, housingBalanceWon);
   const mortgageExcessWon = mortgage - mortgageAppliedWon;
   const contractPaymentsWon = sumWon(contractPayments, '계약금 합계');
-  const futureOptionContractPaymentsWon = sumWon(futureOptionContractPayments, '기타 옵션 계약금');
+  const futureOptionContractPaymentsWon = sumWon(futureOptionContractPayments, '추가선택품목 Ⅲ 계약금');
   const postContractBaseCashWon = sumWon([beforeMoveInWon, balancePaymentsWon], '계약 총액') - contractPaymentsWon - mortgageAppliedWon;
   const balanceCashAfterMortgageWon = balancePaymentsWon - mortgageAppliedWon;
   const requiredCashAtMoveInWon = sumWon([

@@ -6,6 +6,7 @@ import { BUNDANG_SALE_FINANCE_CATALOG_V1, BUNDANG_INTERIM_LOAN_ASSUMED_MOVE_IN_D
 import { BUNDANG_EXECUTED_CONTRACT_REVIEW_V1, BUNDANG_PAYMENT_ITEM_LABELS, contractSupplyBalanceBreakdown } from '../game/bundang-executed-contract';
 import { calculateBundangMoveInSettlement } from '../game/bundang-move-in-finance';
 import { buildBundangFinancingTimeline, type BundangFinancingTimelineRowV1 } from '../game/bundang-financing-timeline';
+import { buildBundangPaymentStageGroups, type BundangPaymentStageGroupV1 } from '../game/bundang-payment-stage-groups';
 import { calculateBundangMortgageSettlement, type BundangMortgageSettlementKind } from '../game/bundang-mortgage-settlement';
 import { countdownForDeadline, paymentDeadlineForDue, recommendedPaymentDue, seoulDateKey } from '../game/bundang-payment-timeline';
 import { clearSaleCalculatorContext, readSaleCalculatorLaunchContext, type SaleCalculatorContextV1 } from '../game/sale-calculator-context';
@@ -13,8 +14,7 @@ import { resolveSaleCalculatorOptionLines, type SaleCalculatorOptionLineV1 } fro
 import { hasOperatorAccess } from '../shared/operator-access';
 import { readSaleCalculatorPreferences, writeSaleCalculatorPreferences } from '../game/sale-calculator-preferences';
 
-type ScheduleRow = { label: string; due: string; dueKey: string; supply: number; balcony: number; systemAc: number; other: number };
-type FundedScheduleRow = ScheduleRow & { financing: BundangFinancingTimelineRowV1 };
+type FundedScheduleRow = BundangPaymentStageGroupV1;
 type TaxReliefMode = 'none' | 'first-home' | 'birth-care';
 type Quote = {
   baseSupply: number; adjustedSupply: number; baseBalcony: number; selectedOptions: number;
@@ -89,30 +89,6 @@ function reconcileChildren(current: Node, desired: Node): void {
   while (current.childNodes.length > desiredChildren.length) current.lastChild!.remove();
 }
 
-function mergeSchedules(schedules: ReturnType<typeof calculateBundangSaleFinance>['paymentSchedules'], plan: BundangPaymentPlanKind): ScheduleRow[] {
-  const merged = new Map<string, ScheduleRow>();
-  for (const schedule of schedules) for (const item of schedule.installments) {
-    // The 5,500만원 housing-city-fund figure is notice metadata here, not an
-    // actual installment. Do not render a misleading zero-value payment row.
-    if (item.id === 'fund' && item.amountWon === 0) continue;
-    const key = item.due;
-    const row = merged.get(key) ?? { label: item.label, due: item.due, dueKey: key, supply: 0, balcony: 0, systemAc: 0, other: 0 };
-    if (schedule.target === 'supply') row.supply += item.amountWon;
-    else if (schedule.target === 'balcony') row.balcony += item.amountWon;
-    else if (schedule.target === 'option-ii') row.systemAc += item.amountWon;
-    else row.other += item.amountWon;
-    merged.set(key, row);
-  }
-  const dueOrder = new Map([['계약 시', 1], ['옵션Ⅲ 계약 시', 1.5], ['2027-04-12', 2], ['2028-02-14', 3], ['별도 안내', 4], ['입주 시', 5]]);
-  const labelForDue = (due: string) => ({
-    '계약 시': '계약금', '옵션Ⅲ 계약 시': '기타 옵션 계약금', '2027-04-12': '중도금 1차', '별도 안내': '기타 옵션 중도금',
-    '2028-02-14': plan === 'pre-subscription' ? '중도금' : '중도금 2차', '입주 시': '잔금',
-  }[due] ?? '납부 일정');
-  return [...merged.values()]
-    .sort((left, right) => (dueOrder.get(left.due) ?? 99) - (dueOrder.get(right.due) ?? 99))
-    .map((row) => ({ ...row, label: labelForDue(row.due), due: paymentDeadlineForDue(row.due).dateLabel }));
-}
-
 const paymentStageId = (due: string) => `calculator-payment-stage-${paymentDeadlineForDue(due).id}`;
 
 class CalculatorApp {
@@ -137,7 +113,7 @@ class CalculatorApp {
   private appraisedPriceWon: number | null = null;
   private salePlanNotified = true;
   private restorePrintState: (() => void) | null = null;
-  private scheduleRows: ScheduleRow[] = [];
+  private scheduleRows: FundedScheduleRow[] = [];
   // undefined follows the calendar; null means the user deliberately folded all stages.
   private selectedPaymentDue: string | null | undefined;
   private countdownTimer: number | undefined;
@@ -202,11 +178,8 @@ class CalculatorApp {
       paymentSchedules: result.paymentSchedules, interimFunding: this.interimFunding,
       deferredInterestWon: moveIn.deferredInterestWon, mortgageAppliedWon: moveIn.mortgageAppliedWon,
     });
-    const financingByDue = new Map(financing.rows.map(row => [row.dueKey, row]));
-    const schedule = mergeSchedules(result.paymentSchedules, this.plan).map(row => {
-      const funding = financingByDue.get(row.dueKey);
-      if (!funding) throw new Error('납부 일정과 자금 흐름이 일치하지 않습니다.');
-      return { ...row, financing: funding };
+    const schedule = buildBundangPaymentStageGroups({
+      paymentSchedules: result.paymentSchedules, financingRows: financing.rows, paymentPlanKind: this.plan,
     });
     return {
       baseSupply: result.baseSupplyPriceWon, adjustedSupply: result.adjustedSupplyPriceWon, baseBalcony: result.baseBalconyExtensionWon,
@@ -260,7 +233,7 @@ class CalculatorApp {
       <main id="calculator-main" class="calculator-main">
         <nav class="calculator-mobile-jump" aria-label="자금 계획 바로가기"><button type="button" data-calculator-jump="calculator-payments">납부 일정</button><button type="button" data-calculator-jump="calculator-move-in-settlement">입주 정산</button><button type="button" data-calculator-jump="calculator-option-details">옵션</button><button type="button" data-calculator-jump="calculator-tax-details">취득세</button><button type="button" data-calculator-jump="calculator-interim-loan-details">중도금 대출</button><button type="button" data-calculator-jump="calculator-mortgage-details">전용 모기지</button></nav>
         <section class="calculator-hero"><div><p class="eyebrow">BUNFIRVIL / SALE FINANCE</p><h1>내 자금 계획</h1><p><b class="context-highlight">${this.unitType} · ${floorLabel(this.floor)} · ${planName}</b> 쇼케이스 선택을 기준으로 계산합니다. 동·호·닉네임은 계산 데이터에 저장하지 않습니다.</p><fieldset class="plan-switch hero-plan-switch" aria-label="청약 구분"><legend>청약 구분</legend><label><input id="calculator-plan-main" name="payment-plan" value="main-subscription" type="radio" ${this.plan === 'main-subscription' ? 'checked' : ''}><span>본청약(신규신청자)</span></label><label><input id="calculator-plan-pre" name="payment-plan" value="pre-subscription" type="radio" ${this.plan === 'pre-subscription' ? 'checked' : ''}><span>사전청약 당첨자</span></label></fieldset><p class="source-stamp">기준: 입주자모집공고 2026.05.29 · 자금 정보 검토 ${FINANCE_REVIEWED_AT} · 예정 일정은 변경될 수 있습니다.</p></div><aside class="restore-card"><span>선택 옵션 상태</span><strong>${(this.context!.optionIds ?? []).length}개 불러옴</strong><p>평형·층은 인증된 선택값으로 고정됩니다. 옵션·가구는 이 브라우저의 같은 평형에서 공유됩니다.</p><button id="calculator-return-options" data-action="return-to-showcase" type="button">옵션 다시 선택</button></aside></section>
-        <section class="quote-layout"><article class="calculator-card result-card"><div class="section-head result-head"><div><p class="eyebrow">CONTRACT</p><h2>최종 계약 예상 총액</h2></div><button id="calculator-print" data-action="print" class="print-button" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3M7 13h10v8H7z" /></svg><span>인쇄 · PDF 저장</span></button></div><div class="hero-total"><span>공급가 + 발코니 + 선택 옵션 − 마이너스 감액</span><strong>${money(quote.contractTotal)}</strong><p>세금·대출 추정을 펼쳐 선택하면 입주 예산에 별도로 반영됩니다.</p></div><dl class="contract-breakdown"><div><dt>조정 전 공급가</dt><dd>${money(quote.baseSupply)}</dd></div><div><dt>발코니 확장</dt><dd>${money(quote.baseBalcony)}</dd></div><div><dt>선택 옵션 합계</dt><dd>${money(quote.selectedOptions)}</dd></div><div class="discount"><dt>마이너스 감액</dt><dd>−${money(quote.minusDiscount)}</dd></div></dl><p class="fund-note">${quote.optionLines.some((option) => option.tier === 'option-iii') ? '선택한 기타 옵션Ⅲ은 아직 계약하지 않은 예정 금액이며 실제 계약 내용에 따라 달라집니다. ' : ''}공고표의 주택도시기금 55,000,000원은 실제 수령액으로 차감하지 않았습니다.</p><div class="payment-block" id="calculator-payments"><div class="subhead"><h3>납부 일정</h3><span>동일 회차·일자 기준 합산</span></div>${this.scheduleTable(quote.schedule)}<p class="schedule-note">추가선택품목 Ⅲ 중도금은 공고문상 납부일이 <b>별도 안내</b>로 명시되어 공급대금 중도금 1·2차에 합산하지 않습니다.</p></div>${this.moveInMarkup(quote)}${this.paymentGuideMarkup()}</article><aside class="calculator-side"><details id="calculator-option-details" class="calculator-card disclosure option-card"><summary><span class="summary-title">선택 옵션 <b>${this.minus ? 1 : quote.optionLines.length}개</b></span><span>펼치기</span></summary><div class="disclosure-body">${this.optionMarkup(quote)}</div></details>${this.taxDetails(quote)}${this.interimLoanDetails(quote)}${this.mortgageDetails(quote)}${this.costDetails(quote)}${this.resaleDetails(quote)}<article class="calculator-card source-card"><p class="eyebrow">NOTICE</p><h2>계산 전 확인</h2><p>금액·일정·감면·대출 실행은 공고문, 계약서, 관계기관 심사 결과가 우선합니다.</p><a href="../guides/?guide=sale-finance" class="text-link">입주·자금 계산 가이드 보기 →</a></article></aside></section>
+        <section class="quote-layout"><article class="calculator-card result-card"><div class="section-head result-head"><div><p class="eyebrow">CONTRACT</p><h2>최종 계약 예상 총액</h2></div><button id="calculator-print" data-action="print" class="print-button" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3M7 13h10v8H7z" /></svg><span>인쇄 · PDF 저장</span></button></div><div class="hero-total"><span>공급가 + 발코니 + 선택 옵션 − 마이너스 감액</span><strong>${money(quote.contractTotal)}</strong><p>세금·대출 추정을 펼쳐 선택하면 입주 예산에 별도로 반영됩니다.</p></div><dl class="contract-breakdown"><div><dt>조정 전 공급가</dt><dd>${money(quote.baseSupply)}</dd></div><div><dt>발코니 확장</dt><dd>${money(quote.baseBalcony)}</dd></div><div><dt>선택 옵션 합계</dt><dd>${money(quote.selectedOptions)}</dd></div><div class="discount"><dt>마이너스 감액</dt><dd>−${money(quote.minusDiscount)}</dd></div></dl><p class="fund-note">${quote.optionLines.some((option) => option.tier === 'option-iii') ? '선택한 추가선택품목 Ⅲ은 아직 계약하지 않은 예정 금액이며 실제 계약 내용에 따라 달라집니다. ' : ''}공고표의 주택도시기금 55,000,000원은 실제 수령액으로 차감하지 않았습니다.</p><div class="payment-block" id="calculator-payments"><div class="subhead"><h3>납부 일정</h3><span>같은 회차에서 확인 · 항목별 별도 납부</span></div>${this.scheduleTable(quote.schedule)}<p class="schedule-note">추가선택품목 Ⅰ·Ⅱ·Ⅲ 중도금은 주택 분양대금 대출과 별개로 <b>각 지정 계좌에 현금 납부</b>합니다. Ⅲ은 같은 중도금 회차에서 준비액을 확인하되 실제 납부일은 <b>별도 안내</b>입니다.</p></div>${this.moveInMarkup(quote)}${this.paymentGuideMarkup()}</article><aside class="calculator-side"><details id="calculator-option-details" class="calculator-card disclosure option-card"><summary><span class="summary-title">선택 옵션 <b>${this.minus ? 1 : quote.optionLines.length}개</b></span><span>펼치기</span></summary><div class="disclosure-body">${this.optionMarkup(quote)}</div></details>${this.taxDetails(quote)}${this.interimLoanDetails(quote)}${this.mortgageDetails(quote)}${this.costDetails(quote)}${this.resaleDetails(quote)}<article class="calculator-card source-card"><p class="eyebrow">NOTICE</p><h2>계산 전 확인</h2><p>금액·일정·감면·대출 실행은 공고문, 계약서, 관계기관 심사 결과가 우선합니다.</p><a href="../guides/?guide=sale-finance" class="text-link">입주·자금 계산 가이드 보기 →</a></article></aside></section>
       </main><footer class="calculator-footer"><span>BUNFIRVIL · STATIC FRONTEND</span><span>개인정보·인증값은 인쇄물과 계산 URL에 포함하지 않습니다.</span></footer></div>`;
     const template = document.createElement('template');
     template.innerHTML = markup;
@@ -289,17 +262,16 @@ class CalculatorApp {
   private scheduleTable(rows: FundedScheduleRow[]): string {
     if (!rows.length) return '<div class="empty-state">납부 일정 데이터를 불러오지 못했습니다.</div>';
     const cell = (value: number) => value ? money(value) : '—';
-    return `<p id="calculator-schedule-scroll-hint" class="schedule-scroll-hint">납부표는 좌우로 스크롤할 수 있습니다. 회차를 누르면 아래에서 해당 납부 상세를 확인할 수 있습니다.</p><div class="schedule-scroll" role="region" aria-label="회차별 납부 일정과 자금 흐름" aria-describedby="calculator-schedule-scroll-hint" tabindex="0"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니</th><th>시스템<br>에어컨</th><th>기타 옵션</th><th>회차 합계<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
+    return `<p id="calculator-schedule-scroll-hint" class="schedule-scroll-hint">납부표는 좌우로 스크롤할 수 있습니다. 회차를 누르면 아래에서 해당 납부 상세를 확인할 수 있습니다. 추가선택품목 Ⅲ은 같은 회차에서 준비할 금액으로 묶으며 실제 납부일은 별도 안내입니다.</p><div class="schedule-scroll" role="region" aria-label="회차별 납부 일정과 자금 흐름" aria-describedby="calculator-schedule-scroll-hint" tabindex="0"><table class="schedule-table"><thead><tr><th>회차</th><th>납부일 · D-day</th><th>주택</th><th>발코니<br><small>추가선택품목 Ⅰ</small></th><th>시스템<br>에어컨<br><small>추가선택품목 Ⅱ</small></th><th>추가선택품목 Ⅲ</th><th>회차 준비액<br>자금 흐름</th></tr></thead><tbody>${rows.map(row => {
       const total = row.supply + row.balcony + row.systemAc + row.other;
-      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      return `<tr data-phase="${phase}" data-finance-due="${escape(row.dueKey)}"><th scope="row"><button type="button" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><strong>${escape(row.label)}</strong><small>상세 보기 ↓</small></button></th><td class="schedule-date"><span>${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span></td><td>${cell(row.supply)}</td><td>${cell(row.balcony)}</td><td>${cell(row.systemAc)}</td><td>${cell(row.other)}</td><td class="total financing-cell"><span class="contract-due">해당 회차 예정액 <b>${money(total)}</b></span>${this.financingMarkup(row.financing)}</td></tr>`;
+      const phase = row.dueKey === '계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      return `<tr data-phase="${phase}" data-finance-due="${escape(row.dueKey)}"><th scope="row"><button type="button" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><strong>${escape(row.label)}</strong><small>상세 보기 ↓</small></button></th><td class="schedule-date"><span>${escape(row.due)}</span>${row.hasSeparateOptionDate ? '<small class="stage-date-scope">주택·Ⅰ·Ⅱ 기준 · Ⅲ은 별도 안내</small>' : ''}<span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span></td><td>${cell(row.supply)}</td><td>${cell(row.balcony)}</td><td>${cell(row.systemAc)}</td><td>${cell(row.other)}${this.optionIiiTiming(row)}</td><td class="total financing-cell"><span class="contract-due">해당 회차 준비액 <b>${money(total)}</b></span>${this.financingMarkup(row.financing)}</td></tr>`;
     }).join('')}</tbody></table></div>${this.scheduleCards(rows)}${this.paymentStageDetails(rows)}<p class="financing-note">집단대출 가정은 <b>중도금 납부일에 대출 실행</b>, <b>잔금·입주 시 원금과 후불이자 상환</b>으로 표시합니다. 대출 유입은 현금 부담에서 차감하며 계약 금액 자체를 줄이지 않습니다. 세금·부대비용은 아래 입주 정산에 별도로 포함됩니다.</p>`;
   }
 
   private contractAccountSummary(rows: FundedScheduleRow[]): string {
     if (!rows.length) return '<div class="empty-state">납부 일정 데이터를 불러오지 못했습니다.</div>';
     const mainContract = rows.find((row) => row.dueKey === '계약 시');
-    const optionContract = rows.find((row) => row.dueKey === '옵션Ⅲ 계약 시');
     const rateLabel = this.plan === 'main-subscription' ? '10%' : '5%';
     const accountLines = [
       ['calculator-account-supply', `${BUNDANG_PAYMENT_ITEM_LABELS.supply} 계좌`, mainContract?.supply ?? 0],
@@ -307,17 +279,17 @@ class CalculatorApp {
       ['calculator-account-system-ac', `${BUNDANG_PAYMENT_ITEM_LABELS['option-ii']} 계좌`, mainContract?.systemAc ?? 0],
     ] as const;
     const contractTotal = accountLines.reduce((sum, [, , amount]) => sum + amount, 0);
-    const futureOptionContract = optionContract?.other ?? 0;
-    return `<section class="account-contract-summary" aria-labelledby="account-contract-heading"><div class="account-contract-head"><h4 id="account-contract-heading">이번 계약금 · 세 계좌</h4><span>${rateLabel} 기준 · 예상</span></div><div class="account-contract-grid">${accountLines.map(([id, label, amount]) => `<div id="${id}"><span>${label}</span><b>${money(amount)}</b>${id === 'calculator-account-system-ac' && !amount ? '<small>미선택</small>' : ''}</div>`).join('')}</div><p class="account-contract-total">세 계좌 합계 <b>${money(contractTotal)}</b></p><div id="calculator-future-option-contract" class="future-option-contract"><div><span>추후 기타 옵션Ⅲ 계약금 <small>별도 계약 · 일정 미정${!futureOptionContract ? ' · 선택 없음' : ''}</small></span><b>${money(futureOptionContract)}</b></div><p>선택한 기타 옵션에 대한 ${rateLabel} 계약금입니다. 실제 납부 일정과 계좌는 추후 안내를 확인하세요.</p></div><p class="account-contract-total account-contract-overall">현재·추후 계약금 예상 합계 <b>${money(contractTotal + futureOptionContract)}</b></p><p>주택·발코니·시스템에어컨은 각각 안내받은 KB 세대별 가상계좌를 확인하세요. 계좌번호는 이 화면에 표시하지 않으며 실제 납부 여부는 확인하지 않습니다. 기타 옵션 계약은 별도로 진행됩니다.</p></section>`;
+    const futureOptionContract = mainContract?.other ?? 0;
+    return `<section class="account-contract-summary" aria-labelledby="account-contract-heading"><div class="account-contract-head"><h4 id="account-contract-heading">이번 계약금 · 세 계좌</h4><span>${rateLabel} 기준 · 예상</span></div><div class="account-contract-grid">${accountLines.map(([id, label, amount]) => `<div id="${id}"><span>${label}</span><b>${money(amount)}</b>${id === 'calculator-account-system-ac' && !amount ? '<small>미선택</small>' : ''}</div>`).join('')}</div><p class="account-contract-total">세 계좌 합계 <b>${money(contractTotal)}</b></p><div id="calculator-future-option-contract" class="future-option-contract"><div><span>추후 추가선택품목 Ⅲ 계약금 <small>별도 계약 · 일정 미정${!futureOptionContract ? ' · 선택 없음' : ''}</small></span><b>${money(futureOptionContract)}</b></div><p>선택한 추가선택품목 Ⅲ에 대한 ${rateLabel} 계약금입니다. 실제 납부 일정과 계좌는 추후 안내를 확인하세요.</p></div><p class="account-contract-total account-contract-overall">현재·추후 계약금 예상 합계 <b>${money(contractTotal + futureOptionContract)}</b></p><p>주택·발코니·시스템에어컨은 각각 안내받은 KB 세대별 가상계좌를 확인하세요. 계좌번호는 이 화면에 표시하지 않으며 실제 납부 여부는 확인하지 않습니다. 추가선택품목 Ⅲ 계약은 별도로 진행됩니다.</p></section>`;
   }
 
   private paymentStageDetails(rows: FundedScheduleRow[]): string {
-    return `<section id="calculator-payment-details" class="payment-stage-details" aria-labelledby="payment-stage-heading"><div class="subhead"><h4 id="payment-stage-heading">회차별 납부 상세</h4><span>한 회차씩 펼쳐보기</span></div><p class="payment-stage-intro">진행 중이거나 다가오는 회차를 먼저 펼칩니다. 다른 회차를 선택하면 기존 상세는 접힙니다.</p><p id="calculator-contract-review" class="payment-stage-intro">${FINANCE_REVIEWED_AT} 아파트·추가선택품목Ⅰ·Ⅱ 계약서 대조: 신규 본청약 55B의 공급가·발코니·선택한 에어컨 가격과 중도금 날짜·비율이 기존 계산과 일치합니다. 사전청약·다른 평형·다른 에어컨 구성·기타 옵션Ⅲ은 기존 공고 기준을 유지합니다. 개인 계약서와 계좌번호는 공개하지 않습니다.</p>${rows.map(row => {
-      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      const body = row.dueKey === '계약 시' ? `<section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.28 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>${this.contractAccountSummary(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.28 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 기타 옵션Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`
+    return `<section id="calculator-payment-details" class="payment-stage-details" aria-labelledby="payment-stage-heading"><div class="subhead"><h4 id="payment-stage-heading">회차별 납부 상세</h4><span>한 회차씩 펼쳐보기</span></div><p class="payment-stage-intro">진행 중이거나 다가오는 회차를 먼저 펼칩니다. 다른 회차를 선택하면 기존 상세는 접힙니다.</p><p id="calculator-contract-review" class="payment-stage-intro">${FINANCE_REVIEWED_AT} 아파트·추가선택품목Ⅰ·Ⅱ 계약서 대조: 신규 본청약 55B의 공급가·발코니·선택한 에어컨 가격과 중도금 날짜·비율이 기존 계산과 일치합니다. 사전청약·다른 평형·다른 에어컨 구성·추가선택품목 Ⅲ은 기존 공고 기준을 유지합니다. 개인 계약서와 계좌번호는 공개하지 않습니다.</p>${rows.map(row => {
+      const phase = row.dueKey === '계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      const body = row.dueKey === '계약 시' ? `<section class="contract-booking-note" aria-label="계약 사전 예약 안내"><b>계약 방문 전 사전 예약 필수 · 당일 예약 불가</b><span>예약 10.30 10:00 ~ 11.12 23:59 · 계약 11.04~11.13 10:00~17:00</span><small>2026.10.28 공식 안내 기준이며 방문 전 운영시간을 확인하세요. <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">계약 안내문 ↗</a> · <a href="https://www.elife.co.kr/MPosr_list01.action?commonMap.CD_BIZ_LND=210114" target="_blank" rel="noreferrer">공식 방문 예약 ↗</a></small></section>${this.contractAccountSummary(rows)}<div class="contract-stamp-note"><strong>주택 계약 인지세 · 시점별 확인</strong><p>계약 전에 종이문서용 전자수입인지 <b>15만원을 선납</b>하고, 사업주체 부담분 <b>7만 5천원은 잔금에서 차감</b>합니다. 납부 후 사본을 계약 시 제출하세요. <a href="${STAMP_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.27 인지세 안내 ↗</a></p><p><b>위 납부표와 아래 예상 현금·계약 총액에는 선납액과 잔금 차감액이 모두 미반영</b>입니다. 계약 전 15만원을 별도로 준비하고 잔금 시 7만 5천원 차감을 확인하세요. 이미 납부한 금액을 입주 부대비용에 중복 입력하지 마세요. 발코니·옵션 계약 인지세는 별도 확인이 필요합니다.</p></div><p class="deadline-note"><b>사전 방문 예약 필수 · 당일 예약 불가</b>: 2026년 10월 30일 10:00부터 11월 12일 23:59까지 홈페이지에서 예약합니다. 주택 계약은 11월 4~13일 10:00~17:00으로 <a href="${CONTRACT_NOTICE_URL}" target="_blank" rel="noreferrer">2026.10.28 계약 안내문</a>에 기재되어 있습니다. 기존 정정공고와 운영시간이 다르므로 방문 전 계약처에 다시 확인하세요. <b>분양대금·발코니·시스템에어컨은 세대별 별도 가상계좌</b>이며 입금 전 각 계좌를 확인하세요. 추가선택품목 Ⅲ 계약금은 별도 계약 시 납부하며 일정은 별도 안내입니다. 입주는 <b>2029년 2월 예정</b>이며 확정일이 아닙니다. 경과 표시는 납부 완료를 뜻하지 않습니다.</p>`
         : row.label.includes('중도금') ? this.interimAccountSummary(row)
-        : `<dl class="payment-stage-amounts">${([['주택', row.supply], ['발코니', row.balcony], ['시스템에어컨', row.systemAc], ['기타 옵션', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}</dl>${row.dueKey === '옵션Ⅲ 계약 시' ? '<p class="stage-note">기타 옵션Ⅲ 계약금은 주택·발코니·시스템에어컨의 이번 계약금과 별개입니다. 실제 계약 일정과 항목별 지정 계좌는 추후 안내를 확인하고 직접 납부할 자금을 준비하세요.</p>' : '<p class="stage-note">잔금·입주 시에는 기존 중도금 대출 원금과 예상 후불이자를 정산하고 승인된 전용 모기지를 충당합니다. 세금·미납 부대비용은 아래 입주 정산에서 별도로 확인하세요. 2029년 2월은 예정월이며 확정 납부일이 아닙니다.</p><button type="button" class="text-link" data-calculator-jump="calculator-move-in-settlement">입주 정산·세부 자금 계획 보기 →</button>'}`;
-      return `<details id="${paymentStageId(row.dueKey)}" class="payment-stage" name="calculator-payment-stage" data-phase="${phase}" data-payment-stage-due="${escape(row.dueKey)}"><summary><span class="payment-stage-title"><strong>${escape(row.label)}</strong><span data-payment-stage-recommendation hidden></span></span><span class="payment-stage-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="payment-stage-body"><div class="payment-stage-timing schedule-countdown" data-payment-due="${escape(row.dueKey)}"></div>${body}${row.dueKey === '입주 시' ? this.supplyContractBalanceMarkup(row.supply) : ''}${phase !== 'contract' ? this.contractPaymentTerms(row) : ''}<div class="payment-stage-funding"><h5>이 회차의 자금 계획</h5>${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-stage-flow=')}</div></div></details>`;
+        : `<dl class="payment-stage-amounts">${([['주택', row.supply], ['추가선택품목 Ⅰ · 발코니', row.balcony], ['추가선택품목 Ⅱ · 시스템에어컨', row.systemAc], ['추가선택품목 Ⅲ', row.other]] as const).map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount ? money(amount) : '—'}</dd></div>`).join('')}</dl><p class="stage-note">잔금·입주 시에는 기존 중도금 대출 원금과 예상 후불이자를 정산하고 승인된 전용 모기지를 충당합니다. 추가선택품목 Ⅱ·Ⅲ 잔금은 현금으로 별도 납부합니다. 세금·미납 부대비용은 아래 입주 정산에서 별도로 확인하세요. 2029년 2월은 예정월이며 확정 납부일이 아닙니다.</p><button type="button" class="text-link" data-calculator-jump="calculator-move-in-settlement">입주 정산·세부 자금 계획 보기 →</button>`;
+      return `<details id="${paymentStageId(row.dueKey)}" class="payment-stage" name="calculator-payment-stage" data-phase="${phase}" data-payment-stage-due="${escape(row.dueKey)}"><summary><span class="payment-stage-title"><strong>${escape(row.label)}</strong><span data-payment-stage-recommendation hidden></span></span><span class="payment-stage-date">${escape(row.due)}${row.hasSeparateOptionDate ? ' · Ⅲ 실제 납부일 별도 안내' : ''}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">펼치기</span></summary><div class="payment-stage-body"><div class="payment-stage-timing schedule-countdown" data-payment-due="${escape(row.dueKey)}"></div>${body}${row.dueKey === '입주 시' ? this.supplyContractBalanceMarkup(row.supply) : ''}${phase !== 'contract' ? this.contractPaymentTerms(row) : ''}<div class="payment-stage-funding"><h5>이 회차의 자금 계획</h5>${row.hasSeparateOptionDate ? '<p class="stage-note">추가선택품목 Ⅲ을 포함한 준비액입니다. 같은 날짜에 납부한다는 의미는 아니며, Ⅲ은 별도 계약·납부 고지에 따라 현금으로 납부하세요.</p>' : ''}${this.financingMarkup(row.financing).replaceAll('data-flow=', 'data-stage-flow=')}</div></div></details>`;
     }).join('')}</section>`;
   }
 
@@ -327,32 +299,32 @@ class CalculatorApp {
   }
 
   private contractPaymentTerms(row: FundedScheduleRow): string {
-    if (row.dueKey === '별도 안내') return '';
     const hasOptions = row.balcony > 0 || row.systemAc > 0;
     return `<p class="stage-note contract-payment-terms">아파트·추가선택품목Ⅰ·Ⅱ 계약서상 중도금·잔금 납부일이 <b>금융기관 휴무일이면 다음 영업일</b>이 납부일입니다. 실제 납부 고지와 변경 안내를 확인하세요.${hasOptions ? ' 발코니·시스템에어컨 계약서의 선납할인율은 연 5%, 연체이율은 연 7.5%이며 변경될 수 있습니다. 이 할인·연체료는 현재 계산에 자동 반영하지 않습니다. 중도금 대출 이자 추정 금리와는 별개입니다.' : ''}</p>`;
   }
 
   private interimAccountSummary(row: FundedScheduleRow): string {
-    const installments = [row];
     const headingId = `interim-account-heading-${paymentDeadlineForDue(row.dueKey).id}`;
-    return `<section class="interim-account-summary" aria-labelledby="${headingId}"><div class="account-contract-head"><h4 id="${headingId}">${escape(row.label)} · 항목별 납부</h4><span>공고 기준 · 계약서 확인</span></div><p>회차별 금액은 각 항목의 지정 계좌에 따로 납부합니다. 집단대출은 주택 공급대금만 가정하며, 발코니·시스템에어컨·기타 옵션은 직접 납부할 자금으로 계산합니다. 대출 실행 및 계좌별 실제 납부 방법은 은행과 계약 안내를 확인하세요.</p>${installments.map((row) => {
-      const optionOnly = row.label === '기타 옵션 중도금';
-      const accounts = optionOnly
-        ? [['other', '기타 옵션Ⅲ 계좌', row.other, '별도 계약 · 자납']] as const
-        : [
-          ['supply', `${BUNDANG_PAYMENT_ITEM_LABELS.supply} 계좌`, row.supply, this.interimFunding === 'loan' ? '주택 집단대출 가정' : '자납 가정'],
-          ['balcony', `${BUNDANG_PAYMENT_ITEM_LABELS.balcony} 계좌`, row.balcony, '자납'],
-          ['system-ac', `${BUNDANG_PAYMENT_ITEM_LABELS['option-ii']} 계좌`, row.systemAc, '자납'],
-        ] as const;
-      return `<div class="interim-account-round" data-interim-account-due="${escape(row.dueKey)}"><div class="account-contract-head"><h5>${escape(row.label)}</h5><span>${escape(row.due)} · ${optionOnly ? '납부일 미정' : '공고 기준'}</span></div><div class="account-contract-grid">${accounts.map(([id, name, amount, funding]) => `<div data-interim-account="${id}"><span>${name}</span><b>${money(amount)}</b><small>${amount ? funding : '해당 회차 납부 없음'}</small></div>`).join('')}</div><p class="account-contract-total">해당 회차 예상 납부액 <b>${money(row.supply + row.balcony + row.systemAc + row.other)}</b></p><p>예상 본인 현금 <b>${money(row.financing.cashDueWon)}</b>${row.financing.groupLoanDrawWon ? ` · 주택 집단대출 가정 ${money(row.financing.groupLoanDrawWon)}` : ''}</p></div>`;
-    }).join('')}<p>납부일과 가상계좌는 실제 계약서·별도 안내가 우선하며, 금액을 합산하거나 다른 항목 계좌로 교차 입금하지 마세요. 옵션Ⅲ의 중도금은 별도 안내 1회로 표시합니다.</p></section>`;
+    const accounts = [
+      ['supply', `${BUNDANG_PAYMENT_ITEM_LABELS.supply} 계좌`, row.supply, this.interimFunding === 'loan' ? '주택 집단대출 가정' : '자납 가정'],
+      ['balcony', `${BUNDANG_PAYMENT_ITEM_LABELS.balcony} 계좌`, row.balcony, '현금 자납'],
+      ['system-ac', `${BUNDANG_PAYMENT_ITEM_LABELS['option-ii']} 계좌`, row.systemAc, '현금 자납'],
+      ['other', `${BUNDANG_PAYMENT_ITEM_LABELS['option-iii']} 계좌`, row.other, '현금 자납 · 실제 납부일 별도 안내'],
+    ] as const;
+    const iiiNote = row.other ? `<p class="option-iii-stage-note"><b>추가선택품목 Ⅲ 중도금 · 현금 자납</b>${this.optionIiiTiming(row)}중도금 기간에 준비할 금액으로 함께 표시합니다. ${this.plan === 'main-subscription' ? '본청약 30% 전액을 1차 준비액에 한 번만 포함했으며 1·2차로 임의 분할하지 않았습니다.' : '사전청약 20%를 이 회차 준비액에 포함했습니다.'} 실제 납부일·횟수는 별도 계약 및 고지를 확인하세요.</p>` : this.options.some(option => option.tier === 'option-iii') ? '<p class="stage-note">추가선택품목 Ⅲ 중도금 준비액은 앞선 중도금 회차에 한 번만 포함했습니다. 이 회차에 다시 합산하지 않으며 실제 납부일·횟수는 별도 고지로 확인하세요.</p>' : '';
+    return `<section class="interim-account-summary" aria-labelledby="${headingId}"><div class="account-contract-head"><h4 id="${headingId}">${escape(row.label)} · 항목별 납부</h4><span>공고 기준 · 계약서 확인</span></div><p><b>주택 분양대금만 집단대출을 가정</b>하며, 추가선택품목 Ⅰ·Ⅱ·Ⅲ은 각각의 지정 계좌에 <b>현금으로 나누어 송금</b>합니다. 대출 실행 및 계좌별 실제 납부 방법은 은행과 계약 안내를 확인하세요.</p><div class="interim-account-round" data-interim-account-due="${escape(row.dueKey)}"><div class="account-contract-head"><h5>${escape(row.label)}</h5><span>${escape(row.due)} · 주택·Ⅰ·Ⅱ 기준</span></div><div class="account-contract-grid interim-account-grid">${accounts.map(([id, name, amount, funding]) => `<div data-interim-account="${id}"><span>${name}</span><b>${money(amount)}</b><small>${amount ? funding : (id === 'other' ? '이 회차 배정 없음' : '해당 회차 납부 없음')}</small></div>`).join('')}</div>${iiiNote}<p class="account-contract-total">해당 회차 준비액 <b>${money(row.supply + row.balcony + row.systemAc + row.other)}</b></p><p>예상 본인 현금 <b>${money(row.financing.cashDueWon)}</b>${row.financing.groupLoanDrawWon ? ` · 주택 집단대출 가정 ${money(row.financing.groupLoanDrawWon)}` : ''}</p></div><p>같은 회차에서 확인하되 계약·계좌는 별개입니다. 실제 납부 고지에 따라 각각 송금하고, 금액을 합산하거나 다른 항목 계좌로 교차 입금하지 마세요.</p></section>`;
   }
 
+  private optionIiiTiming(row: FundedScheduleRow): string {
+    if (!row.other || !row.hasSeparateOptionDate) return '';
+    const rate = row.optionIiiPayments.map(payment => `${payment.rateBps / 100}%`).join(' + ');
+    return `<small class="option-iii-timing" data-option-iii-timing>${escape(rate)} · ${row.dueKey === '계약 시' ? '별도 계약' : '현금 자납'}<br>실제 납부일 미정 · 별도 안내</small>`;
+  }
 
   private scheduleCards(rows: FundedScheduleRow[]): string {
     return `<div class="schedule-cards" aria-label="회차별 납부 요약">${rows.map(row => {
-      const phase = row.dueKey === '계약 시' || row.dueKey === '옵션Ⅲ 계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
-      return `<button type="button" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><span class="installment-heading"><b>${escape(row.label)}</b><span>내 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span><span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">상세 보기</span></button>`;
+      const phase = row.dueKey === '계약 시' ? 'contract' : row.label === '잔금' ? 'balance' : 'interim';
+      return `<button type="button" class="installment-card" data-phase="${phase}" data-mobile-finance-due="${escape(row.dueKey)}" data-payment-stage-target="${escape(row.dueKey)}" aria-controls="${paymentStageId(row.dueKey)}"><span class="installment-heading"><b>${escape(row.label)}</b><span>준비 현금 <strong>${money(row.financing.cashDueWon)}</strong></span></span><span class="installment-date">${escape(row.due)}</span>${this.optionIiiTiming(row)}<span class="schedule-countdown" data-payment-due="${escape(row.dueKey)}"></span><span class="disclosure-action">상세 보기</span></button>`;
     }).join('')}</div>`;
   }
 
@@ -412,7 +384,7 @@ class CalculatorApp {
       block.querySelector('.subhead')?.after(summary);
     }
     const next = upcoming ? countdownForDeadline(paymentDeadlineForDue(upcoming.dueKey), now) : null;
-    summary.innerHTML = `<div><span>다가오는 주택 납부 일정</span><strong>${upcoming ? escape(upcoming.label) : '확정된 다음 납부일 없음'}</strong><small>${upcoming ? escape(upcoming.due) : '입주·기타 옵션은 별도 확정 안내를 확인하세요.'}</small></div>${next ? `<b class="deadline-next" data-state="${next.state}">${escape(next.text)}</b>` : ''}<p id="calculator-deadline-today">D-day 기준 <time datetime="${today}">${today.replaceAll('-', '.')}</time> · 한국시간(KST)<small>입주 예정월은 2월 1일 기준 참고값 · 실제 잔금일 미정</small></p>`;
+    summary.innerHTML = `<div><span>다가오는 주택 납부 일정</span><strong>${upcoming ? escape(upcoming.label) : '확정된 다음 납부일 없음'}</strong><small>${upcoming ? escape(upcoming.due) : '입주·추가선택품목 Ⅲ은 별도 확정 안내를 확인하세요.'}</small></div>${next ? `<b class="deadline-next" data-state="${next.state}">${escape(next.text)}</b>` : ''}<p id="calculator-deadline-today">D-day 기준 <time datetime="${today}">${today.replaceAll('-', '.')}</time> · 한국시간(KST)<small>입주 예정월은 2월 1일 기준 참고값 · 실제 잔금일 미정</small></p>`;
     this.syncPaymentStageSelection(now);
   }
 
@@ -434,7 +406,7 @@ class CalculatorApp {
     quote.optionLines.forEach((line) => groups.set(line.category, [...(groups.get(line.category) ?? []), line]));
     return [...groups].map(([category, lines]) => {
       const subtotal = lines.reduce((sum, line) => sum + line.priceWon, 0);
-      return `<section class="option-group"><h3>${escape(category)}</h3><ul class="option-list">${lines.map((line) => `<li data-option-tier="${line.tier}"><span><b>${escape(line.priceVariantLabel ? `${line.label} · ${line.priceVariantLabel}` : line.label)}</b><small>${line.tier === 'option-ii' ? '시스템에어컨' : '기타 옵션'}</small></span><strong>${money(line.priceWon)}</strong></li>`).join('')}</ul><div class="option-subtotal"><span>${escape(category)} 소계</span><b>${money(subtotal)}</b></div></section>`;
+      return `<section class="option-group"><h3>${escape(category)}</h3><ul class="option-list">${lines.map((line) => `<li data-option-tier="${line.tier}"><span><b>${escape(line.priceVariantLabel ? `${line.label} · ${line.priceVariantLabel}` : line.label)}</b><small>${line.tier === 'option-ii' ? '시스템에어컨' : '추가선택품목 Ⅲ'}</small></span><strong>${money(line.priceWon)}</strong></li>`).join('')}</ul><div class="option-subtotal"><span>${escape(category)} 소계</span><b>${money(subtotal)}</b></div></section>`;
     }).join('');
   }
 
@@ -451,8 +423,8 @@ class CalculatorApp {
     const balconyInterim = interimRows.reduce((total, row) => total + row.balcony, 0);
     const systemAcInterim = interimRows.reduce((total, row) => total + row.systemAc, 0);
     const otherInterim = interimRows.reduce((total, row) => total + row.other, 0);
-    const result = this.interimFunding === 'loan' ? `<dl><dt>은행 집단대출 원금</dt><dd>${money(details.totalPrincipalWon)}</dd><dt class="calculation-total-label">입주 시 납부 예상 이자</dt><dd class="calculation-total">${money(details.totalInterestWon)}</dd><dt>발코니 중도금 · 자납</dt><dd>${money(balconyInterim)}</dd><dt>시스템에어컨 중도금 · 자납</dt><dd>${money(systemAcInterim)}</dd><dt>기타 옵션 중도금 · 자납</dt><dd>${money(otherInterim)}</dd><dt>계산상 입주 기준일</dt><dd>${details.assumedMoveInDate}</dd></dl><ul class="tranche-list">${details.tranches.map((tranche, index) => `<li><span>${this.plan === 'main-subscription' ? `${index + 1}차 · ` : ''}${tranche.executionDate}<small>${tranche.days}일 후불</small></span><b>${money(tranche.principalWon)}<small>예상 이자 ${money(tranche.interestWon)}</small></b></li>`).join('')}</ul>` : '<p class="muted-copy">전액 자납 가정에서는 중도금 대출 원금과 후불이자를 입주 정산에 넣지 않습니다.</p>';
-    return `<details id="calculator-interim-loan-details" class="calculator-card disclosure"><summary>중도금 대출 이자 추정 <span>펼치기</span></summary><div class="disclosure-body"><div class="loan-scope"><span><small>집단대출 추정 대상</small><b>주택 공급대금 중도금 20%</b></span><span><small>별도 현금납부 예상</small><b>${money(selfFunded)}</b></span></div><label class="enable-row"><input id="calculator-interim-loan-enabled" type="checkbox" ${this.interimFunding === 'loan' ? 'checked' : ''}> 집단대출 가정 · 후불이자 반영</label><label class="date-field">입주 정산 기준일 · 계획값<input id="calculator-move-in-date" type="date" min="2028-02-15" max="2099-12-31" value="${this.assumedMoveInDate}"></label>${this.interimRateControl('calculator-interim-rate')}${result}<p class="legal-copy">공고문은 중도금 융자알선을 <b>전체 공급대금의 20% 범위</b>로 명시합니다. 발코니·시스템에어컨·기타 옵션에는 계약상 중도금 회차가 있지만 별도 계약·계좌이며, 은행 집단대출 포함 근거가 없어 자납으로 분리했습니다. 단지 금융기관·금리는 미정이며 4.0%는 현재 금리를 뜻하지 않는 계획값입니다. 기준일 기본값은 2029-02-01이며 입주지정기간 최초일·은행 실제 실행일이 확정되면 다시 확인하세요. <b>실행 예정분을 포함한 전체 예상 후불이자</b>로 현재 발생한 이자가 아닙니다. 실제 이자는 윤년·실행일·일수 산정에 따라 달라질 수 있습니다. 자납을 선택하면 원금 상환과 후불이자는 입주 정산에서 제외됩니다.</p></div></details>`;
+    const result = this.interimFunding === 'loan' ? `<dl><dt>은행 집단대출 원금</dt><dd>${money(details.totalPrincipalWon)}</dd><dt class="calculation-total-label">입주 시 납부 예상 이자</dt><dd class="calculation-total">${money(details.totalInterestWon)}</dd><dt>발코니 중도금 · 자납</dt><dd>${money(balconyInterim)}</dd><dt>시스템에어컨 중도금 · 자납</dt><dd>${money(systemAcInterim)}</dd><dt>추가선택품목 Ⅲ 중도금 · 자납</dt><dd>${money(otherInterim)}</dd><dt>계산상 입주 기준일</dt><dd>${details.assumedMoveInDate}</dd></dl><ul class="tranche-list">${details.tranches.map((tranche, index) => `<li><span>${this.plan === 'main-subscription' ? `${index + 1}차 · ` : ''}${tranche.executionDate}<small>${tranche.days}일 후불</small></span><b>${money(tranche.principalWon)}<small>예상 이자 ${money(tranche.interestWon)}</small></b></li>`).join('')}</ul>` : '<p class="muted-copy">전액 자납 가정에서는 중도금 대출 원금과 후불이자를 입주 정산에 넣지 않습니다.</p>';
+    return `<details id="calculator-interim-loan-details" class="calculator-card disclosure"><summary>중도금 대출 이자 추정 <span>펼치기</span></summary><div class="disclosure-body"><div class="loan-scope"><span><small>집단대출 추정 대상</small><b>주택 공급대금 중도금 20%</b></span><span><small>별도 현금납부 예상</small><b>${money(selfFunded)}</b></span></div><label class="enable-row"><input id="calculator-interim-loan-enabled" type="checkbox" ${this.interimFunding === 'loan' ? 'checked' : ''}> 집단대출 가정 · 후불이자 반영</label><label class="date-field">입주 정산 기준일 · 계획값<input id="calculator-move-in-date" type="date" min="2028-02-15" max="2099-12-31" value="${this.assumedMoveInDate}"></label>${this.interimRateControl('calculator-interim-rate')}${result}<p class="legal-copy">공고문은 중도금 융자알선을 <b>전체 공급대금의 20% 범위</b>로 명시합니다. 발코니·시스템에어컨·추가선택품목 Ⅲ에는 계약상 중도금 회차가 있지만 별도 계약·계좌이며, 은행 집단대출 포함 근거가 없어 자납으로 분리했습니다. 단지 금융기관·금리는 미정이며 4.0%는 현재 금리를 뜻하지 않는 계획값입니다. 기준일 기본값은 2029-02-01이며 입주지정기간 최초일·은행 실제 실행일이 확정되면 다시 확인하세요. <b>실행 예정분을 포함한 전체 예상 후불이자</b>로 현재 발생한 이자가 아닙니다. 실제 이자는 윤년·실행일·일수 산정에 따라 달라질 수 있습니다. 자납을 선택하면 원금 상환과 후불이자는 입주 정산에서 제외됩니다.</p></div></details>`;
   }
 
   private interimRateControl(prefix: string): string {
@@ -471,7 +443,7 @@ class CalculatorApp {
         <label>정산 시 대출 유지기간<select id="calculator-settlement-period" ${this.mortgageEnabled ? '' : 'disabled'}>${Array.from({ length: this.term - 2 }, (_, i) => i + 3).map(year => `<option value="${year}" ${year === this.holdingYears ? 'selected' : ''}>${year}년</option>`).join('')}</select></label>
       </div>
       ${result ? `<dl><dt>대출 기준액 · 공급가+발코니</dt><dd>${money(result.loanBase)}</dd><dt>선택 LTV / 정산용 실효 LTV</dt><dd>${result.ltvPercent}% / ${result.settlement.effectiveLtvPercent}%</dd><dt>공고문 기준 연 이율</dt><dd>${result.annualRatePercent}% 고정</dd><dt>대출 가능 상한</dt><dd>${money(result.eligibleMaximum)}</dd><dt>대출 원금</dt><dd>${money(result.principal)}</dd><dt>입주 시 필요 현금 · 정산표 기준</dt><dd>${money(result.moveInCash)}</dd><dt>1년 거치 월 이자</dt><dd>${money(result.graceInterest)}</dd><dt>거치 후 ${result.repaymentMonths / 12}년 월 원리금</dt><dd>${money(result.repayment)}</dd><dt>향후 매각차익 기금 정산비율</dt><dd>${result.settlement.fundSharePercent}%</dd></dl>` : '<p class="muted-copy">활성화 시 단지 공고 기준 연 1.3%, 1년 거치 후 원리금균등상환을 추정합니다.</p>'}
-      <p class="legal-copy">기준액은 <b>감액 후 공급가 + 발코니 확장비</b>이며 시스템에어컨·기타 옵션·세금은 제외합니다. 선택 LTV를 합산 기준액에 한 번 적용하며 4억원 한도 중 작은 금액을 추정합니다. 이는 계좌별 대출이 두 건이라는 뜻이 아니며, 실제 은행의 주택·발코니 계좌별 대출금 배분은 확인이 필요합니다. 4억원 상한 적용 시 실제 LTV를 절사한 뒤 공식 표를 보간합니다. 자녀 수는 분양계약일부터 상환·만기까지 해당 주택에서 동거하고 가족관계등록부에 등재되거나 등재됐던 만19세 이하 자녀로 출산·입양·사망 포함, 파양 제외입니다. 이 단지는 공고의 연 1.3%를 기준으로 하며 실행 시 기금 조건·심사가 우선합니다. <a href="${SALE_NOTICE_URL}" target="_blank" rel="noreferrer">이 단지 정정공고 ↗</a> · <a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 상품 참고 ↗</a></p>
+      <p class="legal-copy">기준액은 <b>감액 후 공급가 + 발코니 확장비</b>이며 시스템에어컨·추가선택품목 Ⅲ·세금은 제외합니다. 선택 LTV를 합산 기준액에 한 번 적용하며 4억원 한도 중 작은 금액을 추정합니다. 이는 계좌별 대출이 두 건이라는 뜻이 아니며, 실제 은행의 주택·발코니 계좌별 대출금 배분은 확인이 필요합니다. 4억원 상한 적용 시 실제 LTV를 절사한 뒤 공식 표를 보간합니다. 자녀 수는 분양계약일부터 상환·만기까지 해당 주택에서 동거하고 가족관계등록부에 등재되거나 등재됐던 만19세 이하 자녀로 출산·입양·사망 포함, 파양 제외입니다. 이 단지는 공고의 연 1.3%를 기준으로 하며 실행 시 기금 조건·심사가 우선합니다. <a href="${SALE_NOTICE_URL}" target="_blank" rel="noreferrer">이 단지 정정공고 ↗</a> · <a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 상품 참고 ↗</a></p>
     </div></details>`;
   }
 
@@ -485,7 +457,7 @@ class CalculatorApp {
         <div class="cash-plan-contract"><span>01 · 이번 계약금 · 세 계좌</span><strong id="calculator-contract-cash">${money(value.contractPaymentsWon)}</strong><small>주택·발코니·선택한 시스템에어컨 계약금입니다. 실제 납부 여부는 확인하지 않습니다.</small></div>
         <div class="cash-plan-remaining"><span>02 · 계약 후 입주까지 필요한 기본 현금</span><strong id="calculator-post-contract-base-cash">${money(value.postContractBaseCashWon)}</strong><small>계약 총액 − 계약금 − 잔금에 충당하는 전용 모기지</small></div>
       </div>
-      <p class="stage-note">02에는 추후 별도 계약할 기타 옵션Ⅲ 계약금 ${money(value.futureOptionContractPaymentsWon)}, 계약 후 자납할 중도금과 잔금, 집단대출을 이용한다면 추후 상환할 원금이 포함됩니다. 이미 납부한 중도금은 직접 빼서 계획하세요. <b>후불이자·취득세·부대비용은 이 기본 금액에 포함되지 않습니다.</b> 실제 입주 시점의 추정 현금은 아래 정산을 확인하세요.</p>
+      <p class="stage-note">02에는 추후 별도 계약할 추가선택품목 Ⅲ 계약금 ${money(value.futureOptionContractPaymentsWon)}, 계약 후 자납할 중도금과 잔금, 집단대출을 이용한다면 추후 상환할 원금이 포함됩니다. 이미 납부한 중도금은 직접 빼서 계획하세요. <b>후불이자·취득세·부대비용은 이 기본 금액에 포함되지 않습니다.</b> 실제 입주 시점의 추정 현금은 아래 정산을 확인하세요.</p>
       <fieldset class="funding-switch"><legend>주택 중도금 20% 납부 방식</legend><label><input id="calculator-funding-loan" name="interim-funding" value="loan" type="radio" ${this.interimFunding === 'loan' ? 'checked' : ''}> 집단대출 가정</label><label><input id="calculator-funding-cash" name="interim-funding" value="cash" type="radio" ${this.interimFunding === 'cash' ? 'checked' : ''}> 전액 자납 가정</label></fieldset>
       <section class="settlement-stage" aria-labelledby="interim-repayment-heading"><h4 id="interim-repayment-heading"><i aria-hidden="true">01</i> 우선 확보할 중도금 상환자금</h4>
         ${this.interimFunding === 'loan' ? this.interimRateControl('calculator-settlement-rate') : '<p class="muted-copy">전액 자납 가정 · 입주 때 상환할 중도금 대출과 후불이자는 없습니다.</p>'}
@@ -503,7 +475,7 @@ class CalculatorApp {
       <section class="settlement-stage balance-stage" aria-labelledby="balance-funding-heading"><h4 id="balance-funding-heading"><i aria-hidden="true">02</i> 잔금과 전용 모기지</h4>
         <label class="enable-row mortgage-enable"><input id="calculator-balance-mortgage-enabled" type="checkbox" checked disabled> 전용 모기지 필수 적용 · 추정 <b>연 1.3% 고정</b></label>
         ${this.mortgageOverviewMarkup(quote)}
-        <dl class="settlement-table"><div><dt>주택·발코니 잔금</dt><dd>${money(value.housingBalanceWon)}</dd></div><div><dt>＋ 시스템에어컨·기타 옵션 잔금 · 자납</dt><dd>${money(value.optionBalanceWon)}</dd></div><div><dt>− 주택·발코니 잔금에 모기지 충당</dt><dd id="calculator-mortgage-applied">${this.mortgageEnabled ? money(value.mortgageAppliedWon) : '미적용'}</dd></div>
+        <dl class="settlement-table"><div><dt>주택·발코니 잔금</dt><dd>${money(value.housingBalanceWon)}</dd></div><div><dt>＋ 시스템에어컨·추가선택품목 Ⅲ 잔금 · 자납</dt><dd>${money(value.optionBalanceWon)}</dd></div><div><dt>− 주택·발코니 잔금에 모기지 충당</dt><dd id="calculator-mortgage-applied">${this.mortgageEnabled ? money(value.mortgageAppliedWon) : '미적용'}</dd></div>
         <div class="settlement-subtotal"><dt>잔금 추가 자납액</dt><dd id="calculator-balance-cash">${money(value.balanceCashAfterMortgageWon)}</dd></div></dl>
       </section>
       <p class="stamp-settlement-reminder"><b>잔금 확인:</b> 계약 전 인지세 선납 15만원 중 사업주체 부담 7만 5천원이 잔금에서 차감됩니다. 아래 입주 필요 현금에는 이 차감액이 <b>반영되지 않았으니</b> 실제 고지서에서 확인해 주세요.</p>
@@ -512,7 +484,7 @@ class CalculatorApp {
       ${this.costsEnabled && COST_ITEMS.every(([id]) => this.costs[id] === 0) ? '<p class="scenario-warning">부대비용 예상액이 아직 0원입니다. 무료로 확정된 것이 아니므로 실제 견적을 확인하세요.</p>' : ''}
       ${value.mortgageExcessWon ? `<p class="scenario-warning">계산상 모기지 초과액 ${money(value.mortgageExcessWon)}은 현금 수령·추가대출로 간주하지 않습니다.</p>` : ''}
       <div class="funding-metrics"><div><span>입주 전 계약금·자납 중도금 예상액 · 납부 여부 미확인</span><b id="calculator-upfront-cash">${money(value.selfFundedBeforeMoveInWon)}</b></div><div><span>계약·선택한 비용 포함 예산</span><b>${money(value.totalAcquisitionBudgetWon)}</b></div><div><span>계약부터 입주까지 자기자금</span><b>${money(value.totalOwnCashWon)}</b></div></div>
-      <p class="legal-copy">기타 옵션 중도금은 별도 안내일에 입주 전 자납하는 것으로 분리했습니다. 이미 납부한 부대비용과 모기지 만기까지의 이자·향후 세금은 이 입주 예산에 넣지 않습니다. 시뮬레이션 입력은 현재 탭에서만 유지되며 서버로 전송하지 않습니다. 세대 재선택 시 초기화됩니다.</p>
+      <p class="legal-copy">추가선택품목 Ⅲ 중도금은 별도 안내일에 입주 전 자납하는 것으로 분리했습니다. 이미 납부한 부대비용과 모기지 만기까지의 이자·향후 세금은 이 입주 예산에 넣지 않습니다. 시뮬레이션 입력은 현재 탭에서만 유지되며 서버로 전송하지 않습니다. 세대 재선택 시 초기화됩니다.</p>
     </section>`;
   }
 
@@ -524,7 +496,7 @@ class CalculatorApp {
   private mortgageOverviewMarkup(quote: Quote): string {
     const mortgage = quote.mortgage;
     return `<div id="calculator-balance-mortgage-info" class="mortgage-overview"><span class="mortgage-required">공고상 의무가입 대상 · 주택가격의 30% 이상</span>
-      <p>얼마나 빌릴 수 있나요? <b>(감액 후 공급가 + 발코니 확장비) × 선택 LTV(예: 60% 또는 70%)</b>와 <b>4억원</b> 중 작은 금액입니다. 시스템에어컨·기타 유상옵션·세금은 기준액에 포함하지 않습니다.</p><p class="stage-note">주택과 발코니에 각각 별도 대출 두 건을 적용하는 계산이 아닙니다. 실제 은행의 계좌별 배분과 승인 금액은 취급은행에 확인하세요.</p>
+      <p>얼마나 빌릴 수 있나요? <b>(감액 후 공급가 + 발코니 확장비) × 선택 LTV(예: 60% 또는 70%)</b>와 <b>4억원</b> 중 작은 금액입니다. 시스템에어컨·추가선택품목 Ⅲ·세금은 기준액에 포함하지 않습니다.</p><p class="stage-note">주택과 발코니에 각각 별도 대출 두 건을 적용하는 계산이 아닙니다. 실제 은행의 계좌별 배분과 승인 금액은 취급은행에 확인하세요.</p>
       ${mortgage ? `<label class="balance-ltv-control" for="calculator-balance-ltv">담보인정비율(LTV)<select id="calculator-balance-ltv">${[30,40,50,60,70].map(value => `<option value="${value}" ${value === this.ltv ? 'selected' : ''}>${value}%</option>`).join('')}</select></label><div class="mortgage-keyfigures"><div><span>선택 LTV 기준 대출 예상액</span><b id="calculator-balance-mortgage-principal">${money(mortgage.principal)}</b></div><div><span>1년 거치 · 월 이자</span><b>${money(mortgage.graceInterest)}</b></div><div><span>이후 ${this.term - 1}년 · 월 원리금</span><b>${money(mortgage.repayment)}</b></div></div>` : '<p class="stage-note">미적용은 자금 비교용입니다. 의무가입이 면제되는 뜻이 아니며 실제 승인 금액은 은행 심사로 결정됩니다.</p>'}
       <p class="stage-note">공고상 잔금 납부 2~3개월 전 신청 → 은행 심사·중도금 상환 → 모기지 실행·납부 확인 → 입주. ${mortgage ? '대출기간·자녀 수와 수익공유 시나리오는 모기지 추정 항목에서 조정합니다.' : '대출을 적용해 한도와 월 상환액을 확인하세요.'} 이 단지의 연 1.3%를 사용하며 실제 실행 조건은 기금·취급은행 확인이 필요합니다.</p><p class="mortgage-reference"><a href="${SALE_NOTICE_URL}" target="_blank" rel="noreferrer">이 단지 정정공고 ↗</a> · <a href="${MORTGAGE_SOURCE}" target="_blank" rel="noreferrer">KB 상품 참고 ↗</a></p></div>`;
   }

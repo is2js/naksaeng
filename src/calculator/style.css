@@ -326,6 +326,28 @@ input[aria-invalid="true"]{outline:2px solid #e79296!important;outline-offset:2p
 @media print{.account-contract-summary,.interim-account-summary,.interim-account-round,.account-contract-grid>div,.future-option-contract,.option-iii-stage-note{background:#fff!important;border-color:#a7bcb3!important}.account-contract-summary,.account-contract-summary h4,.account-contract-summary span,.account-contract-summary b,.account-contract-summary small,.account-contract-summary p,.interim-account-summary,.interim-account-summary h4,.interim-account-summary h5,.interim-account-summary span,.interim-account-summary b,.interim-account-summary small,.interim-account-summary p,.option-iii-timing,.stage-date-scope{color:#253f34!important}.account-contract-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.interim-account-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* Compare the schedule first, then focus on one installment's payment plan. */
+.payment-stage-reference{display:none!important}
+.payment-block>.financing-note{display:none}
+.payment-stage-actions{display:flex;justify-content:flex-end;margin-top:12px}
+.stage-guide-button{min-height:44px;padding:9px 14px;border:1px solid rgba(92,211,189,.3);border-radius:7px;background:rgba(92,211,189,.07);color:#b8f1e2;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.stage-guide-button:hover{background:rgba(92,211,189,.14);border-color:var(--mint);color:#fff}
+.stage-cash-notice{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 14px;margin-top:14px;padding:11px 13px;border:1px solid rgba(225,185,99,.3);border-radius:8px;background:rgba(225,185,99,.055);font-size:12px;line-height:1.6}
+.stage-cash-notice b{color:#f0d18b}.stage-cash-notice span{color:#c5d6cc}
+.payment-stage-body .stage-short-note{margin:10px 0;color:#b7d2c5;font-size:12px;line-height:1.6}
+.payment-stage-body .interim-account-round>.account-contract-head,.interim-account-summary>.account-contract-head>span{display:none}
+.payment-guide-dialog{width:min(680px,calc(100% - 28px));max-height:calc(100svh - 32px);padding:0;border:1px solid rgba(92,211,189,.35);border-radius:13px;color:var(--ink);background:var(--panel-2);box-shadow:0 22px 90px #0009;overscroll-behavior:contain}
+.payment-guide-dialog::backdrop{background:rgba(1,8,12,.76);backdrop-filter:blur(4px)}
+.payment-guide-dialog[open]{display:flex;flex-direction:column}.payment-guide-header,.payment-guide-footer{flex-shrink:0}.payment-guide-content{min-height:0}
+.payment-guide-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.payment-guide-header h2{margin:0;font-size:18px}.payment-guide-header button{flex:none;min-height:44px;padding:9px 12px;border:1px solid var(--line);border-radius:7px;color:#d8eee5;background:var(--panel);font:inherit;cursor:pointer}.payment-guide-header button span{margin-left:7px;font-size:20px}.payment-guide-header button:hover{border-color:var(--mint)}
+.payment-guide-content{max-height:min(65svh,620px);padding:4px 18px 18px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.payment-guide-content>.payment-stage-reference{display:block!important;margin:14px 0!important;color:#c6d9cf;font-size:13px;line-height:1.8}
+.payment-guide-content p{color:#b8cbc2;font-size:13px;line-height:1.8}.payment-guide-content b,.payment-guide-content strong{color:#ead29a}.payment-guide-content a{color:#a7eddd;text-underline-offset:3px}.payment-guide-content .payment-stage-intro{font-size:12px}
+.payment-guide-footer{padding:12px 18px;border-top:1px solid var(--line);color:#9eb7ab;font-size:12px;line-height:1.6}
+@media(max-width:760px){.payment-guide-header{padding:10px 14px}.payment-guide-header h2{font-size:16px}.payment-guide-content{padding-inline:14px}.payment-guide-footer{padding-inline:14px}.stage-cash-notice{flex-direction:column}}
+@media(max-width:600px){.interim-account-grid>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px}.interim-account-grid>div>span{grid-column:1;grid-row:1}.interim-account-grid>div>b{grid-column:2;grid-row:1;font-size:15px;text-align:right}.interim-account-grid>div>small{grid-column:1/-1;grid-row:2;line-height:1.5}}
+@media print{.payment-stage .payment-stage-reference,.payment-stage-reference .payment-stage-intro{display:block!important}.payment-guide-dialog,.payment-stage-actions{display:none!important}.stage-cash-notice{background:#fff!important;border-color:#a7bcb3!important;break-inside:avoid}.stage-cash-notice b,.stage-cash-notice span,.payment-stage-body .stage-short-note{color:#253f34!important}}
+@media print{.payment-block>.financing-note{display:block}}
 .schedule-table th>button{width:100%;min-height:44px;padding:3px 0;border:0;background:none;text-align:left;font:inherit;cursor:pointer}
 .schedule-table th>button small{display:block;margin-top:6px;font-size:10px}
 .schedule-table th>button:hover strong,.schedule-table th>button[aria-expanded="true"] strong{color:var(--gold)}

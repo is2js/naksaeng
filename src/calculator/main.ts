@@ -328,7 +328,7 @@ class CalculatorApp {
   }
 
   private paymentGuideDialogMarkup(): string {
-    return `<dialog id="calculator-stage-guide-dialog" class="payment-guide-dialog" aria-labelledby="calculator-stage-guide-title"><header class="payment-guide-header"><h2 id="calculator-stage-guide-title">자세한 안내</h2><button type="button" data-close-payment-guide autofocus>닫기 <span aria-hidden="true">×</span></button></header><div class="payment-guide-content"></div><footer class="payment-guide-footer">인쇄·PDF에는 열지 않은 회차의 안내도 모두 포함됩니다.</footer></dialog>`;
+    return `<dialog id="calculator-stage-guide-dialog" class="payment-guide-dialog" aria-labelledby="calculator-stage-guide-title"><header class="payment-guide-header"><h2 id="calculator-stage-guide-title">자세한 안내</h2><button type="button" data-close-payment-guide autofocus>닫기 <span aria-hidden="true">×</span></button></header><div class="payment-guide-content" tabindex="0" role="region" aria-label="납부 상세 안내"></div><footer class="payment-guide-footer">인쇄·PDF에는 열지 않은 회차의 안내도 모두 포함됩니다.</footer></dialog>`;
   }
 
   private openPaymentGuide(due: string): void {

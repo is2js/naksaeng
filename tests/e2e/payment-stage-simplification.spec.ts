@@ -129,6 +129,9 @@ test('모바일 회차의 필수 금액·미정 일정은 남기고 인쇄에는
   await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('.contract-payment-terms')).toBeVisible();
   await expect(dialog).toContainText('선납할인율');
+  await dialog.locator('[data-close-payment-guide]').focus();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('region', { name: '납부 상세 안내' })).toBeFocused();
   const box = await dialog.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.x).toBeGreaterThanOrEqual(0);

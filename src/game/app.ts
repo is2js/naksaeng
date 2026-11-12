@@ -2710,8 +2710,21 @@ export class ShowcaseApp {
   }
 
   private setActiveActor(key: CharacterKey, updateUrl = true): void {
-    if (key !== this.activeActor) this.childCompanionViews.forEach((view) => view.reset());
     if (!this.actors.has(key) && this.actors.size > 0) key = [...this.actors.keys()][0];
+    const previous = this.actors.get(this.activeActor);
+    const next = this.actors.get(key);
+    if (key !== this.activeActor && previous && next) {
+      // The two sprites represent one occupant. Preserve the interpolated
+      // position and in-flight cell travel, without copying identity/label.
+      Object.assign(next, {
+        x: previous.x, y: previous.y, displayX: previous.displayX, displayY: previous.displayY,
+        direction: previous.direction, motion: previous.motion, motionUntil: previous.motionUntil,
+        motionStartedAt: previous.motionStartedAt, moving: previous.moving,
+        turnReadyAt: previous.turnReadyAt, queuedDirection: previous.queuedDirection,
+        travel: previous.travel ? { ...previous.travel } : null,
+      });
+      this.childCompanionViews.forEach((view) => view.reset());
+    }
     this.activeActor = key;
     this.resumeCameraTracking();
     this.actorViews.forEach((view, actorKey) => {
@@ -2719,6 +2732,12 @@ export class ShowcaseApp {
       view.setSelected(active);
       view.setVisible(active);
       view.setTransformed(active ? this.transformationId : null);
+      // Paint before the next RAF so the newly visible sprite never flashes at
+      // its former position when the switch happens between frames.
+      if (active && next && this.world) {
+        const scale = this.renderer === this.threeRenderer ? this.threeRenderer?.getCameraZoom() || 1 : 1;
+        view.update(next, this.renderer.project(next.displayX, next.displayY), performance.now(), scale);
+      }
     });
     this.mount.querySelectorAll<HTMLElement>('[data-actor-key]').forEach((button) => button.classList.toggle('is-active', button.dataset.actorKey === key));
     const actor = this.actors.get(key);

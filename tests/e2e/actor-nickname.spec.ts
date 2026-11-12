@@ -38,9 +38,12 @@ test('authenticated nickname remains literal across appearances, transformation,
   await expectNameOnActor(man, nickname);
   await expect(man.locator('.actor-name b')).toHaveCount(0);
   await expect(man).toHaveAttribute('aria-label', `${nickname} 조작`);
+  await expect(man).toHaveAttribute('data-world-x', /^-?\d/);
 
+  const startPosition = await man.evaluate(element => [element.dataset.worldX, element.dataset.worldY]);
   await genderToggle.click();
   await expect(woman).toBeVisible();
+  await expect.poll(() => woman.evaluate(element => [element.dataset.worldX, element.dataset.worldY])).toEqual(startPosition);
   await page.mouse.move(1, 1);
   await expectNameOnActor(woman, nickname);
   await expect(woman.locator('.actor-name b')).toHaveCount(0);
@@ -50,8 +53,10 @@ test('authenticated nickname remains literal across appearances, transformation,
   await page.mouse.move(1, 1);
   await expectNameOnActor(woman, nickname);
   await transformToggle.click();
+  const returnPosition = await woman.evaluate(element => [element.dataset.worldX, element.dataset.worldY]);
   await genderToggle.click();
   await expect(man).toBeVisible();
+  await expect.poll(() => man.evaluate(element => [element.dataset.worldX, element.dataset.worldY])).toEqual(returnPosition);
   await page.mouse.move(1, 1);
   await expectNameOnActor(man, nickname);
 

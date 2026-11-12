@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ShowcaseApp } from './app';
 import { planVariantDefinition } from './plan-variants';
-import type { ApartmentInteriorProp } from './types';
+import type { ActorState, ApartmentInteriorProp } from './types';
 
 describe('installed furniture edit regressions', () => {
   it('rejects an invalid rotation without mutating or saving, then accepts a clear rotation', () => {
@@ -44,5 +44,37 @@ describe('plan switch visibility regression', () => {
     expect(buttons.map(button => button.hidden)).toEqual([false, false, true, true]);
     expect(stage.hidden).toBe(false);
     expect(stage.dataset.planVariant).toBe('A');
+  });
+});
+
+describe('gender switching keeps the occupant position', () => {
+  it('preserves cell, interpolated position and travel in both directions', () => {
+    const male: ActorState = { key: '100', label: '닉네임', x: 8, y: 9, displayX: 7.4, displayY: 8.4,
+      direction: 'se', motion: 'walk', motionUntil: 0, motionStartedAt: 100,
+      moving: true, turnReadyAt: 0, queuedDirection: 'e',
+      travel: { fromX: 7, fromY: 8, toX: 8, toY: 9, startedAt: 100, endsAt: 300, direction: 'se' } };
+    const female: ActorState = { ...male, key: '200', label: '같은 닉네임', x: 1, y: 2, displayX: 1, displayY: 2, travel: null };
+    const view = () => ({ setSelected: vi.fn(), setVisible: vi.fn(), setTransformed: vi.fn(), update: vi.fn() });
+    const maleView = view(), femaleView = view();
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    app.activeActor = '100';
+    app.actors = new Map([['100', male], ['200', female]]);
+    app.actorViews = new Map([['100', maleView], ['200', femaleView]]);
+    app.childCompanionViews = [];
+    app.transformationId = null;
+    app.world = {};
+    app.renderer = { project: (x: number, y: number) => ({ x, y }) };
+    app.threeRenderer = null;
+    app.resumeCameraTracking = vi.fn();
+    app.renderHotbar = vi.fn();
+    app.mount = { querySelectorAll: () => [], querySelector: () => null };
+    app.setActiveActor('200', false);
+    expect(female).toMatchObject({ key: '200', label: '같은 닉네임', x: 8, y: 9, displayX: 7.4, displayY: 8.4, direction: 'se', moving: true, queuedDirection: 'e', travel: male.travel });
+    expect(female.travel).not.toBe(male.travel);
+    expect(femaleView.update).toHaveBeenCalledWith(female, { x: 7.4, y: 8.4 }, expect.any(Number), 1);
+    Object.assign(female, { x: 12, y: 13, displayX: 12, displayY: 13, travel: null, moving: false, motion: 'idle' });
+    app.setActiveActor('100', false);
+    expect(male).toMatchObject({ key: '100', label: '닉네임', x: 12, y: 13, displayX: 12, displayY: 13, moving: false, travel: null });
+    expect(maleView.update).toHaveBeenCalled();
   });
 });

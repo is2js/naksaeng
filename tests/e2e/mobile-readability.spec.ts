@@ -38,6 +38,18 @@ for (const width of [320, 390]) {
     await input.blur();
     await input.tap();
     await expect(input).toBeFocused();
+    // Virtual keyboards shrink the visible area. The unverified dock must be
+    // in document flow, never over the focused input, even in a short viewport.
+    await page.setViewportSize({ width, height: 420 });
+    await expect(page.locator('#household-selection-dock')).toHaveCSS('position', 'static');
+    await expect.poll(async () => input.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const top = viewport?.offsetTop || 0;
+      return bounds.top >= top && bounds.bottom <= top + (viewport?.height || innerHeight);
+    })).toBe(true);
+    await expect(input).toBeFocused();
+    await page.setViewportSize({ width, height: 844 });
     expect(await input.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     expect((await page.locator('#household-verify-nickname').boundingBox())!.height).toBeGreaterThanOrEqual(44);
     // Chromium may report 44 CSS pixels as 43.99997 after fractional transforms.

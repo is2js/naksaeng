@@ -18,6 +18,7 @@ import {
   type HouseholdVerificationRole,
 } from './household-verification';
 import { resetAllBunfirvilLocalData } from '../shared/storage';
+import '../styles/household-input.css';
 
 export const HOUSEHOLD_FLOORS = Array.from({ length: 25 }, (_, index) => 25 - index);
 
@@ -223,6 +224,7 @@ export function waitForHouseholdSelection(
       ${householdStorageDialogMarkup()}
     </div>`;
 
+    const shell = mount.querySelector<HTMLElement>('.household-selector-shell')!;
     const picker = mount.querySelector<HTMLElement>('#household-building-picker');
     const detail = mount.querySelector<HTMLElement>('#household-building-detail');
     const nicknameStage = mount.querySelector<HTMLElement>('#household-nickname-stage');
@@ -251,6 +253,27 @@ export function waitForHouseholdSelection(
     let verifiedRole: HouseholdVerificationRole | null = null;
     let verificationAttempt = 0;
     let verificationController: AbortController | null = null;
+    const inputViewportEvents = new AbortController();
+    let inputViewportFrame = 0;
+    const fitActiveNicknameInput = (): void => {
+      inputViewportFrame = 0;
+      if (nicknameStage.hidden || !window.matchMedia('(pointer: coarse), (max-width: 760px)').matches) return;
+      const input = document.activeElement;
+      if (!(input instanceof HTMLInputElement) || !nicknameStage.contains(input)) return;
+      const viewport = window.visualViewport;
+      const top = (viewport?.offsetTop || 0) + 16;
+      const bottom = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight) - 16;
+      const bounds = input.getBoundingClientRect();
+      const delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
+      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'instant' });
+    };
+    const scheduleInputVisibility = (): void => {
+      if (inputViewportFrame) cancelAnimationFrame(inputViewportFrame);
+      inputViewportFrame = requestAnimationFrame(fitActiveNicknameInput);
+    };
+    nicknameStage.addEventListener('focusin', scheduleInputVisibility, { signal: inputViewportEvents.signal });
+    window.addEventListener('resize', scheduleInputVisibility, { signal: inputViewportEvents.signal });
+    window.visualViewport?.addEventListener('resize', scheduleInputVisibility, { signal: inputViewportEvents.signal });
 
     const invalidateVerification = (): void => {
       verificationAttempt += 1;
@@ -273,6 +296,7 @@ export function waitForHouseholdSelection(
 
     const revealVerifiedDock = (): void => {
       if (!nicknameVerified) return;
+      shell.classList.remove('is-nickname-editing');
       nicknameInput.disabled = true;
       operatorInput.value = '';
       operatorInput.disabled = true;
@@ -344,6 +368,7 @@ export function waitForHouseholdSelection(
     };
 
     const showBuildingPicker = (): void => {
+      shell.classList.remove('is-nickname-editing');
       selected = null;
       resetNicknameVerification(true);
       picker.hidden = false;
@@ -373,6 +398,7 @@ export function waitForHouseholdSelection(
     const showBuilding = (buildingId: string, pushHistory: boolean): void => {
       const building = BUNDANG_HOUSEHOLD_CATALOG.buildings.find((entry) => entry.buildingId === buildingId);
       if (!building) return;
+      shell.classList.remove('is-nickname-editing');
       chosenBuildingId = buildingId;
       selected = null;
       resetNicknameVerification(true);
@@ -412,6 +438,7 @@ export function waitForHouseholdSelection(
       picker.hidden = true;
       detail.hidden = true;
       nicknameStage.hidden = false;
+      shell.classList.toggle('is-nickname-editing', !nicknameVerified);
       dock.hidden = false;
       dock.classList.toggle('is-authenticated', nicknameVerified);
       legend.hidden = true;
@@ -582,6 +609,8 @@ export function waitForHouseholdSelection(
     enter.addEventListener('click', () => {
       if ((!selected && !shareAuthentication) || !nicknameVerified || !verifiedRole) return;
       window.removeEventListener('popstate', onPopState);
+      inputViewportEvents.abort();
+      if (inputViewportFrame) cancelAnimationFrame(inputViewportFrame);
       resolve({ selection: selected, role: verifiedRole, nickname: nickname.trim() });
     });
 

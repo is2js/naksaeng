@@ -97,6 +97,7 @@ import {
 import { ActorView } from './sprite';
 import { chooseTransformation, TRANSFORMATION_CHOICES } from './transformation-choice';
 import { TouchMovementPad } from './touch-controls';
+import { TouchMapPan } from './touch-map-pan';
 import { ChildCompanionView, CHILD_AGE_LABELS, MAX_CHILD_COMPANIONS, type ChildAgeGroup, type ChildCompanionChoice, type ChildGender } from './child-companion';
 import { resetAllBunfirvilLocalData, resetCurrentMapOptionsAndLayout } from '../shared/storage';
 import type { ThreeWorldRenderer as ThreeWorldRendererInstance } from './three-world';
@@ -271,6 +272,7 @@ export class ShowcaseApp {
   private mapPanLastX = 0;
   private mapPanLastY = 0;
   private mapPanMoved = false;
+  private touchMapPan: TouchMapPan | null = null;
   private pendingSceneSelection: PendingSceneSelection | null = null;
   private cameraTrackingPaused = false;
   private animationFrame = 0;
@@ -385,6 +387,8 @@ export class ShowcaseApp {
     this.activeActor = !this.readOnlyShare && new URLSearchParams(window.location.search).get('actor') === '200' ? '200' : '100';
 
     this.renderShell(fallback);
+    // Do not inherit the nickname keyboard/selection page's scroll position.
+    if (window.matchMedia('(pointer: coarse), (max-width: 760px)').matches) window.scrollTo({ top: 0, behavior: 'instant' });
     this.get<HTMLElement>('#game-stage').dataset.movementIntervalMs = String(MOVEMENT_INTERVAL_MS);
     this.get<HTMLElement>('#game-stage').dataset.cellProjection = '32x24';
     this.get<HTMLElement>('#game-stage').dataset.cameraTracking = 'follow';
@@ -422,6 +426,7 @@ export class ShowcaseApp {
       .map((item) => view.loadTransformation(item.id, item.url, () => this.trackAsset()))));
     await this.selectMap(this.currentMap.id, false);
     this.paintSharedMapIdentity();
+    if (this.mobileLayout) window.scrollTo({ top: 0, behavior: 'instant' });
 
     this.animationFrame = requestAnimationFrame(this.tick);
     this.toast(fallback ? '생성 자산 대기 중 · 안전한 프리뷰 모드로 실행합니다.' : '정적 자산 스냅샷을 불러왔습니다.', fallback ? 'notice' : 'success');
@@ -445,6 +450,7 @@ export class ShowcaseApp {
     if (this.destroyed || this.suspended) return;
     this.suspended = true;
     this.touchPad?.reset();
+    this.touchMapPan?.reset();
     this.pressedKeys.clear();
     cancelAnimationFrame(this.animationFrame);
     this.animationFrame = 0;
@@ -650,7 +656,7 @@ export class ShowcaseApp {
               <span id="stage-summary-anchor" hidden></span>
               <div class="stage-bottom-left">
                 <div class="stage-tip" aria-label="인게임 단축키">
-                  <span class="touch-tip"><b>조이스틱 이동 · 화면 드래그 · ＋/− 확대 · 우하단 실측</b></span>
+                  <span class="touch-tip"><b>조이스틱 이동 · 한 손가락 스크롤 · 두 손가락 지도 이동 · ＋/− 확대 · 실측</b></span>
                   <span><span class="shortcut-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>또는</span><kbd>방향키</kbd><b>이동</b></span>
                   <span class="shortcut-divider">· 빈 화면 드래그 ·</span>
                   <span><span class="shortcut-keys"><kbd>Ctrl</kbd><i>+</i><kbd>휠</kbd></span><b>확대·축소</b></span>
@@ -1138,6 +1144,14 @@ export class ShowcaseApp {
       this.setInspectionLaserPointPairShiftAxisHeld(false);
     }, { signal });
     const stage = this.get<HTMLElement>('#game-stage');
+    this.touchMapPan = new TouchMapPan(stage,
+      () => this.mobileLayout && !this.inspectionLaser.active && !this.interiorGhostProp,
+      () => { this.pendingSceneSelection = null; stage.classList.add('is-panning'); },
+      (dx, dy) => {
+        this.cameraTrackingPaused = true;
+        stage.dataset.cameraTracking = 'free';
+        this.renderer.panByScreenDelta(dx, dy);
+      }, signal);
     this.touchPad = new TouchMovementPad(this.get<HTMLElement>('.touch-move-pad'), (x, y) => {
       if ((x || y) && !this.canTouchMove()) return;
       this.touchMovement = { x, y };
@@ -1170,16 +1184,25 @@ export class ShowcaseApp {
         this.scheduleInspectionLaserMeasurement(event);
         return;
       }
-      this.handleMapPanMove(event);
+      if (event.pointerType === 'touch') {
+        if (this.pendingSceneSelection?.pointerId === event.pointerId
+          && isMapPanDrag(this.mapPanStartX, this.mapPanStartY, event.clientX, event.clientY)) this.pendingSceneSelection = null;
+      } else this.handleMapPanMove(event);
     }, { signal });
     stage.addEventListener('pointerdown', (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('.touch-controls,.touch-ghost-actions,.stage-tip')) return;
-      if (event.pointerType === 'touch' && !event.isPrimary) { event.preventDefault(); return; }
+      if (event.pointerType === 'touch' && !event.isPrimary) return;
       // HUD/팔레트 조작은 맵 선택 해제나 패닝보다 먼저 종료한다. 특히 좌하단
       // 옵션 chip을 pointerdown에서 다시 그리면 뒤따르는 click 자체가 사라진다.
       if (target?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return;
       if (target?.closest('.istarpark-laser-toggle,.istarpark-laser-hud')) return;
+      if (event.pointerType === 'touch' && !this.inspectionLaser.active && !this.interiorGhostProp) {
+        this.mapPanStartX = event.clientX;
+        this.mapPanStartY = event.clientY;
+        this.prepareSceneSelection(event);
+        return; // No capture/preventDefault: a one-finger drag belongs to the page.
+      }
       // Pointer capture and pan preventDefault can leave focus on the last HUD
       // button. Explicitly hand keyboard control back to the scene.
       if (event.button === 0 || event.button === 1) stage.focus({ preventScroll: true });
@@ -1210,10 +1233,21 @@ export class ShowcaseApp {
       if (!this.inspectionLaser.active) this.handleInteriorPointerMove(event);
     }, { signal });
     stage.addEventListener('pointerup', (event) => {
+      if (event.pointerType === 'touch' && !this.inspectionLaser.active && !this.interiorGhostProp) {
+        const pending = this.pendingSceneSelection;
+        this.pendingSceneSelection = null;
+        stage.classList.remove('is-panning');
+        if (pending?.pointerId === event.pointerId && !this.touchMapPan?.ownsGesture) this.commitSceneSelection(pending);
+        return;
+      }
       this.handleInteriorPointerUp(event);
       this.finishMapPan(event);
     }, { signal });
     stage.addEventListener('pointercancel', (event) => {
+      if (event.pointerType === 'touch') {
+        this.pendingSceneSelection = null;
+        stage.classList.remove('is-panning');
+      }
       this.handleInteriorPointerUp(event);
       this.finishMapPan(event, true);
     }, { signal });
@@ -3133,8 +3167,14 @@ export class ShowcaseApp {
         this.renderOptions();
       }, { signal: this.abortController.signal });
     });
-    requestAnimationFrame(() => categoryElement.querySelector<HTMLElement>('button.is-active')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+    requestAnimationFrame(() => {
+      const active = categoryElement.querySelector<HTMLElement>('button.is-active');
+      if (!active) return;
+      // Scroll the category strip, never the surrounding page on mobile entry.
+      const bounds = categoryElement.getBoundingClientRect(), item = active.getBoundingClientRect();
+      if (item.left < bounds.left) categoryElement.scrollLeft += item.left - bounds.left;
+      else if (item.right > bounds.right) categoryElement.scrollLeft += item.right - bounds.right;
+    });
 
     const categoryOptions = options.filter((option) => this.optionCategory === '전체' || option.category === this.optionCategory);
     const visibleOptions = this.paletteAppliedOnly

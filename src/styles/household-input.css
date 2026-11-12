@@ -1,0 +1,18 @@
+/* Keep the real selection summary below the form while the mobile keyboard is
+   in use. It returns to the existing raised/fixed dock after verification. */
+@media (pointer: coarse), (max-width: 760px) {
+  .household-selector-shell.is-nickname-editing {
+    padding-bottom: 24px;
+  }
+
+  .household-selector-shell.is-nickname-editing .household-selection-dock {
+    position: static;
+    inset: auto;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .household-nickname-stage input {
+    scroll-margin-block: 16px;
+  }
+}

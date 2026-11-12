@@ -16,6 +16,8 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   const actor = page.locator('.rpg-actor--100');
   await expect(pad).toBeVisible();
   await expect(actor).toHaveClass(/has-sprite/);
+  await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/);
+  expect(await page.evaluate(() => scrollY)).toBeLessThanOrEqual(1);
   const expectCentered = async (): Promise<void> => {
     await expect.poll(() => page.evaluate(() => {
       const stage = document.querySelector<HTMLElement>('#game-stage')!;
@@ -56,13 +58,24 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   await expect(page.locator('#zoom-value')).not.toHaveText('100%');
   await stage.scrollIntoViewIfNeeded();
   const rect = (await stage.boundingBox())!;
-  const x = rect.x + 60, y = Math.max(30, rect.y + 210);
+  const x = rect.x + 60, y = Math.max(200, rect.y + 260);
   const beforeScroll = await page.evaluate(() => scrollY);
   await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 65, y: y + 30 }] });
+  for (let delta = 20; delta <= 100; delta += 20) {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - delta }] });
+  }
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(stage).toHaveAttribute('data-camera-tracking', 'follow');
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(beforeScroll);
+  await stage.scrollIntoViewIfNeeded();
+  const panRect = (await stage.boundingBox())!;
+  const px = panRect.x + 70, py = Math.max(160, panRect.y + 210);
+  const beforePanScroll = await page.evaluate(() => scrollY);
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x: px, y: py }, { id: 2, x: px + 100, y: py }] });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 1, x: px + 65, y: py + 30 }, { id: 2, x: px + 165, y: py + 30 }] });
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(stage).toHaveAttribute('data-camera-tracking', 'free');
-  expect(await page.evaluate(() => scrollY)).toBe(beforeScroll);
+  expect(await page.evaluate(() => scrollY)).toBe(beforePanScroll);
   const resumeWithTouch = async (): Promise<void> => {
     await pad.scrollIntoViewIfNeeded();
     const bounds = (await pad.boundingBox())!;

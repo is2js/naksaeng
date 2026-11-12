@@ -2382,7 +2382,9 @@ input:focus-visible {
 .stage-option-chips[hidden], .mobile-stage-summary[hidden] { display: none; }
 
 @media (pointer: coarse), (max-width: 760px) {
-  .rpg-actor, #world-canvas, #three-world-canvas { touch-action: none; }
+  .game-stage, .rpg-actor, #world-canvas, #three-world-canvas { touch-action: pan-y; }
+  .game-stage.has-interior-ghost canvas,
+  .game-stage[data-istarpark-laser-active="true"] canvas { touch-action: none; }
   /* Keep the existing palette, but make each choice readable and tappable on a phone. */
   .palette-tabs { height: 48px; }
   .palette-tabs button { font-size: 13px; }

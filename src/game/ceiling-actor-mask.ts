@@ -259,6 +259,7 @@ export class CeilingActorMask {
         ceilingCount++;
       } else if (wall) {
         polygon.dataset.wallOccluder = 'true';
+        polygon.dataset.wallOccluderId = String(wall.userData.laserObstacleId || wall.uuid);
         polygon.dataset.wallOpacity = opacity.toFixed(3);
         wallCount++;
       }

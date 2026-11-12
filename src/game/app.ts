@@ -2644,10 +2644,10 @@ export class ShowcaseApp {
 
   private paintPlanVariant(definition: ApartmentPlanVariantDefinition): void {
     const available = new Set(availablePlanVariants(this.currentMap.unitType));
-    this.mount.querySelectorAll<HTMLElement>('[data-plan-variant]').forEach((button) => {
+    this.mount.querySelectorAll<HTMLButtonElement>('button[data-plan-variant]').forEach((button) => {
       button.hidden = !available.has(button.dataset.planVariant as ApartmentPlanVariant);
       button.classList.toggle('is-active', button.dataset.planVariant === definition.variant);
-      if (button instanceof HTMLButtonElement) button.setAttribute('aria-pressed', String(button.dataset.planVariant === definition.variant));
+      button.setAttribute('aria-pressed', String(button.dataset.planVariant === definition.variant));
     });
     const badge = this.mount.querySelector<HTMLElement>('#plan-variant-badge');
     if (badge) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ShowcaseApp } from './app';
+import { planVariantDefinition } from './plan-variants';
 import type { ApartmentInteriorProp } from './types';
 
 describe('installed furniture edit regressions', () => {
@@ -22,5 +23,26 @@ describe('installed furniture edit regressions', () => {
     app.transformLocalProp('rotate-right');
     expect(prop.yawDeg).toBe(90);
     expect(app.saveInteriorLayout).toHaveBeenCalledOnce();
+  });
+});
+
+describe('plan switch visibility regression', () => {
+  it('does not hide the stage when switching from a four-variant plan to an A/B-only plan', () => {
+    const buttons = ['A', 'B', 'C', 'D'].map(variant => ({
+      dataset: { planVariant: variant }, hidden: false,
+      classList: { toggle: vi.fn() }, setAttribute: vi.fn(),
+    }));
+    const stage = { dataset: { planVariant: 'D' }, hidden: false, classList: { toggle: vi.fn() } };
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    app.currentMap = { unitType: '59A' };
+    app.mount = {
+      querySelectorAll: vi.fn((selector: string) => selector === 'button[data-plan-variant]' ? buttons : [...buttons, stage]),
+      querySelector: (selector: string) => selector === '#game-stage' ? stage : null,
+    };
+    app.paintPlanVariant(planVariantDefinition('59A', 'A'));
+    expect(app.mount.querySelectorAll).toHaveBeenCalledWith('button[data-plan-variant]');
+    expect(buttons.map(button => button.hidden)).toEqual([false, false, true, true]);
+    expect(stage.hidden).toBe(false);
+    expect(stage.dataset.planVariant).toBe('A');
   });
 });

@@ -13,6 +13,7 @@ import {
   type NumericPoint,
 } from './apartment-transform';
 import { castsExteriorStructureShadow } from './structure-shadow';
+import { solidBlockCrossesSightline } from './solid-block-occlusion';
 import {
   bundangEditorSelectionPropIds,
   bundangEffectiveKitchenFixtures,
@@ -113,6 +114,7 @@ interface StructureOccluder {
   mesh: THREE.Mesh;
   segments: Array<[NumericPoint, NumericPoint]>;
   contactHalfThickness?: number;
+  footprint?: NumericPoint[];
   baseOpacity: number;
   currentOpacity: number;
   castsShadow: boolean;
@@ -1580,6 +1582,7 @@ export class ThreeWorldRenderer {
       const worldPolygon = polygon.map((point) => this.localPoint(object, point));
       this.structureOccluders.push({
         mesh,
+        footprint: worldPolygon.map((point) => [point.x, point.z]),
         segments: worldPolygon.map((point, index) => {
           const next = worldPolygon[(index + 1) % worldPolygon.length];
           return [[point.x, point.z], [next.x, next.z]];
@@ -1696,7 +1699,9 @@ export class ThreeWorldRenderer {
     const visibleWallOccluders: Array<{ mesh: THREE.Mesh; opacity: number }> = [];
     const occluders = [...this.structureOccluders, ...this.finishOccluders];
     for (const entry of occluders) {
-      const occluded = Boolean(focus && entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus, entry.contactHalfThickness)));
+      const occluded = Boolean(focus && (entry.footprint
+        ? solidBlockCrossesSightline(entry.footprint, camera, focus)
+        : entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus, entry.contactHalfThickness))));
       const target = occluded ? Math.min(entry.baseOpacity, 0.28) : entry.baseOpacity;
       if (occluded) fadedCount += 1;
       const duration = target < entry.currentOpacity ? 160 : 240;

@@ -15,12 +15,39 @@ export function wallCrossesSightline(
   focus: NumericPoint,
   wallHalfThickness = 0,
 ): boolean {
+  const wallX = wallEnd[0] - wallStart[0];
+  const wallY = wallEnd[1] - wallStart[1];
+  const wallLength = Math.hypot(wallX, wallY);
+  if (wallLength < 1e-7) return false;
+  if (wallHalfThickness > 0 && Number.isFinite(wallHalfThickness)) {
+    // Rendered walls are finite rectangles, not zero-width centre lines.
+    // Clip the sight segment in wall-local coordinates so touching a cap,
+    // standing inside its thickness or looking along it cannot drop the fade.
+    const ux = wallX / wallLength, uy = wallY / wallLength;
+    const dx = focus[0] - wallStart[0], dy = focus[1] - wallStart[1];
+    const sightX = camera[0] - focus[0], sightY = camera[1] - focus[1];
+    if (Math.hypot(sightX, sightY) < 1e-7) return false;
+    const origin = [dx * ux + dy * uy, -dx * uy + dy * ux];
+    const direction = [sightX * ux + sightY * uy, -sightX * uy + sightY * ux];
+    const minimum = [0, -wallHalfThickness], maximum = [wallLength, wallHalfThickness];
+    let enter = 0, exit = 1;
+    for (let axis = 0; axis < 2; axis++) {
+      if (Math.abs(direction[axis]) < 1e-9) {
+        if (origin[axis] < minimum[axis] - 1e-7 || origin[axis] > maximum[axis] + 1e-7) return false;
+        continue;
+      }
+      const first = (minimum[axis] - origin[axis]) / direction[axis];
+      const second = (maximum[axis] - origin[axis]) / direction[axis];
+      enter = Math.max(enter, Math.min(first, second));
+      exit = Math.min(exit, Math.max(first, second));
+      if (enter > exit + 1e-9) return false;
+    }
+    return enter < 1 - 1e-9 && exit >= -1e-9;
+  }
   const cross = (a: NumericPoint, b: NumericPoint, c: NumericPoint): number =>
     (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   const sightX = camera[0] - focus[0];
   const sightY = camera[1] - focus[1];
-  const wallX = wallEnd[0] - wallStart[0];
-  const wallY = wallEnd[1] - wallStart[1];
   const denominator = sightX * wallY - sightY * wallX;
   if (Math.abs(denominator) < 1e-7) return false;
   const offsetX = wallStart[0] - focus[0];
@@ -28,17 +55,12 @@ export function wallCrossesSightline(
   const sightRatio = (offsetX * wallY - offsetY * wallX) / denominator;
   const wallRatio = (offsetX * sightY - offsetY * sightX) / denominator;
   if (!Number.isFinite(sightRatio) || !Number.isFinite(wallRatio)) return false;
-  // 카메라까지의 거리 비율로 배우 근처를 자르면 벽에 붙는 순간 가림이 사라진다.
-  // 선분 내부 접촉은 유지하고, 카메라 쪽이어도 실제 벽 두께 안인 경우만 허용한다.
+  // Zero-width polygon edges require a crossing on the finite sight segment.
+  // Do not trim its focus end by a camera-distance ratio.
   const endpointTolerance = 0.012;
-  if (sightRatio >= 1 - endpointTolerance) return false;
+  if (sightRatio < -1e-9 || sightRatio >= 1 - endpointTolerance) return false;
   if (wallRatio < -endpointTolerance || wallRatio > 1 + endpointTolerance) return false;
   if (sightRatio <= 1e-9 && (wallRatio <= 1e-7 || wallRatio >= 1 - 1e-7)) return false;
-  if (sightRatio < -1e-9) {
-    const wallLength = Math.hypot(wallX, wallY);
-    const distance = wallLength ? Math.abs(cross(wallStart, wallEnd, focus)) / wallLength : Infinity;
-    if (wallHalfThickness <= 0 || distance > wallHalfThickness + 1e-7) return false;
-  }
   // 수치적으로 거의 공선인 교차를 한 번 더 걸러 원본의 안정적인 cutaway를 따른다.
   return Math.abs(cross(focus, camera, wallStart)) > 1e-7
     || Math.abs(cross(focus, camera, wallEnd)) > 1e-7;

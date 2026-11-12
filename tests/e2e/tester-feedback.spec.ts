@@ -71,7 +71,12 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   await expect(guide.locator('#guideTitle')).toBeVisible();
   expect(await guide.evaluate(() => sessionStorage.getItem('bunfirvil:household-verification:v1'))).toBeNull();
   await expect(guide.locator('#guideEditLink')).toBeHidden();
-  await guide.getByRole('link', { name: '놀이터로 돌아가기', exact: true }).first().click();
+  // The return handler deliberately closes its own tab. Chromium can report
+  // that closure before the click RPC completes; still require actual closure
+  // and keep the parent playground assertions below.
+  await guide.getByRole('link', { name: '놀이터로 돌아가기', exact: true }).first().click().catch(error => {
+    if (!guide.isClosed() || !/Target page, context or browser has been closed/.test(String(error))) throw error;
+  });
   await expect.poll(() => guide.isClosed()).toBe(true);
   expect(page.url()).toBe(playgroundUrl);
   await page.keyboard.press('Escape');

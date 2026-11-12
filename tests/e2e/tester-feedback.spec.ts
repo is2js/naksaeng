@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { strToU8, zlibSync } from 'fflate';
 
 test('51A guide stays in the playground, separate guides return, and the entrance card uses its fitted option', async ({ page, context }, testInfo) => {
-  test.setTimeout(150_000);
+  test.setTimeout(process.env.CI ? 240_000 : 150_000);
   const mapId = 'bundang-first-village-51a-prototype';
   const route = `./?map=${mapId}&actor=200&variant=B`;
   const errors: string[] = [];
@@ -102,7 +102,9 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   await expect(dialog).not.toBeVisible();
   // Software WebGL on CI can render less often than the 360ms attack lasts.
   // Advance a bounded animation frame rather than racing that transient state.
-  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 100));
+  // Keep the target beyond this test's deadline: the runner may take more
+  // than 100ms to deliver pauseAt, which otherwise targets the virtual past.
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 600_000));
   await stage.focus();
   await page.keyboard.down('Space');
   await page.clock.runFor(40);

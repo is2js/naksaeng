@@ -32,6 +32,7 @@ import { BUNDANG_MINUS_OPTION_ID, isBundangMinusOption } from './minus-option';
 import { COOKTOP_OPTION_IDS } from './bundang-option-layout';
 import { snapFurnitureToNearestWall } from './interior-wall-snap';
 import { stageOptionChipActionFromPath } from './stage-option-chip-action';
+import { guidePageUrl } from '../guides/navigation';
 import {
   bundangReadOnlyShareUrl,
   createBundangReadOnlyShare,
@@ -379,8 +380,9 @@ export class ShowcaseApp {
       this.currentMap.unitType,
       planVariantFromQuery(window.location.search),
     ).variant;
-    // 외형은 남성 캐릭터로 시작하며 이름은 일반/공유 모드에 따라 결정한다.
-    this.activeActor = '100';
+    // 기본 외형은 남성이다. 가이드·계산기 복귀 URL의 명시된 외형만 복원하며,
+    // 캐릭터 정보를 포함하지 않는 공유 놀이터에는 적용하지 않는다.
+    this.activeActor = !this.readOnlyShare && new URLSearchParams(window.location.search).get('actor') === '200' ? '200' : '100';
 
     this.renderShell(fallback);
     this.get<HTMLElement>('#game-stage').dataset.movementIntervalMs = String(MOVEMENT_INTERVAL_MS);
@@ -511,7 +513,7 @@ export class ShowcaseApp {
             ${operator ? `<a href="${resolveProjectUrl('manage/')}">검수맵 관리</a>
             <a href="${resolveProjectUrl('building-admin/')}">건축물 관리</a>
             <a href="${resolveProjectUrl('interior-admin/')}">인테리어 관리</a>` : ''}
-            <a href="${resolveProjectUrl('guides/')}">가이드</a>
+            <a data-open-guide="playground" data-guide-page="playground" href="${guidePageUrl('playground', this.playgroundReturnUrl())}">가이드</a>
           </nav>
           <div class="build-chip" title="현재 정적 자산 스냅샷">
             <span class="status-dot ${fallback ? 'is-amber' : ''}"></span>
@@ -692,7 +694,7 @@ export class ShowcaseApp {
               </div>
               <div class="option-head-actions">
                 <button type="button" id="open-storage-manager" class="option-storage-button" ${this.readOnlyShare ? 'hidden disabled title="공유 열람 모드에서는 저장을 변경할 수 없습니다."' : ''}>저장 관리</button>
-                <a class="option-guide-link" href="${resolveProjectUrl('guides/?guide=b-option')}" target="_blank" rel="noopener noreferrer" ${this.readOnlyShare ? 'hidden' : ''}>옵션 가이드</a>
+                <a class="option-guide-link" data-guide-page="b-option" href="${guidePageUrl('b-option', this.playgroundReturnUrl(), true)}" target="_blank" rel="noopener noreferrer" ${this.readOnlyShare ? 'hidden' : ''}>옵션 가이드</a>
                 <span class="option-count" id="option-count">0</span>
               </div>
             </header>
@@ -707,6 +709,7 @@ export class ShowcaseApp {
             </div>
             ${this.readOnlyShare ? '<div class="palette-readonly-note"><b>공유 열람 중</b><span>옵션과 가구 배치는 원본을 그대로 표시합니다.</span></div>' : ''}
             <div id="option-palette-body">
+              <p id="option-design-disclaimer" class="option-design-disclaimer" role="note">가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다. 계약 전 공고문과 전시관을 확인해 주세요.</p>
               <div id="option-categories" class="option-categories"></div>
               <div id="option-list" class="option-list"></div>
               <div class="option-summary">
@@ -788,21 +791,11 @@ export class ShowcaseApp {
         </form>
       </dialog>
 
-      <dialog id="help-dialog" class="help-dialog">
+      <dialog id="help-dialog" class="help-dialog playground-guide" aria-labelledby="playground-guide-title">
         <form method="dialog">
           <button class="dialog-close" value="close" aria-label="닫기">×</button>
-          <p class="eyebrow">CONTROL GUIDE</p>
-          <h2>놀이터 조작법</h2>
-          <p class="touch-help">모바일: 왼쪽 아래 원형 조이스틱을 원하는 방향으로 누르거나 밀면 이동하며 캐릭터 중심으로 화면이 따라옵니다. 손을 떼거나 가운데로 돌아오면 멈춥니다. 맵을 드래그해 둘러본 뒤 조이스틱으로 이동하면 자동 추적이 재개됩니다. 우하단에는 지도만 표시하는 미니맵과 작은 ＋/− 확대·축소 버튼이 있습니다. ‘실측’을 눌러 레이저를 켜고 측정 지점을 탭하며, 같은 버튼의 ‘실측 종료’로 끕니다. 핫바는 탭으로 실행합니다. 선택 옵션·합계·계산기는 맵 아래에 있으며 ‘펼치기’로 목록을 확인합니다. 가구는 위치를 터치·드래그한 뒤 ‘배치 확정’을 누르세요. 가구 편집·실측·설정 중에는 조이스틱이 멈춥니다.</p>
-          <div class="help-grid">
-            <div><span class="help-icon">⌨</span><b>한 셀 이동·기본 공격</b><p>WASD 또는 방향키로 한 셀씩 이동하며 키 조합으로 8방향을 사용합니다. Space는 기본 공격입니다.</p></div>
-            <div><span class="help-icon">1–5</span><b>놀이터 핫바</b><p>1 텔레포트(또는 휠 클릭)는 2초 간격으로 세대 내부에서만 이동합니다. 2 성별 전환, 3 거실 방향 전환, 4 무작위 변신, 5 자녀 인형 소환을 실행합니다.</p></div>
-            <div><span class="help-icon">옵션</span><b>옵션 프리뷰</b><p>옵션 선택은 맵 프롭과 견적에 즉시 반영되어 이 브라우저에 저장됩니다. 기본 인테리어와 옵션 구성은 이동·회전·삭제할 수 없습니다.</p></div>
-            <div><span class="help-icon">GHOST</span><b>사용자 가구 배치</b><p>가구 카드를 누르면 고스트가 커서를 따라갑니다. 초록은 설치 가능, 빨강은 설치 불가이며 좌클릭으로 확정하고 우클릭 또는 Esc로 취소합니다.</p></div>
-            <div><span class="help-icon">L</span><b>화면·가구 조작</b><p>빈 맵을 드래그해 이동하고 Ctrl+휠로 확대·축소합니다. 사용자 가구는 재배치할 수 있고 L은 벽 자석, Shift+휠은 회전, Delete는 삭제입니다.</p></div>
-            <div><span class="help-icon">J</span><b>레이저 실측</b><p>J 또는 좌하단 버튼으로 자동·2점 실측을 전환합니다. 2점 실측은 첫 면을 고정한 뒤 L OFF에서 자유 종점을 찍고, Shift를 누르면 네 방향 중 가까운 직선으로 마우스 지점까지만 잽니다. L ON은 반대 벽·가구 면에 자석 고정되고 Shift+휠로 축을 바꿉니다. Esc는 실측을 종료합니다.</p></div>
-          </div>
-          <p class="dialog-note">평면도와 사이버주택전시관을 바탕으로 만든 추론 가상공간이며 게시 자료는 참고용입니다. 옵션과 가구 배치는 현재 브라우저에만 저장됩니다.</p>
+          <h2 id="playground-guide-title">놀이터 조작법</h2>
+          <p role="status">가이드를 불러오는 중입니다.</p>
         </form>
       </dialog>
 
@@ -827,7 +820,7 @@ export class ShowcaseApp {
             <button type="button" id="reset-current-storage">현재 평형 옵션·가구 초기화</button>
             <button type="button" id="reset-all-storage" class="is-danger">Bunfirvil 전체 로컬 데이터 초기화</button>
           </div>
-          <a class="storage-guide-link" href="${resolveProjectUrl('guides/?guide=local-storage')}">로컬 저장·초기화 가이드 보기 →</a>
+          <a class="storage-guide-link" data-guide-page="local-storage" href="${guidePageUrl('local-storage', this.playgroundReturnUrl())}">로컬 저장·초기화 가이드 보기 →</a>
         </form>
       </dialog>
     `;
@@ -968,9 +961,16 @@ export class ShowcaseApp {
     };
     this.mount.querySelectorAll<HTMLButtonElement>('#reset-position, #viewer-reset-position')
       .forEach((button) => button.addEventListener('click', resetActorPosition, { signal }));
-    const dialog = this.get<HTMLDialogElement>('#help-dialog');
     this.mount.querySelectorAll<HTMLButtonElement>('#open-help, #viewer-open-help')
-      .forEach((button) => button.addEventListener('click', () => dialog.showModal(), { signal }));
+      .forEach((button) => button.addEventListener('click', () => void this.openGuide(), { signal }));
+    this.mount.querySelectorAll<HTMLAnchorElement>('[data-open-guide]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        void this.openGuide(link.dataset.openGuide);
+      }, { signal });
+    });
+    this.get<HTMLDialogElement>('#help-dialog').addEventListener('close', () => this.releaseGuideMovement(), { signal });
     this.mount.querySelectorAll<HTMLButtonElement>('#share-showcase').forEach((button) => {
       button.addEventListener('click', () => this.openReadOnlyShareDialog(), { signal });
     });
@@ -1986,6 +1986,12 @@ export class ShowcaseApp {
       button.addEventListener('click', () => {
         if (this.readOnlyShare) return;
         const assetId = button.dataset.furnitureAsset || '';
+        if (assetId === 'entry-sliding-partition-door') {
+          this.cancelInteriorGhost('', false);
+          this.focusOptionInPalette(assetId);
+          this.toast('현관 중문은 고정 옵션입니다. 옵션 카드에서 선택해 주세요.', 'notice');
+          return;
+        }
         const asset = this.interiorAssets.find((candidate) => candidate.assetId === assetId);
         if (!asset) return;
         this.pendingInteriorAssetId = assetId;
@@ -2735,6 +2741,40 @@ export class ShowcaseApp {
     url.searchParams.set('actor', this.activeActor);
     url.searchParams.set('variant', this.planVariant);
     history.replaceState(null, '', url);
+    this.mount.querySelectorAll<HTMLAnchorElement>('[data-guide-page]').forEach((link) => {
+      link.href = guidePageUrl(link.dataset.guidePage || 'playground', this.playgroundReturnUrl(), link.target === '_blank');
+    });
+  }
+
+  private playgroundReturnUrl(): string {
+    const url = new URL(resolveProjectUrl(''));
+    url.searchParams.set('map', this.currentMap.id);
+    url.searchParams.set('actor', this.activeActor);
+    url.searchParams.set('variant', this.planVariant);
+    if (this.readOnlyShare) url.hash = `share=v1.${this.shareToken}`;
+    return url.toString();
+  }
+
+  private releaseGuideMovement(): void {
+    this.pressedKeys.clear();
+    this.touchPad?.reset();
+    this.touchMovement = { x: 0, y: 0 };
+    this.movementInputIntent.resolve(0, 0, performance.now());
+  }
+
+  private async openGuide(id = 'playground'): Promise<void> {
+    this.releaseGuideMovement();
+    const dialog = this.get<HTMLDialogElement>('#help-dialog');
+    if (!dialog.open) dialog.showModal();
+    try {
+      const { renderPlaygroundGuide } = await import('../guides/playground-panel');
+      if (!this.destroyed && dialog.open) {
+        renderPlaygroundGuide(dialog, readHouseholdVerificationSession()?.role === 'operator', this.playgroundReturnUrl(), id);
+      }
+    } catch {
+      if (this.destroyed || !dialog.open) return;
+      dialog.innerHTML = `<form method="dialog"><button class="dialog-close" aria-label="가이드 닫기">×</button><h2 id="playground-guide-title">놀이터 조작법</h2><p>가이드를 불러오지 못했습니다.</p><a href="${escapeHtml(guidePageUrl(id, this.playgroundReturnUrl(), true))}" target="_blank" rel="noopener noreferrer">새 탭에서 가이드 보기</a></form>`;
+    }
   }
 
   private renderHotbar(): void {

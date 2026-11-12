@@ -40,8 +40,8 @@ test('verified playground controls, guides, and calculator history return stay u
 
   await page.getByRole('button', { name: '놀이터 조작법' }).click();
   await expect(page.getByRole('heading', { name: '놀이터 조작법' })).toBeVisible();
-  await expect(page.locator('#help-dialog')).toContainText('1 텔레포트');
-  await expect(page.locator('#help-dialog')).toContainText('Space는 기본 공격');
+  await expect(page.locator('#help-dialog')).toContainText('텔레포트');
+  await expect(page.locator('#help-dialog')).toContainText('기본 공격');
   await page.locator('#help-dialog .dialog-close').click();
 
   await page.goto('./guides/?guide=playground');

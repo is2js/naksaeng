@@ -73,8 +73,11 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
     ];
     for (const name of names) {
       const directory = path.join(process.cwd(), 'public', 'assets', 'options', 'previews');
+      const originalPath = name === 'refrigerator-cabinet-bespoke-alt2'
+        ? path.join(process.cwd(), 'docs', 'assets', `${name}-v2.png`)
+        : path.join(directory, `${name}-v2.png`);
       const [original, optimized] = await Promise.all([
-        readFile(path.join(directory, `${name}-v2.png`)),
+        readFile(originalPath),
         readFile(path.join(directory, `${name}-v2.webp`)),
       ]);
       expect(optimized.subarray(0, 4).toString()).toBe('RIFF');

@@ -43,6 +43,17 @@ describe('RPG-style interior GHOST placement', () => {
     expect(validateInteriorPlacement({ prop: existing, geometry, props: [existing], assets: [asset], ignorePropId: 'existing' }).ok).toBe(true);
   });
 
+  it('respects fixed-prop collision metadata and vertical separation without allowing tall furniture through equipment', () => {
+    const candidate = prop('candidate', [2, 1.5]);
+    const overhead = { ...prop('ceiling-unit', [2, 1.5]), dimensionsMeters: [1, 1, .2], mountHeightMeters: 2.1 };
+    expect(validateInteriorPlacement({ prop: candidate, geometry, props: [overhead], assets: [asset] }).ok).toBe(true);
+    expect(validateInteriorPlacement({ prop: { ...candidate, dimensionsMeters: [1, 1, 2.3] }, geometry, props: [overhead], assets: [asset] }).errors)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'solid-prop-overlap' })]));
+    expect(validateInteriorPlacement({ prop: candidate, geometry, props: [{ ...overhead, mountHeightMeters: 0, collisionMode: 'visual-only' }], assets: [asset] }).ok).toBe(true);
+    expect(validateInteriorPlacement({ prop: candidate, geometry, props: [{ ...candidate, id: 'fixed-cabinet', assetId: 'fixed-runtime-only', collisionMode: 'solid' }], assets: [asset] }).errors)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'solid-prop-overlap' })]));
+  });
+
   it('does not leave a hidden Bunfirvil kitchen fixture as a GHOST placement obstacle', () => {
     const fixtureGeometry: ApartmentGeometry = {
       ...geometry,

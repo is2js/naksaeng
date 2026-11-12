@@ -11,16 +11,16 @@
     <a class="skip-link" href="#guideContent">본문으로 이동</a>
 
     <header class="guide-topbar">
-      <a class="brand" href="../" aria-label="Bunfirvil 렌더 랩 홈">
+      <a class="brand" data-playground-return href="../" aria-label="놀이터로 돌아가기">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
         <span><b>e편한세상 분당퍼스트빌리지</b><small>돌아온범생의 놀이터 개발 연구실</small></span>
       </a>
       <nav class="topnav" aria-label="주요 메뉴">
-        <a href="../"><span>LIVE</span> 놀이터</a>
+        <a data-playground-return href="../"><span>LIVE</span> 놀이터</a>
         <a data-operator-only hidden href="../manage/">검수맵 관리</a>
         <a data-operator-only hidden href="../building-admin/">건축물 관리</a>
         <a data-operator-only hidden href="../interior-admin/">인테리어 관리</a>
-        <a class="is-active" href="./" aria-current="page">가이드</a>
+        <a class="is-active" data-guide-home href="./" aria-current="page">가이드</a>
         <a href="../documents/">공식 문서 · PDF</a>
       </nav>
       <span class="markdown-chip" data-operator-only hidden>MARKDOWN · STATIC</span>
@@ -55,9 +55,10 @@
           <p id="guideSummary"></p>
           <div class="guide-actions">
             <a id="guideEditLink" data-operator-only hidden href="#" target="_blank" rel="noreferrer">GitHub에서 Markdown 수정</a>
-            <a href="../">놀이터로 돌아가기</a>
+            <a data-playground-return href="../">놀이터로 돌아가기</a>
             <a href="../documents/">공식 문서 · PDF 자료실</a>
           </div>
+          <p id="guideReturnNotice" hidden>돌아가기를 누르면 이 가이드 탭을 닫고 열어 둔 놀이터로 돌아갑니다.</p>
         </header>
         <div id="markdownBody" class="markdown-body"></div>
         <details class="markdown-source" data-operator-only hidden>

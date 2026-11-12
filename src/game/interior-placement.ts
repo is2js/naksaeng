@@ -127,9 +127,17 @@ function openingClearancePolygon(opening: Record<string, unknown>): Point[] {
   ];
 }
 
-function assetCollision(asset?: InteriorAssetEntry): string {
+function assetCollision(asset?: InteriorAssetEntry, prop?: ApartmentInteriorProp): string {
   const contract = asset as AssetContract | undefined;
-  return String(contract?.collision || contract?.collisionMode || contract?.collisionDefault || 'solid');
+  if (asset?.mountingKind === 'room-finish' || prop?.installationRole === 'continuous-wood-floor-finish') return 'visual-only';
+  return String(prop?.collisionMode || prop?.collisionDefault || contract?.collision || contract?.collisionMode || contract?.collisionDefault || 'solid');
+}
+
+function heightRange(prop: ApartmentInteriorProp, asset: InteriorAssetEntry | undefined, geometry: ApartmentGeometry): [number, number] {
+  const height = dimensions(prop, asset)[2];
+  const ceiling = asset?.mountingKind === 'ceiling' || prop.installationRole === 'ceiling-appliance';
+  const base = finite(prop.mountHeightMeters, ceiling ? Math.max(0, finite(geometry.clearHeightMeters, 2.3) - height) : 0);
+  return [base, base + height];
 }
 
 function roomAtPoint(point: Point, geometry: ApartmentGeometry): Record<string, unknown> | null {
@@ -200,11 +208,16 @@ export function validateInteriorPlacement({
   });
   if (doorway) errors.push({ code: 'door-clearance-overlap', message: `문 통과 영역 ${String(doorway.id || '')}을 침범합니다.`.trim() });
 
-  if (assetCollision(asset) === 'solid') {
+  if (assetCollision(asset, prop) === 'solid') {
+    const [bottom, top] = heightRange(prop, asset, geometry);
     const overlap = props.find((other) => {
       if (!other || other.localDeleted === true || String(other.id || '') === String(ignorePropId || '')) return false;
       const otherAsset = assets.find((candidate) => candidate.assetId === other.assetId);
-      return otherAsset && assetCollision(otherAsset) === 'solid'
+      const [otherBottom, otherTop] = heightRange(other, otherAsset, geometry);
+      // Floor finishes and overhead equipment are not floor furniture. Keep
+      // full-height cabinets and genuinely intersecting furniture blocking.
+      return assetCollision(otherAsset, other) === 'solid'
+        && bottom < otherTop - .001 && otherBottom < top - .001
         && polygonsOverlap(footprint, interiorPropCorners(other, otherAsset));
     });
     if (overlap) errors.push({ code: 'solid-prop-overlap', message: '다른 가구와 겹칩니다.' });

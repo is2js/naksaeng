@@ -15,7 +15,7 @@ export interface GuideDocument {
 }
 
 function safeLink(href: string): string | null {
-  return /^(?:https?:\/\/|\/|\.\.?\/|#)/i.test(href) ? href : null;
+  return /^(?:https?:\/\/|\/|\.\.?\/|#|\?)/i.test(href) ? href : null;
 }
 
 function renderInline(source: string): string {

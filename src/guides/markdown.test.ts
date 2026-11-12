@@ -20,4 +20,10 @@ describe('Markdown guide documents', () => {
   it('rejects unsafe guide ids', () => {
     expect(() => parseGuideDocument('---\nid: ../bad\ntitle: 잘못된 문서\n---\n본문', 'bad.md')).toThrow(/id 또는 title/);
   });
+
+  it('renders query-only guide links without admitting executable URLs', () => {
+    const html = renderGuideMarkdown('[옵션](?guide=b-option) · [거부](javascript:alert)');
+    expect(html).toContain('href="?guide=b-option"');
+    expect(html).not.toContain('href="javascript:');
+  });
 });

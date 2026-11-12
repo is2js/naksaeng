@@ -6,6 +6,7 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   const mapId = 'bundang-first-village-51a-prototype';
   const route = `./?map=${mapId}&actor=200&variant=B`;
   const errors: string[] = [];
+  await page.clock.install();
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(id => {
     if (!sessionStorage.getItem('bunfirvil:household-verification:v1')) {
@@ -99,8 +100,12 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   await dialog.screenshot({ path: testInfo.outputPath('mobile-guide-panel.png') });
   await dialog.getByRole('button', { name: '가이드 닫기' }).click();
   await expect(dialog).not.toBeVisible();
+  // Software WebGL on CI can render less often than the 360ms attack lasts.
+  // Advance a bounded animation frame rather than racing that transient state.
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 100));
   await stage.focus();
   await page.keyboard.down('Space');
+  await page.clock.runFor(40);
   await expect(actor).toHaveAttribute('data-motion', 'attack');
   await page.keyboard.up('Space');
   expect(errors).toEqual([]);

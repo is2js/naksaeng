@@ -7,12 +7,13 @@ function finite(value: unknown, fallback = 0): number {
   return Number.isFinite(number) ? number : fallback;
 }
 
-/** 카메라-캐릭터 시선이 벽 선분을 실제로 통과하는지 판정한다. 끝점의 미세 접촉은 제외한다. */
+/** 벽 뒤/벽 두께 내부의 시선 가림을 판정한다. 두께는 월드 cell 단위다. */
 export function wallCrossesSightline(
   wallStart: NumericPoint,
   wallEnd: NumericPoint,
   camera: NumericPoint,
   focus: NumericPoint,
+  wallHalfThickness = 0,
 ): boolean {
   const cross = (a: NumericPoint, b: NumericPoint, c: NumericPoint): number =>
     (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
@@ -27,10 +28,17 @@ export function wallCrossesSightline(
   const sightRatio = (offsetX * wallY - offsetY * wallX) / denominator;
   const wallRatio = (offsetX * sightY - offsetY * sightX) / denominator;
   if (!Number.isFinite(sightRatio) || !Number.isFinite(wallRatio)) return false;
-  // 배우나 카메라가 벽 선분 끝에 정확히 붙을 때 생기는 프레임별 깜빡임을 피한다.
+  // 카메라까지의 거리 비율로 배우 근처를 자르면 벽에 붙는 순간 가림이 사라진다.
+  // 선분 내부 접촉은 유지하고, 카메라 쪽이어도 실제 벽 두께 안인 경우만 허용한다.
   const endpointTolerance = 0.012;
-  if (sightRatio <= endpointTolerance || sightRatio >= 1 - endpointTolerance) return false;
+  if (sightRatio >= 1 - endpointTolerance) return false;
   if (wallRatio < -endpointTolerance || wallRatio > 1 + endpointTolerance) return false;
+  if (sightRatio <= 1e-9 && (wallRatio <= 1e-7 || wallRatio >= 1 - 1e-7)) return false;
+  if (sightRatio < -1e-9) {
+    const wallLength = Math.hypot(wallX, wallY);
+    const distance = wallLength ? Math.abs(cross(wallStart, wallEnd, focus)) / wallLength : Infinity;
+    if (wallHalfThickness <= 0 || distance > wallHalfThickness + 1e-7) return false;
+  }
   // 수치적으로 거의 공선인 교차를 한 번 더 걸러 원본의 안정적인 cutaway를 따른다.
   return Math.abs(cross(focus, camera, wallStart)) > 1e-7
     || Math.abs(cross(focus, camera, wallEnd)) > 1e-7;

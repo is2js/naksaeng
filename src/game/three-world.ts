@@ -112,6 +112,7 @@ interface OptionRuntimeModule {
 interface StructureOccluder {
   mesh: THREE.Mesh;
   segments: Array<[NumericPoint, NumericPoint]>;
+  contactHalfThickness?: number;
   baseOpacity: number;
   currentOpacity: number;
   castsShadow: boolean;
@@ -1627,6 +1628,7 @@ export class ThreeWorldRenderer {
       this.structureOccluders.push({
         mesh,
         segments: [[ [start.x, start.z], [end.x, end.z] ]],
+        contactHalfThickness: thickness / 2,
         baseOpacity: frontCutaway ? 0.38 : 1,
         currentOpacity: frontCutaway ? 0.38 : 1,
         castsShadow,
@@ -1694,7 +1696,7 @@ export class ThreeWorldRenderer {
     const visibleWallOccluders: Array<{ mesh: THREE.Mesh; opacity: number }> = [];
     const occluders = [...this.structureOccluders, ...this.finishOccluders];
     for (const entry of occluders) {
-      const occluded = Boolean(focus && entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus)));
+      const occluded = Boolean(focus && entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus, entry.contactHalfThickness)));
       const target = occluded ? Math.min(entry.baseOpacity, 0.28) : entry.baseOpacity;
       if (occluded) fadedCount += 1;
       const duration = target < entry.currentOpacity ? 160 : 240;
@@ -1905,7 +1907,7 @@ export class ThreeWorldRenderer {
       return [[[worldStart.x, worldStart.z], [worldEnd.x, worldEnd.z]]];
     });
     if (!segments.length) return;
-    const inheritedBaseOpacity = this.structureOccluders.find((entry) => entry.segments.some(([candidateStart, candidateEnd]) => (
+    const inheritedWall = this.structureOccluders.find((entry) => entry.segments.some(([candidateStart, candidateEnd]) => (
       segments.some(([start, end]) => {
         const direct = Math.hypot(start[0] - candidateStart[0], start[1] - candidateStart[1]) < .001
           && Math.hypot(end[0] - candidateEnd[0], end[1] - candidateEnd[1]) < .001;
@@ -1913,13 +1915,13 @@ export class ThreeWorldRenderer {
           && Math.hypot(end[0] - candidateStart[0], end[1] - candidateStart[1]) < .001;
         return direct || reversed;
       })
-    )))?.baseOpacity;
+    )));
     group.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const materialOpacity = Math.min(...materials.map((material) => Number.isFinite(material.opacity) ? material.opacity : 1));
-      const baseOpacity = Math.min(materialOpacity, inheritedBaseOpacity ?? 1);
+      const baseOpacity = Math.min(materialOpacity, inheritedWall?.baseOpacity ?? 1);
       for (const material of materials) {
         material.opacity = Math.min(material.opacity, baseOpacity);
         material.transparent = material.opacity < .995;
@@ -1929,6 +1931,7 @@ export class ThreeWorldRenderer {
       this.finishOccluders.push({
         mesh,
         segments,
+        contactHalfThickness: inheritedWall?.contactHalfThickness,
         baseOpacity,
         currentOpacity: baseOpacity,
         castsShadow: false,

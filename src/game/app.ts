@@ -702,14 +702,13 @@ export class ShowcaseApp {
               <button type="button" class="is-active" data-palette-tab="options">옵션</button>
               <button type="button" data-palette-tab="furniture">가구 배치</button>
             </div>
-            ${this.readOnlyShare ? '' : '<p class="option-storage-note">옵션·가구는 이 브라우저의 같은 평형에서 공유되며 다른 기기에는 자동 저장되지 않습니다.</p>'}
+            <p class="option-storage-note">${this.readOnlyShare ? '' : '<span class="option-storage-description">옵션·가구는 이 브라우저의 같은 평형에서 공유되며 다른 기기에는 자동 저장되지 않습니다.</span> '}<span id="option-design-disclaimer" class="option-design-disclaimer" role="note">가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다. 계약 전 공고문과 전시관을 확인해 주세요.</span></p>
             <div class="palette-viewbar">
               <span id="palette-view-label">${this.readOnlyShare ? '적용 옵션' : '전체 옵션'}</span>
               <button type="button" id="palette-applied-only" aria-pressed="${this.readOnlyShare ? 'true' : 'false'}" ${this.readOnlyShare ? 'hidden disabled' : ''}>적용만 보기</button>
             </div>
             ${this.readOnlyShare ? '<div class="palette-readonly-note"><b>공유 열람 중</b><span>옵션과 가구 배치는 원본을 그대로 표시합니다.</span></div>' : ''}
             <div id="option-palette-body">
-              <p id="option-design-disclaimer" class="option-design-disclaimer" role="note">가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다. 계약 전 공고문과 전시관을 확인해 주세요.</p>
               <div id="option-categories" class="option-categories"></div>
               <div id="option-list" class="option-list"></div>
               <div class="option-summary">

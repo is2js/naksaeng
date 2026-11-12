@@ -1866,7 +1866,7 @@ input:focus-visible {
   background: rgba(225, 185, 99, .11);
 }
 
-.option-design-disclaimer { margin: 10px 14px; padding: 10px 12px; border-left: 2px solid var(--gold); border-radius: 4px; color: #c3c4ac; background: rgba(225,185,99,.06); font-size: 12px; line-height: 1.6; }
+.option-design-disclaimer { color: #c3c4ac; }
 
 .option-count {
   width: 35px;

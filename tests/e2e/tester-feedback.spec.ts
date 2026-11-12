@@ -32,6 +32,15 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   const playgroundUrl = page.url();
   await expect(page.locator('#option-design-disclaimer')).toBeVisible();
   await expect(page.locator('#option-design-disclaimer')).toContainText('실제 시공과 다를 수');
+  await expect(page.locator('.option-storage-description')).toBeVisible();
+  const noticeStyle = () => page.locator('.option-storage-note').evaluate(note => {
+    const storage = getComputedStyle(note.querySelector('.option-storage-description')!);
+    const disclaimer = getComputedStyle(note.querySelector('#option-design-disclaimer')!);
+    return { storageSize: storage.fontSize, disclaimerSize: disclaimer.fontSize, storageColor: storage.color, disclaimerColor: disclaimer.color };
+  });
+  const desktopNotice = await noticeStyle();
+  expect(desktopNotice.disclaimerSize).toBe(desktopNotice.storageSize);
+  expect(desktopNotice.disclaimerColor).not.toBe(desktopNotice.storageColor);
 
   await page.locator('[data-open-guide]').click();
   await expect(dialog).toBeVisible();
@@ -95,6 +104,9 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   await expect(page.locator('#option-design-disclaimer')).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileNotice = await noticeStyle();
+  expect(mobileNotice.disclaimerSize).toBe(mobileNotice.storageSize);
+  expect(mobileNotice.disclaimerColor).toBe(desktopNotice.disclaimerColor);
   await page.getByRole('button', { name: '놀이터 조작법' }).click();
   await expect(dialog).toBeVisible();
   const box = (await dialog.boundingBox())!;
@@ -136,6 +148,8 @@ test('the in-playground guide preserves a read-only share without exposing authe
   })));
   await page.goto(`./#share=v1.${token}`);
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 60_000 });
+  await expect(page.locator('#option-design-disclaimer')).toBeVisible();
+  await expect(page.locator('.option-storage-description')).toHaveCount(0);
   await page.getByRole('button', { name: '놀이터 조작법' }).click();
   const dialog = page.locator('#help-dialog');
   await expect(dialog.locator('article')).toBeVisible();

@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 
 const base = '/naksaeng/bunfirvil/';
-const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v3.webp');
+const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v4.webp');
 const server = await createServer({
   configFile: resolve('vite.config.ts'),
   server: { host: '127.0.0.1', port: 0, strictPort: true },
@@ -32,7 +32,7 @@ try {
     const THREE = await import(root + 'node_modules/three/build/three.module.js');
     const { ThreeWorldRenderer, STRUCTURAL_PROP_ASSETS } = await import(root + 'src/game/three-world.ts');
     const asset = STRUCTURAL_PROP_ASSETS.find(item => item.assetId === 'entry-pantry-rounded-system-cabinet');
-    if (!asset || asset.parts.length !== 9) throw new Error('Corrected open-entry recipe is required.');
+    if (!asset || asset.parts.length !== 10) throw new Error('Corrected open-entry recipe is required.');
 
     // No live game is constructed: use its exact pure geometry/material methods.
     const factory = Object.create(ThreeWorldRenderer.prototype);

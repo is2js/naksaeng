@@ -148,12 +148,12 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
     rendererKind: 'procedural',
     mountingKind: 'floor',
     defaultMountHeightMeters: .018,
-    // The exported cabinet's +X full-height end panel closes the entry side.
-    // Keep the wall-side L backing, every rounded shelf and the low plinth;
-    // leave the opposite/entrance end open instead of adding another door.
+    // Open system shelving: thin posts instead of full-height back/end panels.
+    // Keep the rounded L shelves and their low supports.
     parts: [
-      { shape: 'box', scale: [1, .055, .96], offset: [0, -.4725, .48], materialRole: 'secondary' },
-      { shape: 'box', scale: [.055, 1, .96], offset: [-.4725, 0, .48], materialRole: 'secondary' },
+      ...[[-.46, -.46], [.46, -.46], [-.46, .46]].map(([x, y]): RuntimePart => ({
+        shape: 'box', scale: [.035, .035, .96], offset: [x, y, .48], materialRole: 'accent',
+      })),
       ...[.08, .30, .52, .74, .96].map((height): RuntimePart => ({
         shape: 'rounded-l-shelf', scale: [1, 1, .035], offset: [0, 0, height], materialRole: 'primary',
       })),

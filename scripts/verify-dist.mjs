@@ -595,9 +595,9 @@ async function main() {
   await verifyCatalog(appRoot, failures);
   await verifyHouseholdVerificationConfig(appRoot, failures);
   const previewProvenance = await readJson(path.join(appRoot, "assets/options/previews/provenance.v1.json"), "local preview provenance", failures);
-  const pantryPreview = previewProvenance?.files?.find(row => row.file === "assets/options/previews/entry-pantry-system-shelf-v3.webp");
-  const pantryPreviewPath = path.join(appRoot, "assets/options/previews/entry-pantry-system-shelf-v3.webp");
-  if (!pantryPreview || pantryPreview.width !== 512 || pantryPreview.height !== 512 || pantryPreview.bytes !== 4566
+  const pantryPreview = previewProvenance?.files?.find(row => row.file === "assets/options/previews/entry-pantry-system-shelf-v4.webp");
+  const pantryPreviewPath = path.join(appRoot, "assets/options/previews/entry-pantry-system-shelf-v4.webp");
+  if (!pantryPreview || pantryPreview.width !== 512 || pantryPreview.height !== 512 || pantryPreview.bytes !== 5222
     || pantryPreview.sha256 !== await sha256File(pantryPreviewPath).catch(() => "")) {
     failures.push("현관 팬트리 새 미리보기의 provenance·크기·해시가 일치하지 않습니다.");
   }

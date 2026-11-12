@@ -14,6 +14,18 @@
       "sha256": "8a518cf77180087a57598e780c8f8b4d92e95b44d26a20c3f9a690ed7ffbc637",
       "rightsClass": "maintainer-reviewed-project-asset",
       "publicationApprovalCategory": "site-generated-procedural-preview"
+    },
+    {
+      "file": "assets/options/previews/entry-pantry-system-shelf-v4.webp",
+      "sourceScript": "scripts/render-pantry-preview.mjs",
+      "sourceRuntime": "src/game/three-world.ts",
+      "optionId": "entry-pantry-system-shelf",
+      "width": 512,
+      "height": 512,
+      "bytes": 5222,
+      "sha256": "180f60d641a1252af690fdad1edf4d776d50fa81951c7d355c89238d20b0425f",
+      "rightsClass": "maintainer-reviewed-project-asset",
+      "publicationApprovalCategory": "site-generated-procedural-preview"
     }
   ]
 }

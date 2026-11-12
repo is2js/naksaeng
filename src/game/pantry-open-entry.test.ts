@@ -21,21 +21,19 @@ async function exportedCatalogs() {
 }
 
 describe('entry pantry open-end cabinet', () => {
-  it('removes only the entrance-facing full-height cover and preserves the rounded L shelves', async () => {
+  it('replaces full-height solid panels with slender posts and preserves the rounded L shelves', async () => {
     const { interior, recipes } = await exportedCatalogs();
     const original = recipes.assets.find((asset: { assetId: string }) => asset.assetId === ASSET);
     const merged = mergeRuntimeAssetCatalogs(interior.assets, recipes.assets);
     const corrected = merged.get(ASSET)!;
-    const expected = original.parts.filter((part: { materialRole: string; scale: number[]; offset: number[] }) =>
-      !(part.materialRole === 'accent' && part.scale[2] === .96 && part.offset[0] > 0));
-    expect(original.parts.length - expected.length).toBe(1);
-    expect(corrected.parts).toEqual(expected);
     expect(corrected.rendererKind).toBe('procedural');
     expect(corrected.defaultMountHeightMeters).toBe(original.defaultMountHeightMeters);
     expect(corrected.defaultDimensionsMeters).toEqual(interior.assets.find((asset: { assetId: string }) => asset.assetId === ASSET).defaultDimensionsMeters);
     expect(corrected.parts!.filter(part => part.shape === 'rounded-l-shelf')).toHaveLength(5);
-    expect(corrected.parts!.filter(part => part.shape === 'box' && part.scale![2]! > .9)).toHaveLength(2);
-    expect(corrected.parts!.filter(part => part.materialRole === 'accent')).toHaveLength(2);
+    const tallParts = corrected.parts!.filter(part => part.shape === 'box' && part.scale![2]! > .9);
+    expect(tallParts).toHaveLength(3);
+    expect(tallParts.every(part => part.scale![0]! <= .035 && part.scale![1]! <= .035)).toBe(true);
+    expect(corrected.parts!.filter(part => part.materialRole === 'accent')).toHaveLength(5);
     expect(recipes.assets.find((asset: { assetId: string }) => asset.assetId === ASSET)).toEqual(original);
   });
 
@@ -81,7 +79,7 @@ describe('entry pantry open-end cabinet', () => {
 
   it('uses a compact local preview rendered from the corrected recipe', async () => {
     const preview = BUNDANG_OPTION_DISPLAY_OVERRIDES[OPTION].previewUrl!;
-    expect(preview).toBe('assets/options/previews/entry-pantry-system-shelf-v3.webp');
+    expect(preview).toBe('assets/options/previews/entry-pantry-system-shelf-v4.webp');
     const file = await readFile(path.join(publicRoot, preview));
     expect(file.subarray(0, 4).toString()).toBe('RIFF');
     expect(file.subarray(8, 12).toString()).toBe('WEBP');

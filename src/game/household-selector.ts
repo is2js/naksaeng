@@ -434,10 +434,10 @@ export function waitForHouseholdSelection(
       nicknameStep.disabled = false;
       animatePanel(nicknameStage);
       updateSelectionSummary();
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        nicknameInput.focus();
-      });
+      // Focus within the selection gesture: mobile browsers can suppress the
+      // keyboard when focus is deferred to an animation frame. Let the browser
+      // scroll the field into view when its virtual keyboard opens.
+      if (!nicknameInput.disabled) nicknameInput.focus();
     };
 
     picker.addEventListener('click', (event) => {

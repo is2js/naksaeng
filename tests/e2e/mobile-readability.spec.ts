@@ -5,6 +5,16 @@ test.use({ isMobile: true, hasTouch: true });
 for (const width of [320, 390]) {
   test(`mobile household picker remains readable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.addInitScript(() => {
+      let handlingClick = false;
+      document.addEventListener('click', () => { handlingClick = true; }, true);
+      document.addEventListener('click', () => { handlingClick = false; });
+      document.addEventListener('focusin', event => {
+        if ((event.target as HTMLElement).id === 'household-nickname') {
+          (window as any).__nicknameFocusedDuringClick = handlingClick;
+        }
+      });
+    });
     await page.goto('./');
     await page.locator('[data-choose-building="105"]').tap();
     const household = page.locator('.household-cell[data-building="105"][data-floor="25"][data-line="1"]');
@@ -21,6 +31,13 @@ for (const width of [320, 390]) {
     await household.tap();
     const input = page.locator('#household-nickname');
     await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+    expect(await page.evaluate(() => (window as any).__nicknameFocusedDuringClick)).toBe(true);
+    await input.fill('모바일테스트');
+    await expect(page.locator('#household-selection-summary')).toContainText('모바일테스트');
+    await input.blur();
+    await input.tap();
+    await expect(input).toBeFocused();
     expect(await input.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     expect((await page.locator('#household-verify-nickname').boundingBox())!.height).toBeGreaterThanOrEqual(44);
     // Chromium may report 44 CSS pixels as 43.99997 after fractional transforms.

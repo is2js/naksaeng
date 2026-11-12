@@ -35,6 +35,10 @@ test('51A guide stays in the playground, separate guides return, and the entranc
 
   await page.locator('[data-open-guide]').click();
   await expect(dialog).toBeVisible();
+  const desktopBox = (await dialog.boundingBox())!;
+  const desktopViewport = page.viewportSize()!;
+  expect(Math.abs(desktopBox.x + desktopBox.width / 2 - desktopViewport.width / 2)).toBeLessThan(2);
+  expect(Math.abs(desktopBox.y + desktopBox.height / 2 - desktopViewport.height / 2)).toBeLessThan(2);
   const position = await actor.getAttribute('data-cell-x');
   await dialog.locator('article').focus();
   await page.keyboard.press('ArrowRight');
@@ -97,6 +101,8 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.width).toBeLessThanOrEqual(390);
   expect(box.height).toBeLessThanOrEqual(844);
+  expect(Math.abs(box.x + box.width / 2 - 390 / 2)).toBeLessThan(2);
+  expect(Math.abs(box.y + box.height / 2 - 844 / 2)).toBeLessThan(2);
   await dialog.screenshot({ path: testInfo.outputPath('mobile-guide-panel.png') });
   await dialog.getByRole('button', { name: '가이드 닫기' }).click();
   await expect(dialog).not.toBeVisible();

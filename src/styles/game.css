@@ -2264,7 +2264,7 @@ input:focus-visible {
   width: min(700px, calc(100vw - 24px));
   height: min(840px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
-  margin: auto 16px auto auto;
+  margin: auto;
   padding: 0;
   border: 1px solid rgba(123, 191, 180, 0.24);
   border-radius: 12px;
@@ -2286,7 +2286,7 @@ input:focus-visible {
 .playground-guide a { color: var(--mint); }
 .playground-guide .markdown-body { max-width: none; min-height: 0; padding: 22px; overflow: auto; overscroll-behavior: contain; font-size: 14px; }
 .playground-guide .markdown-body h2 { font-size: 23px; }
-@media (max-width: 760px) { .help-dialog { margin: auto; } .playground-guide-tools { padding: 12px 16px; } .playground-guide-tools select { min-height: 44px; } .playground-guide .dialog-close { width: 44px; height: 44px; top: 10px; right: 10px; } .playground-guide .markdown-body { padding: 18px; } }
+@media (max-width: 760px) { .playground-guide-tools { padding: 12px 16px; } .playground-guide-tools select { min-height: 44px; } .playground-guide .dialog-close { width: 44px; height: 44px; top: 10px; right: 10px; } .playground-guide .markdown-body { padding: 18px; } }
 
 .fatal-shell {
   width: min(620px, calc(100vw - 40px));

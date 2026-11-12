@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraZoomPercent, RPG_CAMERA_BASE_ZOOM } from './camera';
+import { cameraZoomPercent, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA_MOBILE_ZOOM } from './camera';
 import { normalizeHotbar } from './catalog';
 import { resolveEffectSource, selectEffectVariant, type EffectManifest } from './effect-player';
 import { readHotbar, reorderHotbar } from './hotbar';
@@ -131,6 +131,7 @@ describe('game-local state helpers', () => {
 
   it('labels the RPG 1.29 camera scale as the 100 percent baseline', () => {
     expect(cameraZoomPercent(RPG_CAMERA_BASE_ZOOM)).toBe(100);
+    expect(cameraZoomPercent(RPG_CAMERA_MOBILE_ZOOM)).toBe(65);
     expect(cameraZoomPercent(RPG_CAMERA_BASE_ZOOM * 1.5)).toBe(150);
   });
 

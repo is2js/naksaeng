@@ -17,6 +17,7 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   await expect(pad).toBeVisible();
   await expect(actor).toHaveClass(/has-sprite/);
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/);
+  await expect(page.locator('#zoom-value')).toHaveText('65%');
   expect(await page.evaluate(() => scrollY)).toBeLessThanOrEqual(1);
   const expectCentered = async (): Promise<void> => {
     await expect.poll(() => page.evaluate(() => {
@@ -33,10 +34,24 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   await expect(page.locator('#touch-attack, #touch-cancel')).toHaveCount(0);
   expect((await pad.boundingBox())!.width).toBe(110);
   expect((await page.locator('.stage-zoom').boundingBox())!.width).toBeLessThanOrEqual(108);
+  const initialStage = (await stage.boundingBox())!;
+  const minimap = (await page.locator('.floorplan-minimap').boundingBox())!;
+  const zoomControls = (await page.locator('.stage-zoom').boundingBox())!;
+  expect(minimap.y - initialStage.y).toBeGreaterThanOrEqual(0);
+  expect(minimap.y - initialStage.y).toBeLessThanOrEqual(20);
+  expect(initialStage.x + initialStage.width - minimap.x - minimap.width).toBeLessThanOrEqual(20);
+  expect(zoomControls.y).toBeGreaterThanOrEqual(minimap.y + minimap.height);
+  expect(zoomControls.y + zoomControls.height).toBeLessThan(initialStage.y + initialStage.height / 2);
   expect((await pad.evaluate(el => getComputedStyle(el).borderRadius))).toBe('50%');
   await expect(page.locator('#mobile-stage-summary .stage-option-quote')).toBeVisible();
   await expect(page.locator('#stage-option-chips')).toBeHidden();
   await expect(page.locator('#open-sale-calculator')).toBeVisible();
+  const paletteBounds = (await page.locator('.option-panel').boundingBox())!;
+  const summaryBounds = (await page.locator('#mobile-stage-summary').boundingBox())!;
+  expect(summaryBounds.y).toBeGreaterThanOrEqual(paletteBounds.y + paletteBounds.height);
+  const calculatorButton = page.locator('#open-sale-calculator');
+  expect((await calculatorButton.boundingBox())!.height).toBeGreaterThanOrEqual(52);
+  expect(await calculatorButton.evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
   await pad.scrollIntoViewIfNeeded();
   const client = await context.newCDPSession(page);
   const box = (await pad.boundingBox())!;
@@ -55,7 +70,7 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   await expect(pad).not.toHaveAttribute('data-direction', /.+/);
   await expect(pad).not.toHaveAttribute('style', /--stick-x/);
   await page.locator('#zoom-in').tap();
-  await expect(page.locator('#zoom-value')).not.toHaveText('100%');
+  await expect(page.locator('#zoom-value')).not.toHaveText('65%');
   await stage.scrollIntoViewIfNeeded();
   const rect = (await stage.boundingBox())!;
   const x = rect.x + 60, y = Math.max(200, rect.y + 260);
@@ -128,6 +143,8 @@ test('compact joystick, map, laser, zoom and furniture preview work without keyb
   const quote = (await page.locator('.stage-option-quote').boundingBox())!;
   const stageBounds = (await stage.boundingBox())!;
   expect(quote.y).toBeGreaterThanOrEqual(stageBounds.y + stageBounds.height);
+  const finalPaletteBounds = (await page.locator('.option-panel').boundingBox())!;
+  expect(quote.y).toBeGreaterThanOrEqual(finalPaletteBounds.y + finalPaletteBounds.height);
   await page.locator('#stage-option-chips').evaluate(el => { (el as HTMLElement).dataset.identityToken = 'same-node'; });
   // Disable coarse input while resizing to exercise both branches on the same DOM.
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: false });

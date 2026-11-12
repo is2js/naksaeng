@@ -17,7 +17,7 @@ import {
   writeSaleCalculatorLaunchContext,
   type SaleCalculatorApplicantRoute,
 } from './sale-calculator-context';
-import { cameraZoomPercent, RPG_CAMERA_BASE_ZOOM } from './camera';
+import { cameraZoomPercent, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA_MOBILE_ZOOM } from './camera';
 import { ManifestEffectPlayer } from './effect-player';
 import { interpolateCellTravel, MovementInputIntent, screenDirection, screenVectorToWorldDelta } from './grid';
 import { FrameMetrics } from './metrics';
@@ -406,6 +406,9 @@ export class ShowcaseApp {
         this.catalog.renderAssets,
         () => this.trackAsset(),
       );
+      if (window.matchMedia('(pointer: coarse), (max-width: 760px)').matches) {
+        this.paintZoom(this.threeRenderer.resetCameraZoom(RPG_CAMERA_MOBILE_ZOOM));
+      }
     } catch (error) {
       console.warn('[bunfirvil] WebGL unavailable; Canvas2D renderer stays active.', error);
       this.threeRenderer = null;
@@ -689,7 +692,7 @@ export class ShowcaseApp {
                 <div id="hotbar" class="hotbar" aria-label="쇼케이스 전환 핫바"></div>
               </div>
             </div>
-            <div id="mobile-stage-summary" class="mobile-stage-summary" hidden></div>
+            <div id="mobile-stage-help" class="mobile-stage-help" hidden></div>
           </section>
 
           <aside class="option-panel" aria-label="옵션 팔레트">
@@ -743,6 +746,7 @@ export class ShowcaseApp {
               ${this.readOnlyShare ? '' : `<a class="furniture-manage-link" href="${resolveProjectUrl('manage/#interiorEditor')}">평면도 · PBR 상세 편집 열기 →</a>`}
             </div>
           </aside>
+          <div id="mobile-stage-summary" class="mobile-stage-summary" hidden></div>
         </main>
 
         <footer class="app-footer">
@@ -955,7 +959,8 @@ export class ShowcaseApp {
     this.get<HTMLButtonElement>('#zoom-out').addEventListener('click', () => zoomFromButton(.75), { signal });
     this.get<HTMLButtonElement>('#zoom-in').addEventListener('click', () => zoomFromButton(1.25), { signal });
     this.get<HTMLButtonElement>('#zoom-reset').addEventListener('click', () => {
-      const zoom = this.threeRenderer?.resetCameraZoom() || RPG_CAMERA_BASE_ZOOM;
+      const baseline = this.mobileLayout ? RPG_CAMERA_MOBILE_ZOOM : RPG_CAMERA_BASE_ZOOM;
+      const zoom = this.threeRenderer?.resetCameraZoom(baseline) || baseline;
       this.paintZoom(zoom);
     }, { signal });
 
@@ -1377,12 +1382,18 @@ export class ShowcaseApp {
     const media = window.matchMedia('(pointer: coarse), (max-width: 760px)');
     const summary = this.get<HTMLElement>('.stage-bottom-left');
     const host = this.get<HTMLElement>('#mobile-stage-summary');
+    const helpHost = this.get<HTMLElement>('#mobile-stage-help');
+    const help = summary.querySelector<HTMLElement>('.stage-tip')!;
+    const quote = summary.querySelector<HTMLElement>('.stage-option-quote')!;
     const sync = (): void => {
       this.mobileLayout = media.matches;
       this.touchPad?.reset();
       host.hidden = !this.mobileLayout;
-      if (this.mobileLayout) host.append(summary);
-      else this.get<HTMLElement>('#stage-summary-anchor').after(summary);
+      helpHost.hidden = !this.mobileLayout;
+      if (this.mobileLayout) {
+        helpHost.append(help);
+        host.append(quote);
+      } else summary.append(help, quote);
       this.paintMobileOptions();
       if (this.mobileLayout && !this.cameraTrackingPaused && this.canTouchMove()) this.centerMobileActor();
     };

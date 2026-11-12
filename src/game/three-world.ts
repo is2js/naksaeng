@@ -1189,11 +1189,12 @@ export class ThreeWorldRenderer {
     return this.cameraZoom;
   }
 
-  resetCameraZoom(): number {
-    this.cameraZoom = RPG_CAMERA_BASE_ZOOM;
-    this.camera.zoom = RPG_CAMERA_BASE_ZOOM;
+  resetCameraZoom(zoom = RPG_CAMERA_BASE_ZOOM): number {
+    this.cameraZoom = THREE.MathUtils.clamp(Number.isFinite(zoom) ? zoom : RPG_CAMERA_BASE_ZOOM,
+      RPG_CAMERA_BASE_ZOOM * .65, RPG_CAMERA_BASE_ZOOM * 2.8);
+    this.camera.zoom = this.cameraZoom;
     this.camera.updateProjectionMatrix();
-    this.canvas.dataset.cameraZoom = RPG_CAMERA_BASE_ZOOM.toFixed(3);
+    this.canvas.dataset.cameraZoom = this.cameraZoom.toFixed(3);
     return this.cameraZoom;
   }
 

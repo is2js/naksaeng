@@ -23,6 +23,7 @@ interface DesignWallRunV1 {
   roomZoneId: 'living' | 'entry';
   segmentIds: string[];
   interiorNormal: Point;
+  baseProvided?: true;
 }
 
 interface InfinityDoorAnchorV1 {
@@ -161,7 +162,7 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
   }),
   [BUNDANG_DESIGN_WALL_OPTION_ID]: Object.freeze({
     label: '디자인 월(거실/복도면)',
-    description: '거실 3면과 현관에서 거실까지 이어지는 복도 벽면 전체를 동일한 디자인 월 마감으로 감쌉니다.',
+    description: 'TV 쪽 침실1 맞닿은 벽은 기본 제공입니다. 유상 선택 시 기본 제공면과 냉장고면을 제외한 거실·복도 벽면에 디자인 월 마감을 추가합니다.',
   }),
   [BEDROOM_ONE_PET_CLOSET_OPTION_ID]: Object.freeze({
     label: '침실1 와이드 붙박이장',
@@ -307,7 +308,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
     },
     designWallRuns: [
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outer-south-living-before', 'outer-south-living-sill', 'outer-south-living-lintel', 'outer-south-living-after'], interiorNormal: [0, -1] },
-      { id: 'living-east', roomZoneId: 'living', segmentIds: ['bedroom-1-west-before', 'bedroom-1-west-lintel', 'bedroom-1-west-after'], interiorNormal: [-1, 0] },
+      { id: 'living-east', roomZoneId: 'living', segmentIds: ['bedroom-1-west-before', 'bedroom-1-west-lintel', 'bedroom-1-west-after'], interiorNormal: [-1, 0], baseProvided: true },
       { id: 'living-west', roomZoneId: 'living', segmentIds: ['bedroom-2-east'], interiorNormal: [1, 0] },
       { id: 'corridor-west', roomZoneId: 'entry', segmentIds: ['bathroom-2-east-before', 'bathroom-2-east-lintel'], interiorNormal: [1, 0] },
       { id: 'corridor-east', roomZoneId: 'entry', segmentIds: ['entry-kitchen-divider'], interiorNormal: [-1, 0] },
@@ -328,7 +329,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
     },
     designWallRuns: [
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outer-south-living-before', 'outer-south-living-sill', 'outer-south-living-lintel', 'outer-south-living-after'], interiorNormal: [0, -1] },
-      { id: 'living-west', roomZoneId: 'living', segmentIds: ['bedroom-1-east-before', 'bedroom-1-east-after'], interiorNormal: [1, 0] },
+      { id: 'living-west', roomZoneId: 'living', segmentIds: ['bedroom-1-east-before', 'bedroom-1-east-after'], interiorNormal: [1, 0], baseProvided: true },
       { id: 'living-east', roomZoneId: 'living', segmentIds: ['alpha-west'], interiorNormal: [-1, 0] },
       { id: 'corridor-north', roomZoneId: 'entry', segmentIds: ['pantry-kitchen-short-return', 'pantry-south', 'bathroom-2-entry-return'], interiorNormal: [0, 1] },
       { id: 'corridor-south', roomZoneId: 'entry', segmentIds: ['alpha-north-before', 'alpha-north-lintel', 'alpha-north-after', 'bedroom-2-north-before', 'bedroom-2-north-lintel', 'bedroom-2-north-after'], interiorNormal: [0, -1] },
@@ -349,7 +350,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
     },
     designWallRuns: [
       { id: 'living-west', roomZoneId: 'living', segmentIds: ['outer-west-living-before', 'outer-west-living-sill', 'outer-west-living-lintel', 'outer-west-living-after'], interiorNormal: [1, 0] },
-      { id: 'living-north', roomZoneId: 'living', segmentIds: ['bedroom-1-south'], interiorNormal: [0, 1] },
+      { id: 'living-north', roomZoneId: 'living', segmentIds: ['bedroom-1-south'], interiorNormal: [0, 1], baseProvided: true },
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outdoor-unit-north', 'utility-north'], interiorNormal: [0, -1] },
       { id: 'corridor-north', roomZoneId: 'entry', segmentIds: ['bathroom-1-south', 'pantry-south', 'bathroom-2-entry-return'], interiorNormal: [0, 1] },
       { id: 'corridor-south', roomZoneId: 'entry', segmentIds: ['kitchen-alpha-north-return', 'alpha-north-door-before', 'alpha-north-door-lintel', 'alpha-north-door-after', 'alpha-north-after-door', 'bedroom-2-north-before', 'bedroom-2-north-lintel', 'bedroom-2-north-after'], interiorNormal: [0, -1] },
@@ -370,7 +371,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
     },
     designWallRuns: [
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outer-south-living-before', 'outer-south-living-sill', 'outer-south-living-lintel', 'outer-south-living-after'], interiorNormal: [0, -1] },
-      { id: 'living-west', roomZoneId: 'living', segmentIds: ['bedroom-1-east-before', 'bedroom-1-east-after'], interiorNormal: [1, 0] },
+      { id: 'living-west', roomZoneId: 'living', segmentIds: ['bedroom-1-east-before', 'bedroom-1-east-after'], interiorNormal: [1, 0], baseProvided: true },
       { id: 'living-east', roomZoneId: 'living', segmentIds: ['bedroom-2-west'], interiorNormal: [-1, 0] },
       { id: 'corridor-north', roomZoneId: 'entry', segmentIds: ['pantry-kitchen-short-return', 'pantry-south', 'bathroom-2-entry-short-return'], interiorNormal: [0, 1] },
       { id: 'corridor-south', roomZoneId: 'entry', segmentIds: ['bedroom-2-north-before', 'bedroom-2-north-lintel', 'bedroom-2-north-after', 'bedroom-3-north-before', 'bedroom-3-north-lintel', 'bedroom-3-north-after'], interiorNormal: [0, -1] },
@@ -482,7 +483,7 @@ function offsetFinish(a: Point, b: Point, normal: Point, wallThickness: number):
   };
 }
 
-function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayoutV1): ApartmentInteriorProp[] {
+function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayoutV1, includePaid: boolean): ApartmentInteriorProp[] {
   const segments = new Map((geometry.wallSegments || []).flatMap((value) => {
     const segment = record(value);
     const id = String(segment?.id || '');
@@ -490,6 +491,7 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
   }));
   const props: ApartmentInteriorProp[] = [];
   for (const run of layout.designWallRuns) {
+    if (!run.baseProvided && !includePaid) continue;
     for (const segmentId of run.segmentIds) {
       const segment = segments.get(segmentId);
       const a = point(segment?.a);
@@ -500,7 +502,7 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
       const span = wallSpan(segment);
       if (placement.length < 0.005 || span.height < 0.005) continue;
       props.push({
-        id: `bunfirvil-${layout.unitType.toLowerCase()}-design-wall-${run.id}-${segmentId}`,
+        id: `bunfirvil-${layout.unitType.toLowerCase()}-${run.baseProvided ? 'base-' : ''}design-wall-${run.id}-${segmentId}`,
         assetId: 'living-art-wall-greige-stone',
         roomZoneId: run.roomZoneId,
         positionMeters: placement.position,
@@ -508,7 +510,11 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
         yawDeg: placement.yawDeg,
         mountHeightMeters: span.base,
         materialVariantId: 'golden-shore-engineered-stone',
-        sourceOptionId: BUNDANG_DESIGN_WALL_OPTION_ID,
+        ...(run.baseProvided ? {
+          baseProvided: true,
+          displayNameKo: '기본 제공 디자인 월(TV 벽)',
+        } : { sourceOptionId: BUNDANG_DESIGN_WALL_OPTION_ID }),
+        fixedOptionLayout: true,
         anchorId: `bunfirvil.options.designWall.${run.id}.${segmentId}`,
         anchorWallSegmentId: segmentId,
         installationRole: 'wall-skin-finish',
@@ -1271,7 +1277,7 @@ export function refineBundangOptionProps(
     .map(refineWidePlankAndVentilatorProp)
     .map(alignIntegratedBidetToDefaultFacing)
     .map((prop) => alignOpenPremiumShoeCabinetToEntry(prop, unitType, planVariant));
-  if (selected.has(BUNDANG_DESIGN_WALL_OPTION_ID)) props.push(...designWallProps(geometry, layout));
+  if (!suppressMinusOptionPackage) props.push(...designWallProps(geometry, layout, selected.has(BUNDANG_DESIGN_WALL_OPTION_ID)));
   if (selected.has(ALL_DOORS_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, true));
   else if (selected.has(BEDROOM_ONE_DOOR_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, false));
   if (selected.has(BEDROOM_ONE_CLOTHING_CARE_CLOSET_OPTION_ID)) {

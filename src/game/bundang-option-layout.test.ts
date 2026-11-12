@@ -19,7 +19,8 @@ import {
   secondaryBedroomStoragePlacement,
   synchronizeBundangMinusOptionGeometryState,
 } from './bundang-option-layout';
-import { applyPlanVariantInteriorOverrides, planVariantDefinition } from './plan-variants';
+import { applyPlanVariantInteriorOverrides, availablePlanVariants, planVariantDefinition } from './plan-variants';
+import { associateOptionSources } from './option-prop-selection';
 import { mergeEditorPropsWithBase, mergeRuntimeAssetCatalogs, STRUCTURAL_PROP_ASSETS } from './three-world';
 import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog, WorldChunk, WorldManifest, WorldObject } from './types';
 
@@ -403,7 +404,7 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
         { id: `inspection-${unitType}-living-design-wall`, assetId: 'living-art-wall-greige-stone', anchorId: 'options.livingDesignWall' },
       ]);
       const skins = props.filter((prop) => prop.sourceOptionId === 'living-design-wall-panel');
-      const expectedSegments = layout.designWallRuns.flatMap((run) => run.segmentIds).sort();
+      const expectedSegments = layout.designWallRuns.filter(run => !run.baseProvided).flatMap((run) => run.segmentIds).sort();
       expect(skins.map((prop) => prop.anchorWallSegmentId).sort(), unitType).toEqual(expectedSegments);
       expect(props.some((prop) => prop.id === unrelated.id), unitType).toBe(true);
       expect(props.some((prop) => String(prop.id).startsWith(`inspection-${unitType}-living-design-wall`)), unitType).toBe(false);
@@ -417,6 +418,41 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
         expect(skin.occlusionSegmentsMeters, `${unitType}:${skin.id}:occlusion`).toHaveLength(1);
       }
     }
+  });
+
+  it('전체 12개 평면의 TV벽은 기본 제공이며 마옵에서만 빠지고 유상면과 중복되지 않는다', async () => {
+    const apartments = await apartmentsByUnit();
+    let checked = 0;
+    for (const [unitType, source] of apartments) for (const variant of availablePlanVariants(unitType)) {
+      const geometry = structuredClone(source.geometry!);
+      const original = structuredClone(geometry);
+      const layout = BUNDANG_OPTION_LAYOUTS[unitType as keyof typeof BUNDANG_OPTION_LAYOUTS];
+      const expected = layout.designWallRuns.filter(run => run.baseProvided).flatMap(run => run.segmentIds).sort();
+      const defaults = optionProps(geometry, unitType, [], [], variant);
+      const base = defaults.filter(prop => prop.baseProvided === true);
+      expect(base.map(prop => prop.anchorWallSegmentId).sort(), `${unitType}-${variant}`).toEqual(expected);
+      expect(expected.length).toBeGreaterThan(0);
+      expect(base.every(prop => !prop.sourceOptionId && prop.fixedOptionLayout === true
+        && prop.measurementObstacle === false && prop.collisionMode === 'visual-only')).toBe(true);
+      const selected = ['living-design-wall-panel', 'kitchen-wall-countertop-radianz-golden-shore'];
+      const upgraded = associateOptionSources(optionProps(geometry, unitType, selected, [], variant), selected);
+      expect(upgraded.filter(prop => prop.baseProvided === true)).toEqual(base);
+      const skins = upgraded.filter(prop => prop.installationRole === 'wall-skin-finish');
+      const wallIds = skins.map(prop => prop.anchorWallSegmentId);
+      expect(new Set(wallIds).size).toBe(wallIds.length);
+      expect(skins.length).toBeGreaterThan(base.length);
+      for (const skin of base) {
+        const placed = apartmentPropPlacement({ ...source, transform: planVariantDefinition(unitType, variant).transform }, skin);
+        expect([placed.center.x, placed.center.y, placed.worldYaw].every(Number.isFinite)).toBe(true);
+      }
+      for (const selection of [[BUNDANG_MINUS_OPTION_PACKAGE_ID], [BUNDANG_MINUS_OPTION_PACKAGE_ID, ...selected]]) {
+        expect(optionProps(geometry, unitType, selection, [], variant).some(prop => prop.installationRole === 'wall-skin-finish')).toBe(false);
+      }
+      expect(optionProps(geometry, unitType, [], [], variant).filter(prop => prop.baseProvided === true)).toEqual(base);
+      expect(geometry).toEqual(original);
+      checked++;
+    }
+    expect(checked).toBe(12);
   });
 
   it('침실1 또는 전체 시공을 실제 출입구에 배치하고 욕실을 제외한다', async () => {

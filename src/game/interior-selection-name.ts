@@ -23,6 +23,7 @@ export function interiorSelectionName(
   options: BOptionEntry[],
   assets: InteriorNameAsset[],
 ): string {
+  if (prop.baseProvided === true && typeof prop.displayNameKo === 'string' && prop.displayNameKo.trim()) return prop.displayNameKo.trim();
   const optionId = String(prop.sourceOptionId || '');
   const assetId = String(prop.assetId || '');
   const option = (optionId ? options.find((candidate) => candidate.id === optionId) : undefined)

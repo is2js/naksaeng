@@ -27,6 +27,7 @@ export function optionSourceIdForProp(
   prop: ApartmentInteriorProp,
   selectedOptionIds: Iterable<string>,
 ): string {
+  if (prop.baseProvided === true) return '';
   const selected = new Set([...selectedOptionIds].map(String));
   const existing = String(prop.sourceOptionId || '');
   if (existing && selected.has(existing)) return existing;

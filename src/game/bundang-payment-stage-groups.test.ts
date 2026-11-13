@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBundangFinancingTimeline } from './bundang-financing-timeline';
-import { buildBundangPaymentStageGroups } from './bundang-payment-stage-groups';
+import { buildBundangPaymentStageGroups, paymentStageCashBreakdown } from './bundang-payment-stage-groups';
 import { calculateBundangSaleFinance } from './bundang-sale-finance';
 
 const plans = ['main-subscription', 'pre-subscription'] as const;
@@ -38,6 +38,9 @@ describe('grouped payment stages keep additional items III separate inside share
         expect(row.financing.cashDueWon).toBe(row.financing.contractDueWon + row.financing.interimRepaymentWon
           + row.financing.deferredInterestWon - row.financing.groupLoanDrawWon - row.financing.mortgageAppliedWon);
         if (row.financing.groupLoanDrawWon) expect(row.financing.groupLoanDrawWon).toBe(row.supply);
+        const split = paymentStageCashBreakdown(row);
+        expect(split.scheduledCashWon + split.separatelyNotifiedCashWon).toBe(row.financing.cashDueWon);
+        expect(split.separatelyNotifiedCashWon).toBe(row.optionIiiPayments.filter(p => p.datePrecision === 'unknown').reduce((sum, p) => sum + p.amountWon, 0));
       }
       const iii = quote.paymentSchedules.find(schedule => schedule.target === 'option-iii');
       if (iii) {
@@ -58,6 +61,33 @@ describe('grouped payment stages keep additional items III separate inside share
       } else {
         expect(groups.every(row => row.other === 0 && !row.optionIiiPayments.length && !row.hasSeparateOptionDate)).toBe(true);
       }
+    });
+  }
+
+  for (const unitType of ['51A', '55A', '55B', '59A'] as const) for (const plan of plans) {
+    it(`${unitType}/${plan}: dated option cash excludes undated III and all options remain outside housing loans`, () => {
+      const quote = calculateBundangSaleFinance({
+        household: { unitType, floorBand: 5 }, paymentPlanKind: plan,
+        optionLines: [
+          { id: 'air', label: '시스템에어컨', tier: 'option-ii', priceWon: 5_800_000 },
+          { id: 'cooktop', label: '삼성 인덕션', tier: 'option-iii', priceWon: 950_000 },
+        ],
+      });
+      const financing = buildBundangFinancingTimeline({ paymentSchedules: quote.paymentSchedules, interimFunding: 'loan' });
+      const groups = buildBundangPaymentStageGroups({ paymentSchedules: quote.paymentSchedules, financingRows: financing.rows, paymentPlanKind: plan });
+      const firstDue = plan === 'main-subscription' ? '2027-04-12' : '2028-02-14';
+      const first = groups.find(row => row.dueKey === firstDue)!;
+      const split = paymentStageCashBreakdown(first);
+      expect(split.scheduledCashWon).toBe(first.balcony + first.systemAc);
+      expect(split.separatelyNotifiedCashWon).toBe(plan === 'main-subscription' ? 285_000 : 190_000);
+      if (unitType === '55B') expect(split.scheduledCashWon).toBe(plan === 'main-subscription' ? 2_651_200 : 2_071_200);
+      if (plan === 'main-subscription') {
+        const second = groups.find(row => row.dueKey === '2028-02-14')!;
+        expect(paymentStageCashBreakdown(second)).toEqual({ scheduledCashWon: 0, separatelyNotifiedCashWon: 0, totalCashWon: 0 });
+      }
+      const balance = groups.at(-1)!;
+      expect(balance.other).toBe(plan === 'main-subscription' ? 570_000 : 712_500);
+      expect(paymentStageCashBreakdown(balance).separatelyNotifiedCashWon).toBe(0);
     });
   }
 

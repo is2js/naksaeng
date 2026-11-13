@@ -6,7 +6,7 @@ import { BUNDANG_SALE_FINANCE_CATALOG_V1, BUNDANG_INTERIM_LOAN_ASSUMED_MOVE_IN_D
 import { BUNDANG_EXECUTED_CONTRACT_REVIEW_V1, BUNDANG_PAYMENT_ITEM_LABELS, contractSupplyBalanceBreakdown } from '../game/bundang-executed-contract';
 import { calculateBundangMoveInSettlement } from '../game/bundang-move-in-finance';
 import { buildBundangFinancingTimeline, type BundangFinancingTimelineRowV1 } from '../game/bundang-financing-timeline';
-import { buildBundangPaymentStageGroups, type BundangPaymentStageGroupV1 } from '../game/bundang-payment-stage-groups';
+import { buildBundangPaymentStageGroups, paymentStageCashBreakdown, type BundangPaymentStageGroupV1 } from '../game/bundang-payment-stage-groups';
 import { calculateBundangMortgageSettlement, type BundangMortgageSettlementKind } from '../game/bundang-mortgage-settlement';
 import { countdownForDeadline, paymentDeadlineForDue, recommendedPaymentDue, seoulDateKey } from '../game/bundang-payment-timeline';
 import { clearSaleCalculatorContext, readSaleCalculatorLaunchContext, type SaleCalculatorContextV1 } from '../game/sale-calculator-context';
@@ -373,9 +373,14 @@ class CalculatorApp {
   }
 
   private financingMarkup(row: BundangFinancingTimelineRowV1): string {
+    const group = this.scheduleRows.find(candidate => candidate.financing === row);
+    const split = group ? paymentStageCashBreakdown(group) : null;
+    const separate = Boolean(split?.separatelyNotifiedCashWon);
+    const cashLabel = separate ? '내 현금 · 준비 합계' : '내 현금';
+    const breakdown = separate ? `<div class="financing-cash-breakdown"><span data-flow="scheduled-cash"><span>표시 납부일 자납</span><b>${money(split!.scheduledCashWon)}</b></span><span data-flow="undated-cash"><span>Ⅲ 별도 안내일 자납</span><b>${money(split!.separatelyNotifiedCashWon)}</b></span></div>` : '';
     const line = (kind: string, label: string, value: number, sign: string) => value
       ? `<span class="financing-line" data-flow="${kind}"><span>${label}</span><b>${sign}${money(value)}</b></span>` : '';
-    return `<div class="financing-lines">${line('loan-draw', '집단대출 실행 · 유입', row.groupLoanDrawWon, '−')}${line('interim-repayment', '중도금 원금 상환', row.interimRepaymentWon, '＋')}${line('deferred-interest', '예상 후불이자 상환', row.deferredInterestWon, '＋')}${line('mortgage', '잔금 모기지 · 유입', row.mortgageAppliedWon, '−')}<span class="financing-cash" data-flow="cash-due"><span>내 현금</span><b>${money(row.cashDueWon)}</b></span></div>`;
+    return `<div class="financing-lines">${line('loan-draw', '집단대출 실행 · 유입', row.groupLoanDrawWon, '−')}${line('interim-repayment', '중도금 원금 상환', row.interimRepaymentWon, '＋')}${line('deferred-interest', '예상 후불이자 상환', row.deferredInterestWon, '＋')}${line('mortgage', '잔금 모기지 · 유입', row.mortgageAppliedWon, '−')}<span class="financing-cash" data-flow="cash-due"><span>${cashLabel}</span><b>${money(row.cashDueWon)}</b></span>${breakdown}</div>`;
   }
 
   private syncPaymentStageSelection(now = new Date()): void {

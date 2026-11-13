@@ -239,7 +239,6 @@ export class ShowcaseApp {
   private touchMovement = { x: 0, y: 0 };
   private touchPad?: TouchMovementPad;
   private mobileLayout = false;
-  private mobileOptionsExpanded = false;
   private readonly cooldowns = new Map<string, number>();
   private readonly frameMetrics = new FrameMetrics();
   private minimap!: FloorPlanMinimap;
@@ -659,7 +658,6 @@ export class ShowcaseApp {
                 <small>manifest와 chunk를 조합하고 있습니다</small>
               </div>
 
-              <span id="stage-summary-anchor" hidden></span>
               <div class="stage-bottom-left">
                 <div class="stage-tip" aria-label="인게임 단축키">
                   <span class="touch-tip"><b>조이스틱 이동 · 한 손가락 스크롤 · 두 손가락 지도 이동 · ＋/− 확대 · 실측</b></span>
@@ -675,7 +673,7 @@ export class ShowcaseApp {
                   </button>
                 </div>
                 <div class="stage-option-quote" aria-label="선택 옵션과 합계">
-                  <div class="stage-option-title"><span>선택 옵션</span><em id="stage-option-count">0개</em><button type="button" id="mobile-options-toggle" aria-expanded="false" aria-controls="stage-option-chips">펼치기 ▾</button><button type="button" id="stage-option-clear" class="stage-option-clear" hidden>전체 옵션 해제</button></div>
+                  <div class="stage-option-title"><span>선택 옵션</span><em id="stage-option-count">0개</em><button type="button" id="stage-option-clear" class="stage-option-clear" hidden>전체 옵션 해제</button></div>
                   <div class="stage-option-content">
                     <div class="stage-option-chips" id="stage-option-chips"><span>기본 마감</span></div>
                     <div class="stage-option-footer">
@@ -729,6 +727,7 @@ export class ShowcaseApp {
                   <span><small>선택 옵션 합계</small><b id="option-selected-count">0개</b></span>
                   <strong id="option-total">0<small>원</small></strong>
                 </div>
+                <div id="mobile-palette-calculator" class="mobile-palette-calculator" hidden></div>
                 <p>본 견적은 렌더 검수용 예시이며 실제 계약 금액이 아닙니다.</p>
               </div>
             </div>
@@ -749,7 +748,6 @@ export class ShowcaseApp {
               ${this.readOnlyShare ? '' : `<a class="furniture-manage-link" href="${resolveProjectUrl('manage/#interiorEditor')}">평면도 · PBR 상세 편집 열기 →</a>`}
             </div>
           </aside>
-          <div id="mobile-stage-summary" class="mobile-stage-summary" hidden></div>
         </main>
 
         <footer class="app-footer">
@@ -1372,39 +1370,34 @@ export class ShowcaseApp {
     this.renderer.follow(actor, 1);
   }
 
-  private paintMobileOptions(): void {
-    const expanded = !this.mobileLayout || this.mobileOptionsExpanded;
-    this.get<HTMLElement>('#stage-option-chips').hidden = !expanded;
-    const toggle = this.get<HTMLButtonElement>('#mobile-options-toggle');
-    toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.textContent = expanded ? '접기 ▴' : '펼치기 ▾';
-  }
-
   private bindResponsiveSummary(): void {
     const signal = this.abortController.signal;
     const media = window.matchMedia('(pointer: coarse), (max-width: 760px)');
     const summary = this.get<HTMLElement>('.stage-bottom-left');
-    const host = this.get<HTMLElement>('#mobile-stage-summary');
     const helpHost = this.get<HTMLElement>('#mobile-stage-help');
+    const calculatorHost = this.get<HTMLElement>('#mobile-palette-calculator');
+    const calculatorButton = this.get<HTMLButtonElement>('#open-sale-calculator');
     const help = summary.querySelector<HTMLElement>('.stage-tip')!;
     const quote = summary.querySelector<HTMLElement>('.stage-option-quote')!;
+    const quoteFooter = quote.querySelector<HTMLElement>('.stage-option-footer')!;
     const sync = (): void => {
       this.mobileLayout = media.matches;
       this.touchPad?.reset();
-      host.hidden = !this.mobileLayout;
       helpHost.hidden = !this.mobileLayout;
+      calculatorHost.hidden = !this.mobileLayout;
+      quote.hidden = this.mobileLayout;
       if (this.mobileLayout) {
         helpHost.append(help);
-        host.append(quote);
-      } else summary.append(help, quote);
-      this.paintMobileOptions();
+        // Move the existing button, preserving its single listener, enabled
+        // state and modal contract. The desktop quote stays out of mobile UI.
+        calculatorHost.append(calculatorButton);
+      } else {
+        summary.prepend(help);
+        quoteFooter.append(calculatorButton);
+      }
       if (this.mobileLayout && !this.cameraTrackingPaused && this.canTouchMove()) this.centerMobileActor();
     };
     media.addEventListener('change', sync, { signal });
-    this.get<HTMLButtonElement>('#mobile-options-toggle').addEventListener('click', () => {
-      this.mobileOptionsExpanded = !this.mobileOptionsExpanded;
-      this.paintMobileOptions();
-    }, { signal });
     sync();
   }
 

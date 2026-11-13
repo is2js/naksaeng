@@ -2168,6 +2168,8 @@ input:focus-visible {
   background: linear-gradient(180deg, rgba(28, 26, 21, .94), rgba(7, 10, 10, .96));
   box-shadow: 0 10px 26px rgba(0, 0, 0, .48), inset 0 1px rgba(255, 255, 255, .04);
 }
+.stage-option-quote[hidden], .mobile-palette-calculator[hidden] { display: none; }
+.mobile-palette-calculator { display: none; }
 
 .stage-option-title { padding: 2px 0 6px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .stage-option-title span { color: #ddd2b8; font-size: 12px; font-weight: 800; }
@@ -2406,8 +2408,7 @@ input:focus-visible {
   .app-footer { padding: 8px 14px; gap: 10px; flex-wrap: wrap; }
 }
 
-.touch-controls, .touch-ghost-actions, .touch-laser-axis, .stage-tip > .touch-tip, #mobile-options-toggle { display: none; }
-.stage-option-chips[hidden], .mobile-stage-summary[hidden] { display: none; }
+.touch-controls, .touch-ghost-actions, .touch-laser-axis, .stage-tip > .touch-tip { display: none; }
 
 @media (pointer: coarse), (max-width: 760px) {
   .game-stage, .rpg-actor, #world-canvas, #three-world-canvas { touch-action: pan-y; }
@@ -2455,17 +2456,11 @@ input:focus-visible {
   .game-stage.is-furniture-ghost-invalid [data-touch-ghost="confirm"] { opacity: .55; }
   .game-stage.is-interior-authoring .touch-move-pad, .game-stage[data-istarpark-laser-active="true"] .touch-move-pad { opacity: .35; }
   .mobile-stage-help { margin-top: 8px; }
-  .mobile-stage-summary { width: 100%; margin-top: 14px; }
-  .mobile-stage-summary .stage-option-quote { max-height: none; padding: 12px 14px 14px; }
-  .mobile-stage-summary .stage-option-content { display: flex; flex-direction: column; overflow: hidden; }
-  .mobile-stage-summary .stage-option-chips { max-height: min(240px, 35svh); overflow-y: auto; padding-bottom: 8px; }
-  .mobile-stage-summary .stage-option-footer { border-left: 0; padding: 8px 0 0; grid-template-columns: auto 1fr; }
-  .mobile-stage-summary .stage-option-footer > strong { justify-self: end; font-size: 22px; }
-  .mobile-stage-summary #open-sale-calculator { width: 100%; min-height: 54px; margin-top: 10px; padding: 12px 16px; border-radius: 8px; font-size: 16px; }
-  .mobile-stage-summary #open-sale-calculator:not(:disabled) { color: #eafff7; border-color: rgba(135, 231, 207, .8); background: linear-gradient(135deg, #236e5b, #15483f); box-shadow: 0 4px 16px rgba(27, 118, 94, .2); }
-  .mobile-stage-summary #open-sale-calculator > span { font-size: 22px; }
-  .mobile-stage-summary #open-sale-calculator:focus-visible { outline: 2px solid #a7f3d0; outline-offset: 3px; }
-  #mobile-options-toggle { display: inline-flex; align-items: center; min-height: 44px; padding: 5px 8px; border: 1px solid rgba(141,225,201,.3); border-radius: 6px; background: rgba(83,173,152,.1); color: #b8eee2; font-size: 12px; cursor: pointer; }
+  .mobile-palette-calculator { display: block; }
+  .mobile-palette-calculator #open-sale-calculator { width: 100%; min-height: 54px; margin-top: 10px; padding: 12px 16px; border-radius: 8px; font-size: 16px; }
+  .mobile-palette-calculator #open-sale-calculator:not(:disabled) { color: #eafff7; border-color: rgba(135, 231, 207, .8); background: linear-gradient(135deg, #236e5b, #15483f); box-shadow: 0 4px 16px rgba(27, 118, 94, .2); }
+  .mobile-palette-calculator #open-sale-calculator > span { font-size: 22px; }
+  .mobile-palette-calculator #open-sale-calculator:focus-visible { outline: 2px solid #a7f3d0; outline-offset: 3px; }
   .stage-tip { width: 100%; max-width: 100%; flex-wrap: wrap; white-space: normal; font-size: 11px; }
   .stage-tip > span { display: none; }
   .stage-tip > .touch-tip { display: inline-flex; }

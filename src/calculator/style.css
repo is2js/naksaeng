@@ -113,6 +113,12 @@ input:focus-visible{outline:2px solid var(--mint-bright);outline-offset:3px}
 .financing-line[data-flow="deferred-interest"] b{color:#e4c282}
 .financing-cash{margin-top:3px;color:#c8ddcf;font-weight:750}
 .financing-cash b{color:var(--mint-bright);font-size:12px}
+.financing-cash-breakdown{display:grid;gap:4px;margin-top:7px;padding-top:6px;border-top:1px dashed var(--line);font-size:11px;line-height:1.65}
+.financing-cash-breakdown>span{display:flex;justify-content:space-between;gap:12px;white-space:normal;color:#c6d9d1}
+.financing-cash-breakdown>span[data-flow="undated-cash"],.financing-cash-breakdown>span[data-stage-flow="undated-cash"]{color:var(--gold)}
+.financing-cash-breakdown b{font-size:12px;white-space:nowrap}
+.payment-stage-funding .financing-cash-breakdown{font-size:13px}.payment-stage-funding .financing-cash-breakdown b{font-size:15px}
+@media print{.financing-cash-breakdown,.financing-cash-breakdown>span{color:#254534!important;border-color:#a7bcb3!important}}
 .separate-contract-date{display:block;margin-top:6px;color:#afaa91;font-size:9px;line-height:1.6;white-space:nowrap}
 .financing-note{margin:13px 0;color:#9bb3a4;font-size:11px;line-height:1.75}
 .financing-note b{color:#c9dfcf}

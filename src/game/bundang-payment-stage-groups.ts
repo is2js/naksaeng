@@ -33,6 +33,24 @@ export interface BundangPaymentStageGroupsInputV1 {
   paymentPlanKind: BundangPaymentPlanKind;
 }
 
+/** Distinguish a displayed due date from undated III planning amounts. */
+export function paymentStageCashBreakdown(row: BundangPaymentStageGroupV1): {
+  scheduledCashWon: number;
+  separatelyNotifiedCashWon: number;
+  totalCashWon: number;
+} {
+  const totalCashWon = amount(row.financing.cashDueWon);
+  const separatelyNotifiedCashWon = row.optionIiiPayments
+    .filter(payment => payment.datePrecision === 'unknown')
+    .reduce((sum, payment) => amount(sum + amount(payment.amountWon)), 0);
+  if (separatelyNotifiedCashWon > totalCashWon) throw new Error('별도 안내 현금이 회차 준비액을 초과합니다.');
+  return {
+    scheduledCashWon: totalCashWon - separatelyNotifiedCashWon,
+    separatelyNotifiedCashWon,
+    totalCashWon,
+  };
+}
+
 const FINANCING_AMOUNT_KEYS = [
   'contractDueWon', 'groupLoanDrawWon', 'interimRepaymentWon', 'deferredInterestWon',
   'mortgageAppliedWon', 'cashDueWon',

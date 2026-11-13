@@ -20,6 +20,10 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await expect(page.locator('.stage-option-quote')).toBeHidden();
   await expect(page.locator('#mobile-palette-calculator #open-sale-calculator')).toHaveCount(1);
   await expect(button).toBeEnabled(); // Basic finish still supports calculating.
+  expect((await page.locator('#option-list').boundingBox())!.height).toBeGreaterThanOrEqual(350);
+  expect((await page.locator('.option-storage-note').innerText()).trim()).toBe('가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다.');
+  await expect(page.locator('.option-storage-description')).toBeHidden();
+  await expect(page.locator('.option-design-reference')).toBeHidden();
   await page.locator('input[data-option-id="wide-plank-floor-finish"]').check({ force: true });
   await expect(page.locator('#option-selected-count')).toHaveText('1개');
   await expect(page.locator('#option-total')).toContainText('1,820,000');
@@ -42,6 +46,8 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await expect(page.locator('.stage-option-quote')).toBeVisible();
   await expect(page.locator('.stage-option-footer #open-sale-calculator')).toHaveAttribute('data-identity-token', 'same-cta');
   await expect(page.locator('#mobile-palette-calculator')).toBeHidden();
+  await expect(page.locator('.option-storage-description')).toBeVisible();
+  await expect(page.locator('.option-design-reference')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.stage-option-quote')).toBeHidden();
   await expect(page.locator('#mobile-palette-calculator #open-sale-calculator')).toHaveAttribute('data-identity-token', 'same-cta');

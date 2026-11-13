@@ -2431,7 +2431,8 @@ input:focus-visible {
   .furniture-search { min-height: 44px; font-size: 16px; }
   .game-stage { min-height: 520px; height: clamp(520px, 72svh, 680px); }
   .showcase-layout { display: flex; flex-direction: column; }
-  .option-panel { width: 100%; height: auto; max-height: 720px; }
+  .option-panel { width: 100%; height: auto; max-height: 800px; }
+  .option-storage-description, .option-design-reference { display: none; }
   .map-identity { display: none !important; }
   .floorplan-minimap { top: 8px; bottom: auto; right: 8px; width: 114px; padding: 4px; transform: none; border-radius: 10px; }
   .floorplan-minimap canvas { height: 90px; border: 0; border-radius: 6px; }

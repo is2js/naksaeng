@@ -164,6 +164,9 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
     label: '디자인 월(거실/복도면)',
     description: 'TV 쪽 침실1 맞닿은 벽은 기본 제공입니다. 유상 선택 시 기본 제공면과 냉장고면을 제외한 거실·복도 벽면에 디자인 월 마감을 추가합니다.',
   }),
+  [WIDE_PLANK_FLOOR_OPTION_ID]: Object.freeze({
+    description: '기본 강마루를 같은 DL-MISTY 계열의 광폭 강마루로 교체합니다. 바닥 높이는 유지하고 판재 폭·길이와 이음매 간격이 달라집니다. 실제 색상은 마감재·전시관을 확인해 주세요.',
+  }),
   [BEDROOM_ONE_PET_CLOSET_OPTION_ID]: Object.freeze({
     label: '침실1 와이드 붙박이장',
     description: '붙박이장(PET) 구성입니다.',
@@ -1009,7 +1012,13 @@ function kitchenCooktopAndHoodProps(
 
 function refineWidePlankAndVentilatorProp(prop: ApartmentInteriorProp): ApartmentInteriorProp {
   if (prop.assetId === WIDE_PLANK_FLOOR_OPTION_ID) {
-    return { ...prop, sourceOptionId: WIDE_PLANK_FLOOR_OPTION_ID };
+    return {
+      ...prop,
+      sourceOptionId: WIDE_PLANK_FLOOR_OPTION_ID,
+      fixedOptionLayout: true,
+      collisionMode: 'visual-only',
+      measurementObstacle: false,
+    };
   }
   if (prop.assetId === BATHROOM_COMBINATION_VENTILATOR_OPTION_ID) {
     return {

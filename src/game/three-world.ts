@@ -26,6 +26,14 @@ import {
 } from './bundang-option-layout';
 import { associateOptionSources } from './option-prop-selection';
 import {
+  applyBundangFloorUVs,
+  BUNDANG_FLOOR_SURFACE_Y,
+  bundangFloorFinish,
+  createBundangFloorSelectionSurface,
+  createBundangWoodFloorTexture,
+  WIDE_PLANK_FLOOR_OPTION_ID,
+} from './bundang-floor-finish';
+import {
   ISTARPARK_LASER_HEIGHT_METERS,
   type InspectionLaserAxis,
   type InspectionLaserMeasurement,
@@ -669,6 +677,7 @@ export class ThreeWorldRenderer {
   private readonly modelCache = new Map<string, Promise<THREE.Group>>();
   private readonly renderedProps = new Map<string, ApartmentInteriorProp>();
   private readonly textureCache = new Map<string, THREE.Texture>();
+  private readonly woodFloorTexture = createBundangWoodFloorTexture();
   private readonly assets = new Map<string, RuntimeAsset>();
   private readonly variants = new Map<string, Record<string, string>>(Object.entries(DEFAULT_VARIANTS));
   private optionRuntime: OptionRuntimeModule | null = null;
@@ -1322,6 +1331,7 @@ export class ThreeWorldRenderer {
     disposeTree(this.propRoot);
     this.textureCache.forEach((texture) => texture.dispose());
     this.textureCache.clear();
+    this.woodFloorTexture.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
@@ -1483,15 +1493,19 @@ export class ThreeWorldRenderer {
     const floorGeometry = this.shapeGeometry(object, floorPolygon);
     if (!floorGeometry) return;
     const cellSize = Math.max(0.01, finite(geometry.cellSizeMeters, 0.5));
+    const floorFinish = bundangFloorFinish(this.selectedOptionIds);
+    applyBundangFloorUVs(floorGeometry, object, this.world || { width: 64, height: 64 }, floorFinish);
     const floor = new THREE.Mesh(
       floorGeometry,
-      this.material('#b9aa9b', { roughness: 0.86, mapId: String(geometry.materials?.wood || 'bundang-55b-greige-oak-v1') }),
+      new THREE.MeshStandardMaterial({ color: '#ffffff', map: this.woodFloorTexture, roughness: .86, metalness: 0, side: THREE.DoubleSide }),
     );
-    floor.position.y = 0.035;
+    floor.position.y = BUNDANG_FLOOR_SURFACE_Y;
     floor.receiveShadow = false;
     floor.userData.structureKind = 'apartment-floor';
     floor.userData.laserFloor = true;
+    floor.userData.floorFinish = floorFinish;
     this.structureRoot.add(floor);
+    this.canvas.dataset.woodFloorFinish = floorFinish;
 
     for (const roomValue of geometry.roomZones || []) {
       const room = roomValue as Record<string, unknown>;
@@ -1887,7 +1901,8 @@ export class ThreeWorldRenderer {
           : ['wall', 'anchored'].includes(mountingKind)
             ? Math.max(0, finite(asset?.defaultMountHeightMeters))
             : 0.018;
-    const baseY = mountingKind === 'room-finish' ? 0.038 : mountHeight / cellSize;
+    const baseY = assetId === WIDE_PLANK_FLOOR_OPTION_ID ? BUNDANG_FLOOR_SURFACE_Y
+      : mountingKind === 'room-finish' ? 0.038 : mountHeight / cellSize;
     group.position.set(center.x, baseY, center.z);
     group.rotation.y = placement.worldYaw;
     group.renderOrder = mountingKind === 'room-finish' ? 3.04 : 3.1;
@@ -2027,6 +2042,12 @@ export class ThreeWorldRenderer {
     const group = new THREE.Group();
     const size = dimensions(prop, asset);
     const cellSize = Math.max(0.01, finite(this.apartment?.geometry?.cellSizeMeters, 0.5));
+    if (prop.assetId === WIDE_PLANK_FLOOR_OPTION_ID) {
+      // The structural floor owns the visible material. Preserve the existing
+      // whole-floor picking/mask group without rendering a second thick layer.
+      group.add(createBundangFloorSelectionSurface(size[0] / cellSize, size[1] / cellSize));
+      return group;
+    }
     const palette = this.palette(prop.materialVariantId);
     const roomFinish = asset?.mountingKind === 'room-finish';
     const wallFinish = String(prop.installationRole || '').includes('wall-');

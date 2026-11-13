@@ -499,6 +499,7 @@ export class ShowcaseApp {
 
   private renderShell(fallback: boolean): void {
     const operator = readHouseholdVerificationSession()?.role === 'operator';
+    const openChatLink = `<a class="open-chat-link" href="https://open.kakao.com/o/gjze7GWi" target="_blank" rel="noopener noreferrer" aria-label="오픈카톡 (새 탭)"><img src="${resolveProjectUrl('assets/ui/open-kakao.svg')}" width="22" height="22" alt="" aria-hidden="true"><span>오픈카톡</span></a>`;
     const mapOptions = this.catalog.maps
       .map(
         (map) => `<option value="${escapeHtml(map.id)}" ${map.id === this.currentMap.id ? 'selected' : ''}>${escapeHtml(map.unitType)} · ${escapeHtml(map.label)}</option>`,
@@ -546,6 +547,7 @@ export class ShowcaseApp {
               <button type="button" id="viewer-reset-position" class="icon-button" title="캐릭터 위치 초기화" aria-label="캐릭터 위치 초기화">↺</button>
               <button type="button" id="viewer-open-help" class="icon-button" title="놀이터 조작법" aria-label="놀이터 조작법">?</button>
               ${this.readOnlyShare ? '' : '<button type="button" id="share-showcase" class="deck-text-button share-showcase-button">공유</button>'}
+              ${openChatLink}
             </div>`}
             <div class="control-deck ${operator && !this.readOnlyShare ? '' : 'is-user-hidden'}">
               <label class="select-field">
@@ -570,6 +572,7 @@ export class ShowcaseApp {
                 <button type="button" id="reset-position" class="icon-button" title="캐릭터 위치 초기화" aria-label="캐릭터 위치 초기화">↺</button>
                 <button type="button" id="open-help" class="icon-button" title="놀이터 조작법" aria-label="놀이터 조작법">?</button>
                 ${operator && !this.readOnlyShare ? '<button type="button" id="share-showcase" class="deck-text-button share-showcase-button">공유</button>' : ''}
+                ${operator && !this.readOnlyShare ? openChatLink : ''}
               </div>
             </div>
 

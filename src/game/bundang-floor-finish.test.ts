@@ -21,7 +21,8 @@ describe('마루는 기존 바닥 면을 교체하며 덧깔지 않는다', () =
 
   it('한 그레이지 컬러맵을 결정적으로 생성하며 판별 색조 차이를 만들지 않는다', () => {
     const first = bundangWoodFloorPixels(), second = bundangWoodFloorPixels();
-    expect(first.data).toEqual(second.data);
+    // Byte-exact comparison without the test runner walking a million keys.
+    expect(Buffer.compare(first.data, second.data)).toBe(0);
     expect(first.data.length).toBe(first.width * first.height * 4);
     let red = 0, green = 0, blue = 0;
     for (let i = 0; i < first.data.length; i += 4) {

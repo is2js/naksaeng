@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 
 const base = '/naksaeng/bunfirvil/';
-const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v4.webp');
+const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v5.webp');
 const server = await createServer({
   configFile: resolve('vite.config.ts'),
   server: { host: '127.0.0.1', port: 0, strictPort: true },

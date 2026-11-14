@@ -175,13 +175,13 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
     // Open system shelving: thin posts instead of full-height back/end panels.
     // Keep the rounded L shelves and their low supports.
     parts: [
-      ...[[-.46, -.46], [.46, -.46], [-.46, .46]].map(([x, y]): RuntimePart => ({
+      ...[[-.46, -.46], [.46, .46], [-.46, .46]].map(([x, y]): RuntimePart => ({
         shape: 'box', scale: [.035, .035, .96], offset: [x, y, .48], materialRole: 'accent',
       })),
       ...[.08, .30, .52, .74, .96].map((height): RuntimePart => ({
         shape: 'rounded-l-shelf', scale: [1, 1, .035], offset: [0, 0, height], materialRole: 'primary',
       })),
-      { shape: 'box', scale: [.66, .08, .055], offset: [.16, -.34, .025], materialRole: 'accent' },
+      { shape: 'box', scale: [.66, .08, .055], offset: [.16, .34, .025], materialRole: 'accent' },
       { shape: 'box', scale: [.08, .7, .055], offset: [-.39, .05, .025], materialRole: 'accent' },
     ],
   },
@@ -660,6 +660,9 @@ export function mergeEditorPropsWithBase(
     const sourceId = String(base.id || '');
     const override = sourceId ? overridesBySource.get(sourceId) : undefined;
     if (!override) return [base];
+    // Old editable-option saves must not put the corrected fixed pantry back on
+    // its former side wall. Keep the stored rows/user furniture untouched.
+    if (base.fixedOptionLayout === true && base.sourceOptionId === 'entry-pantry-system-shelf') return [base];
     if (override.localDeleted === true) return [];
     const yawDeg = Number(override.yawDeg);
     return [{

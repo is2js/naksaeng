@@ -119,8 +119,11 @@ describe('55B v2 canonical reconstruction', () => {
     expect(shelfRecipe.parts!.filter(part => part.shape === 'box' && part.scale![2] > .5)
       .every(part => part.scale![0] < .05 && part.scale![1] < .05)).toBe(true);
     const shelfWidth = (pantry.dimensionsMeters as number[])[0];
-    expect(pantry.positionMeters![0] - shelfWidth / 2).toBeGreaterThan(5.87);
-    expect(pantry.positionMeters![0] + shelfWidth / 2).toBeLessThan(6.87);
+    const shelfDepth = (pantry.dimensionsMeters as number[])[1];
+    expect(pantry.positionMeters![1] - shelfWidth / 2).toBeGreaterThan(1.91);
+    expect(pantry.positionMeters![1] + shelfWidth / 2).toBeLessThan(3.36);
+    expect(pantry.positionMeters![0] - shelfDepth / 2).toBeCloseTo(5.88);
+    expect(pantry.positionMeters![0] + shelfDepth / 2).toBeLessThan(6.87);
   });
 
   for (const variant of ['A', 'B', 'C', 'D'] as const) it(`${variant}: blocks new walls/fixtures for walking and teleport while retaining open floor and minus restoration`, () => {

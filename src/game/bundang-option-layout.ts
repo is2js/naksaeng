@@ -1,6 +1,8 @@
-import type { ApartmentGeometry, ApartmentInteriorProp, BOptionEntry } from './types';
+import type { ApartmentGeometry, ApartmentInteriorProp, BOptionEntry, WorldObject } from './types';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
 import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
+import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
+import { planVariantDefinition, type ApartmentPlanVariant } from './plan-variant-definitions';
 
 type UnitTypeId = '51A' | '55A' | '55B' | '59A';
 type Point = [number, number];
@@ -156,7 +158,7 @@ function isBundangMinusSuppressedProp(prop: ApartmentInteriorProp): boolean {
 export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<Pick<BOptionEntry, 'label' | 'description' | 'previewUrl'>>>> = Object.freeze({
   'entry-pantry-system-shelf': Object.freeze({
     description: 'L자 라운드 선반과 얇은 지지대로 구성된 개방형 시스템 선반입니다.',
-    previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v4.webp',
+    previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v5.webp',
   }),
   [OPEN_PREMIUM_SHOE_CABINET_OPTION_ID]: Object.freeze({
     label: '오픈형 프리미엄 신발장',
@@ -1289,6 +1291,63 @@ function islandApplianceBayProps(
   return props;
 }
 
+/**
+ * Pantry entrance is east of its storage recess in all supported source plans.
+ * The actual rounded shelf's long run is local +Z (Shape.rotateX flips depth),
+ * so +Z must face the WEST backing surface, not the short north side wall.
+ * Use the exposed service-block face where present, never bury it in that block.
+ */
+function alignEntryPantryToBackWall(
+  geometry: ApartmentGeometry, unitType: string, prop: ApartmentInteriorProp, planVariant?: string,
+): ApartmentInteriorProp {
+  if (prop.assetId !== 'entry-pantry-rounded-system-cabinet') return prop;
+  const wall = geometry.wallSegments?.find(candidate => candidate.id === 'pantry-west');
+  const a = point(wall?.a), b = point(wall?.b);
+  const opening = geometry.openings?.find(candidate => candidate.id === 'pantry-east-opening');
+  const doorA = point(opening?.a), doorB = point(opening?.b);
+  if (!wall || !a || !b || !doorA || !doorB || Math.abs(a[0] - b[0]) > .0001) return prop;
+  let backX = a[0] + Number(wall.thicknessMeters || .2) / 2;
+  let start = Math.min(a[1], b[1]), end = Math.max(a[1], b[1]);
+  // Clip the west wall to the actual adjoining north/south wall faces.
+  const endInset = (y: number): number => Math.max(0, ...(geometry.wallSegments || []).flatMap(candidate => {
+    const c = point(candidate.a), d = point(candidate.b);
+    return c && d && Number(candidate.baseMeters || 0) < .05 && Math.abs(c[1] - d[1]) < .0001
+      && Math.abs(c[1] - y) < .0001 && a[0] >= Math.min(c[0], d[0]) - .0001 && a[0] <= Math.max(c[0], d[0]) + .0001
+      ? [Number(candidate.thicknessMeters || .12) / 2] : [];
+  }));
+  const startInset = endInset(start), finishInset = endInset(end);
+  start += startInset;
+  end -= finishInset;
+  let backingSurfaceId = 'pantry-west';
+  const block = geometry.solidBlocks?.find(candidate => candidate.id === 'entry-pantry-west-service-block');
+  if (block) {
+    const footprint = apartmentSolidBlockVisualFootprint({ geometry, unitTypeId: unitType } as WorldObject, block);
+    if (footprint.length < 3) return prop;
+    backX = Math.max(backX, ...footprint.map(p => p[0]));
+    start = Math.max(start, Math.min(...footprint.map(p => p[1])));
+    end = Math.min(end, Math.max(...footprint.map(p => p[1])));
+    backingSurfaceId = String(block.id);
+  }
+  const sourceSize = prop.dimensionsMeters;
+  const depth = Number(Array.isArray(sourceSize) ? sourceSize[1] : sourceSize?.depth) || .48;
+  const height = Number(Array.isArray(sourceSize) ? sourceSize[2] : sourceSize?.height) || 2.15;
+  const width = end - start - .04; // 20 mm at each end, including the small shelf bevel.
+  const doorX = (doorA[0] + doorB[0]) / 2;
+  if (width <= .2 || doorX <= backX + depth + .01) return prop;
+  const requested = String(planVariant || record(geometry.optionAnchors)?.resolvedPlanVariant || 'A').toUpperCase();
+  const variant = (['A', 'B', 'C', 'D'].includes(requested) ? requested : 'A') as ApartmentPlanVariant;
+  const transform = planVariantDefinition(unitType, variant).transform;
+  const reflected = Boolean(transform.mirrorX) !== Boolean(transform.mirrorY);
+  return {
+    ...prop, positionMeters: [backX + depth / 2 + .01, (start + end) / 2], dimensionsMeters: [width, depth, height],
+    // Placement transforms +X into yaw; for an odd reflection it omits local Z.
+    // A half-turn plus recipe-X reflection restores the complete L exactly once.
+    yawDeg: reflected ? 270 : 90, mirrored: reflected,
+    fixedOptionLayout: true, pantryBackSurfaceId: backingSurfaceId,
+    pantryBackFaceMeters: [backX, start, backX, end], wallClearanceMeters: .01,
+  };
+}
+
 /** Entry joinery is fitted to the v2 physical faces, not the legacy 1.55 m cap. */
 export function bundang55BEntryOptionProps(
   geometry: ApartmentGeometry, selectedIds: Iterable<string>, planVariant?: string,
@@ -1316,11 +1375,11 @@ export function bundang55BEntryOptionProps(
       sourceOptionId: OPEN_PREMIUM_SHOE_CABINET_OPTION_ID, anchorId: 'options.entryShoeCabinet', installationRole: 'entry-storage' };
     result.push(alignOpenPremiumShoeCabinetToEntry(cabinet, '55B', planVariant));
   }
-  if (selected.has('entry-pantry-system-shelf')) result.push({ ...common,
+  if (selected.has('entry-pantry-system-shelf')) result.push(alignEntryPantryToBackWall(geometry, '55B', { ...common,
     id: 'inspection-55B-entry-pantry-system-shelf', assetId: 'entry-pantry-rounded-system-cabinet',
     roomZoneId: 'entry-pantry', positionMeters: [6.37, 2.23], dimensionsMeters: [.82, .48, 2.15], yawDeg: 0,
     materialVariantId: 'pet-warm-ivory', sourceOptionId: 'entry-pantry-system-shelf',
-    anchorId: 'options.entryPantrySystemShelf', installationRole: 'entry-storage' });
+    anchorId: 'options.entryPantrySystemShelf', installationRole: 'entry-storage' }, planVariant));
   return result;
 }
 
@@ -1354,6 +1413,7 @@ export function refineBundangOptionProps(
     .map((prop) => refineRefrigeratorCabinetProp(geometry, selected, prop, planVariant))
     .filter((prop): prop is ApartmentInteriorProp => Boolean(prop))
     .map(refineWidePlankAndVentilatorProp)
+    .map(prop => alignEntryPantryToBackWall(geometry, unitType, prop, planVariant))
     .map(alignIntegratedBidetToDefaultFacing)
     .map((prop) => alignOpenPremiumShoeCabinetToEntry(prop, unitType, planVariant));
   props.push(...bundang55BEntryOptionProps(geometry, selected, planVariant));

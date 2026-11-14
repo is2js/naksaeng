@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bunfirvil-local-preview-provenance-v1",
-  "reviewedAt": "2026-11-07",
+  "reviewedAt": "2026-11-14",
   "legalRightsProof": false,
   "files": [
     {
@@ -24,6 +24,18 @@
       "height": 512,
       "bytes": 5222,
       "sha256": "180f60d641a1252af690fdad1edf4d776d50fa81951c7d355c89238d20b0425f",
+      "rightsClass": "maintainer-reviewed-project-asset",
+      "publicationApprovalCategory": "site-generated-procedural-preview"
+    },
+    {
+      "file": "assets/options/previews/entry-pantry-system-shelf-v5.webp",
+      "sourceScript": "scripts/render-pantry-preview.mjs",
+      "sourceRuntime": "src/game/three-world.ts",
+      "optionId": "entry-pantry-system-shelf",
+      "width": 512,
+      "height": 512,
+      "bytes": 5370,
+      "sha256": "f07f76f244c9fbbbef3dd3db65c80f16c05b0a11331ce3486d4b3609710514b2",
       "rightsClass": "maintainer-reviewed-project-asset",
       "publicationApprovalCategory": "site-generated-procedural-preview"
     }

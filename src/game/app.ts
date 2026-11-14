@@ -12,6 +12,7 @@ import {
   type HouseholdVerificationRole,
 } from './household-verification';
 import { playgroundCapabilities } from './playground-access';
+import { showcaseHotbarActionAt, showcaseHotbarActions, type ShowcaseHotbarAction } from './showcase-hotbar';
 import {
   clearSaleCalculatorContext,
   readSaleCalculatorHouseholdContext,
@@ -2893,18 +2894,19 @@ export class ShowcaseApp {
     const planVariants = availablePlanVariants(this.currentMap.unitType);
     const planVariantIndex = Math.max(0, planVariants.indexOf(this.planVariant));
     const nextPlanVariant = planVariants[(planVariantIndex + 1) % planVariants.length] || 'A';
-    const controls = [
+    const controlsByAction = new Map([
       { id: 'common-teleport', label: '텔레포트', icon: teleport.iconUrl ? `<img src="${escapeHtml(resolveProjectUrl(teleport.iconUrl))}" alt="" onerror="this.hidden=true" />` : '', glyph: teleport.glyph, state: '', active: false },
       { id: 'showcase-gender-toggle', label: '성별 전환', icon: `<img src="${escapeHtml(resolveProjectUrl('assets/showcase-controls/lk-custom-023.png'))}" alt="" />`, glyph: '↺', state: '', active: this.activeActor === '200' },
       { id: 'showcase-plan-toggle', label: '평면 타입 전환', icon: '', glyph: `${this.planVariant}→${nextPlanVariant}`, state: '', active: planVariantIndex > 0 },
       { id: 'showcase-pigmy-toggle', label: '변신', icon: '<span class="pigmy-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.transformationId ? 'ON' : '', active: Boolean(this.transformationId) },
       { id: 'showcase-children', label: '자녀 인형', icon: '<span class="child-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.childCompanionChoices.length ? String(this.childCompanionChoices.length) : '', active: this.childCompanionChoices.length > 0 },
-    ].map((control, slot) => ({ ...control, slot }))
-      .filter(control => this.hasMemberAccess || (control.slot !== 2 && control.slot !== 3));
+    ].map(control => [control.id, control] as const));
+    const controls = showcaseHotbarActions(this.hasMemberAccess)
+      .map((action, slot) => ({ ...controlsByAction.get(action)!, slot }));
     this.get<HTMLElement>('#game-stage').style.setProperty('--hotbar-count', String(controls.length));
     element.innerHTML = controls.map((control) => `
       <span class="hotbar-slot-wrap" data-slot-wrap="${control.slot}">
-        <button type="button" class="hotbar-slot hotbar-control ${control.active ? 'is-active' : ''}" data-slot="${control.slot}" data-hotbar-action="${control.id}" ${control.id === 'common-teleport' ? 'data-skill-id="common-teleport"' : ''} aria-label="${control.slot + 1}번 ${escapeHtml(control.label)}" ${this.readOnlyShare && control.slot > 0 || this.planSwitchPending && control.slot === 2 ? 'disabled' : ''}>
+        <button type="button" class="hotbar-slot hotbar-control ${control.active ? 'is-active' : ''}" data-slot="${control.slot}" data-hotbar-action="${control.id}" ${control.id === 'common-teleport' ? 'data-skill-id="common-teleport"' : ''} aria-label="${control.slot + 1}번 ${escapeHtml(control.label)}" ${this.readOnlyShare && control.id !== 'common-teleport' || this.planSwitchPending && control.id === 'showcase-plan-toggle' ? 'disabled' : ''}>
           <span class="slot-number">${control.slot + 1}</span>
           ${control.icon}<span class="skill-glyph">${escapeHtml(control.glyph)}</span>
           ${control.state ? `<span class="hotbar-control-state">${escapeHtml(control.state)}</span>` : ''}
@@ -2920,7 +2922,7 @@ export class ShowcaseApp {
         // the scene, which also becomes a dialog's focus-restoration target.
         if (event.detail > 0) this.get<HTMLElement>('#game-stage').focus({ preventScroll: true });
         const touch = event instanceof PointerEvent && event.pointerType === 'touch';
-        this.activateHotbarSlot(Number(slot.dataset.slot), touch ? null : this.cursorScreenPoint);
+        this.activateHotbarAction(slot.dataset.hotbarAction as ShowcaseHotbarAction, touch ? null : this.cursorScreenPoint);
       }, { signal: this.abortController.signal });
     });
   }
@@ -2947,7 +2949,12 @@ export class ShowcaseApp {
   }
 
   private activateHotbarSlot(index: number, target: { x: number; y: number } | null = null): void {
-    if (index === 0) {
+    const action = showcaseHotbarActionAt(index, this.hasMemberAccess);
+    if (action) this.activateHotbarAction(action, target);
+  }
+
+  private activateHotbarAction(action: ShowcaseHotbarAction, target: { x: number; y: number } | null = null): void {
+    if (action === 'common-teleport') {
       this.activateSkill('common-teleport', target);
       return;
     }
@@ -2955,7 +2962,7 @@ export class ShowcaseApp {
       this.toast('공유 열람 모드에서는 텔레포트 외 핫바 기능을 변경할 수 없습니다.', 'notice');
       return;
     }
-    if (index === 1) {
+    if (action === 'showcase-gender-toggle') {
       const transformationWasActive = Boolean(this.transformationId);
       this.transformationId = null;
       const next: CharacterKey = this.activeActor === '100' ? '200' : '100';
@@ -2968,7 +2975,7 @@ export class ShowcaseApp {
       );
       return;
     }
-    if (index === 2) {
+    if (action === 'showcase-plan-toggle') {
       if (!this.capabilities.canSwitchPlan) {
         this.toast('평면 타입 전환은 인증 회원 전용입니다.', 'notice');
         return;
@@ -2979,7 +2986,7 @@ export class ShowcaseApp {
       void this.selectPlanVariant(next);
       return;
     }
-    if (index === 3) {
+    if (action === 'showcase-pigmy-toggle') {
       if (!this.capabilities.canTransform) {
         this.toast('변신은 인증 회원 전용입니다.', 'notice');
         return;
@@ -3001,7 +3008,7 @@ export class ShowcaseApp {
       this.toast(transformation ? `${transformation.label} 변신 ON` : '변신을 해제했습니다.', 'success');
       return;
     }
-    if (index === 4) {
+    if (action === 'showcase-children') {
       this.openChildCompanionWizard();
     }
   }

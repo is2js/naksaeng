@@ -77,17 +77,26 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     expect(attempts).toBe(2);
   });
 
-  await test.step('공개 사용자는 옵션·계산기·공유는 사용하고 가구·3/4번 슬롯은 사용할 수 없다', async () => {
+  await test.step('공개 사용자는 연속된 1·2·3번 슬롯을 쓰며 회원 전용 평면·변신은 사용할 수 없다', async () => {
     const stage = page.locator('#game-stage');
     const slots = page.locator('#hotbar [data-slot]');
     const furnitureTab = page.locator('[data-palette-tab="furniture"]');
     await expect(furnitureTab).toBeHidden();
-    expect(await slots.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-slot')))).toEqual(['0', '1', '4']);
-    await expect(page.locator('#hotbar [data-slot="4"] .slot-number')).toHaveText('5');
+    expect(await slots.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-slot')))).toEqual(['0', '1', '2']);
+    const children = page.locator('#hotbar [data-slot="2"][data-hotbar-action="showcase-children"]');
+    await expect(children.locator('.slot-number')).toHaveText('3');
     const variant = await stage.getAttribute('data-plan-variant');
     await stage.focus();
     await page.keyboard.press('3');
+    await expect(page.locator('.child-companion-dialog')).toBeVisible();
+    await page.locator('.child-companion-dialog [data-child-action="close"]').click();
+    await children.click();
+    await expect(page.locator('.child-companion-dialog')).toBeVisible();
+    await page.locator('.child-companion-dialog [data-child-action="close"]').click();
+    await stage.focus();
     await page.keyboard.press('4');
+    await page.keyboard.press('5');
+    await expect(page.locator('.child-companion-dialog')).toHaveCount(0);
     await expect(stage).toHaveAttribute('data-plan-variant', variant!);
     await expect(page.locator('.rpg-actor--100')).not.toHaveAttribute('data-transformation', /.+/);
     // Dispatch directly as well: hiding the tab alone is not an authorization guard.
@@ -104,11 +113,57 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await page.locator('#share-dialog').getByRole('button', { name: '닫기' }).click();
     await expectNoHorizontalOverflow(page);
     await page.setViewportSize({ width: 390, height: 844 });
+    // A width-only resize deliberately retains the current camera. Reload to
+    // exercise the actual mobile initial/reset zoom rather than that retention.
+    await page.reload();
+    await waitForPlayground(page);
     await expectNoHorizontalOverflow(page);
     await expect(slots).toHaveCount(3);
-    await expect(page.locator('#hotbar [data-slot="4"] .slot-number')).toHaveText('5');
+    await expect(children.locator('.slot-number')).toHaveText('3');
+    await expect(page.locator('#zoom-value')).toHaveText('65%');
+    for (let index = 0; index < 5; index++) await page.locator('#zoom-out').click();
+    await expect(page.locator('#zoom-value')).toHaveText('40%');
+    await page.locator('#zoom-out').click();
+    await expect(page.locator('#zoom-value')).toHaveText('40%');
+    await page.locator('#zoom-reset').click();
+    await expect(page.locator('#zoom-value')).toHaveText('65%');
     await page.screenshot({ path: testInfo.outputPath('public-mobile.png') });
+
+    await page.locator('#touch-laser-toggle').click();
+    const hud = page.locator('#inspection-laser-hud');
+    await expect(hud).toBeVisible();
+    const stageBox = (await stage.boundingBox())!;
+    const hudBox = (await hud.boundingBox())!;
+    expect(hudBox.y - stageBox.y).toBeGreaterThanOrEqual(0);
+    expect(hudBox.y - stageBox.y).toBeLessThanOrEqual(12);
+    expect(hudBox.x).toBeGreaterThanOrEqual(stageBox.x);
+    expect(hudBox.x + hudBox.width).toBeLessThanOrEqual(stageBox.x + stageBox.width);
+    for (const selector of ['.floorplan-minimap', '.stage-zoom']) {
+      const reserved = (await page.locator(selector).boundingBox())!;
+      const overlap = hudBox.x < reserved.x + reserved.width && hudBox.x + hudBox.width > reserved.x
+        && hudBox.y < reserved.y + reserved.height && hudBox.y + hudBox.height > reserved.y;
+      expect(overlap, `mobile HUD overlaps ${selector}`).toBe(false);
+      await expect(page.locator(selector)).toBeVisible();
+    }
+    await page.locator('#inspection-laser-point-mode').click();
+    await expect(page.locator('#inspection-laser-point-mode')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#inspection-laser-line-snap').click();
+    await expect(page.locator('#inspection-laser-line-snap')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#touch-laser-axis').click();
+    const actionSizes = await hud.locator('.istarpark-laser-actions button').evaluateAll(buttons =>
+      buttons.map(button => button.getBoundingClientRect().height));
+    expect(actionSizes.every(height => height >= 44)).toBe(true);
+    await stage.screenshot({ path: testInfo.outputPath('public-mobile-laser.png') });
+    await page.locator('#touch-laser-toggle').click();
+    await expect(hud).toBeHidden();
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await stage.focus();
+    await page.keyboard.press('j');
+    await expect(hud).toBeVisible();
+    await expect(hud).toHaveCSS('top', '76px');
+    await stage.screenshot({ path: testInfo.outputPath('public-desktop-laser.png') });
+    await page.keyboard.press('Escape');
+    await expect(hud).toBeHidden();
   });
 
   let sharedUrl = '';

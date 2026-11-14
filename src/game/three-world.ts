@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
-import { RPG_CAMERA_BASE_ZOOM } from './camera';
+import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA_MOBILE_MEDIA_QUERY } from './camera';
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
 import {
@@ -1025,6 +1025,8 @@ export class ThreeWorldRenderer {
     group.add(anchor);
     const distanceLabel = this.createApartmentInspectionLaserDistanceLabel();
     group.userData.distanceLabel = distanceLabel;
+    group.userData.hasDistanceMeasurement = false;
+    if (distanceLabel) distanceLabel.visible = false;
     if (distanceLabel) group.add(distanceLabel);
     group.visible = false;
     this.scene.add(group);
@@ -1062,6 +1064,7 @@ export class ThreeWorldRenderer {
       return false;
     }
     const group = this.ensureApartmentInspectionLaserGroup();
+    group.userData.hasDistanceMeasurement = false;
     const cellSize = Math.max(.01, finite(object.geometry.cellSizeMeters, .5));
     const elevation = finite(object.elevation) + ISTARPARK_LASER_HEIGHT_METERS / cellSize;
     for (const mesh of [
@@ -1119,9 +1122,10 @@ export class ThreeWorldRenderer {
       label.position.copy(start).add(end).multiplyScalar(.5);
       label.position.y = finite(object.elevation) + .09;
       label.rotation.set(-Math.PI / 2, 0, 0);
-      label.visible = true;
     }
     group.visible = true;
+    group.userData.hasDistanceMeasurement = true;
+    this.updateApartmentInspectionLaserLabelVisibility();
     this.canvas.dataset.inspectionLaserVisible = 'true';
     this.canvas.dataset.inspectionLaserDistanceMm = String(Math.round(finite(measurement.distanceMm)));
     this.canvas.dataset.inspectionLaserRenderedStart = JSON.stringify(negativePoint);
@@ -1134,11 +1138,25 @@ export class ThreeWorldRenderer {
   }
 
   hideApartmentInspectionLaserFrame(): void {
-    if (this.apartmentInspectionLaserGroup) this.apartmentInspectionLaserGroup.visible = false;
+    if (this.apartmentInspectionLaserGroup) {
+      this.apartmentInspectionLaserGroup.visible = false;
+      this.apartmentInspectionLaserGroup.userData.hasDistanceMeasurement = false;
+    }
+    this.updateApartmentInspectionLaserLabelVisibility();
     delete this.canvas.dataset.inspectionLaserVisible;
     delete this.canvas.dataset.inspectionLaserDistanceMm;
     delete this.canvas.dataset.inspectionLaserRenderedStart;
     delete this.canvas.dataset.inspectionLaserPhase;
+  }
+
+  /** Mobile keeps distance text in the top HUD, never over the actor/beam. */
+  private updateApartmentInspectionLaserLabelVisibility(): void {
+    const mobile = window.matchMedia(RPG_CAMERA_MOBILE_MEDIA_QUERY).matches;
+    const placement = mobile ? 'hud-only' : 'in-scene';
+    if (this.canvas.dataset.inspectionLaserLabelPlacement !== placement) this.canvas.dataset.inspectionLaserLabelPlacement = placement;
+    const group = this.apartmentInspectionLaserGroup;
+    const label = group?.userData.distanceLabel as THREE.Mesh | null | undefined;
+    if (label) label.visible = !mobile && group?.visible === true && group.userData.hasDistanceMeasurement === true;
   }
 
   clearApartmentInspectionLaserFrame(): void {
@@ -1189,11 +1207,7 @@ export class ThreeWorldRenderer {
   zoomAt(screenX: number, screenY: number, wheelDelta: number): number {
     this.resize();
     const before = this.unproject(screenX, screenY);
-    const next = THREE.MathUtils.clamp(
-      this.cameraZoom * Math.exp(-wheelDelta * 0.0014),
-      RPG_CAMERA_BASE_ZOOM * 0.65,
-      RPG_CAMERA_BASE_ZOOM * 2.8,
-    );
+    const next = cameraZoomAfterWheel(this.cameraZoom, wheelDelta, window.matchMedia(RPG_CAMERA_MOBILE_MEDIA_QUERY).matches);
     if (Math.abs(next - this.cameraZoom) < 0.001) return this.cameraZoom;
     this.cameraZoom = next;
     this.camera.zoom = next;
@@ -1209,8 +1223,7 @@ export class ThreeWorldRenderer {
   }
 
   resetCameraZoom(zoom = RPG_CAMERA_BASE_ZOOM): number {
-    this.cameraZoom = THREE.MathUtils.clamp(Number.isFinite(zoom) ? zoom : RPG_CAMERA_BASE_ZOOM,
-      RPG_CAMERA_BASE_ZOOM * .65, RPG_CAMERA_BASE_ZOOM * 2.8);
+    this.cameraZoom = clampCameraZoom(zoom, window.matchMedia(RPG_CAMERA_MOBILE_MEDIA_QUERY).matches);
     this.camera.zoom = this.cameraZoom;
     this.camera.updateProjectionMatrix();
     this.canvas.dataset.cameraZoom = this.cameraZoom.toFixed(3);
@@ -1391,6 +1404,9 @@ export class ThreeWorldRenderer {
   }
 
   private resize(): void {
+    // Pointer class can change without a canvas size change. Update before the
+    // dimensions early return, but never revive a point-only/hidden frame.
+    this.updateApartmentInspectionLaserLabelVisibility();
     const bounds = this.canvas.getBoundingClientRect();
     const width = Math.max(1, Math.round(bounds.width));
     const height = Math.max(1, Math.round(bounds.height));

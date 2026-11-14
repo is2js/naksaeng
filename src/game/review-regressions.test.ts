@@ -21,8 +21,8 @@ describe('installed furniture edit regressions', () => {
     app.toggleFurnitureWallSnap();
     app.saveInteriorLayout('must not save');
     await app.selectPlanVariant('C');
-    app.activateHotbarSlot(2);
-    app.activateHotbarSlot(3);
+    app.activateHotbarAction('showcase-plan-toggle');
+    app.activateHotbarAction('showcase-pigmy-toggle');
     expect(prop).toEqual(original);
     expect(app.localInteriorProps).toEqual([original]);
     expect(app.paletteTab).toBe('options');
@@ -50,6 +50,51 @@ describe('installed furniture edit regressions', () => {
     app.transformLocalProp('rotate-right');
     expect(prop.yawDeg).toBe(90);
     expect(app.saveInteriorLayout).toHaveBeenCalledOnce();
+  });
+});
+
+describe('role-specific hotbar dispatch regressions', () => {
+  it('routes public keyboard slot 3 and the child button action to the same wizard, with slots 4/5 inactive', () => {
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    Object.assign(app, { accessRole: 'public', readOnlyShare: false });
+    app.openChildCompanionWizard = vi.fn();
+    app.selectPlanVariant = vi.fn();
+    app.toast = vi.fn();
+    app.activateHotbarSlot(2);
+    app.activateHotbarAction('showcase-children');
+    app.activateHotbarSlot(3);
+    app.activateHotbarSlot(4);
+    expect(app.openChildCompanionWizard).toHaveBeenCalledTimes(2);
+    expect(app.selectPlanVariant).not.toHaveBeenCalled();
+    expect(app.toast).not.toHaveBeenCalled();
+  });
+
+  it('keeps member keyboard slot 3 for plans and slot 5 for children', () => {
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    Object.assign(app, { accessRole: 'verified', readOnlyShare: false, currentMap: { unitType: '55B' }, planVariant: 'A' });
+    app.selectPlanVariant = vi.fn();
+    app.openChildCompanionWizard = vi.fn();
+    app.activateHotbarSlot(2);
+    app.activateHotbarSlot(4);
+    expect(app.selectPlanVariant).toHaveBeenCalledWith('B');
+    expect(app.openChildCompanionWizard).toHaveBeenCalledOnce();
+  });
+
+  it.each(['public', 'verified', 'operator'])('keeps the %s shared hotbar teleport-only for keyboard and direct button actions', (accessRole) => {
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    Object.assign(app, { accessRole, readOnlyShare: true });
+    app.activateSkill = vi.fn();
+    app.openChildCompanionWizard = vi.fn();
+    app.selectPlanVariant = vi.fn();
+    app.toast = vi.fn();
+    app.activateHotbarSlot(0);
+    for (let index = 1; index < 5; index++) app.activateHotbarSlot(index);
+    for (const action of ['showcase-gender-toggle', 'showcase-plan-toggle', 'showcase-pigmy-toggle', 'showcase-children']) {
+      app.activateHotbarAction(action);
+    }
+    expect(app.activateSkill).toHaveBeenCalledExactlyOnceWith('common-teleport', null);
+    expect(app.openChildCompanionWizard).not.toHaveBeenCalled();
+    expect(app.selectPlanVariant).not.toHaveBeenCalled();
   });
 });
 

@@ -541,7 +541,8 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
         expect(door.assetId).toBe('interior-infinity-door-panel');
         expect(dimensions[0]).toBeGreaterThanOrEqual(.8);
         expect(dimensions[1]).toBeCloseTo(.02);
-        expect(door.materialVariantId).toBe('golden-shore-engineered-stone');
+        expect(door.materialVariantId).toBe(BUNDANG_DESIGN_WALL_MATERIAL_ID);
+        expect(door.wallFaceNormalMeters).toHaveLength(2);
         expect(door.measurementObstacle).toBe(false);
         expect(door.collisionMode).toBe('visual-only');
       }

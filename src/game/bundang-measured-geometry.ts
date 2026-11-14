@@ -1,5 +1,6 @@
 import calibration from './bundang-measured-geometry.v1.json';
 import type { ApartmentGeometry, WorldObject } from './types';
+import { applyBundang55BGeometry } from './bundang-55b-geometry';
 
 type Point = [number, number];
 type Row = Record<string, unknown>;
@@ -78,9 +79,11 @@ function onPerpendicularExterior(
 /**
  * Applies a reviewed, offline-generated deformation only to source-owned geometry.
  * No optimization, measurement cap, saved furniture migration or snapshot edit
- * takes place in the browser. Exterior wall meshes and the floor outline stay exact.
+ * takes place in the browser. The three bounded types retain their exact exterior;
+ * the separately approved 55B v2 rebuild has its own source guard and revision.
  */
 export function applyBundangMeasuredGeometry(apartment: WorldObject): boolean {
+  if (String(apartment.unitTypeId || '').toUpperCase() === '55B') return applyBundang55BGeometry(apartment);
   const source = apartment.geometry;
   if (!source || apartment.type !== 'enterable-apartment-unit-v1') return false;
   if (source.bundangMeasuredGeometryRevision === BUNDANG_MEASURED_GEOMETRY_REVISION) return false;

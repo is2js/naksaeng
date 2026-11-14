@@ -91,11 +91,22 @@ describe('46 physical/reference dimension contracts', () => {
     }
   });
 
-  it.each(UNITS)('%s retains the source snapshot and exact exterior, with every wall displacement within 50mm', unit => {
+  it.each(UNITS)('%s retains source data and its approved geometry-revision bounds', unit => {
     const source = sourceApartments.get(unit)!;
     const apartment = calibrated.get(unit)!;
     const before = source.geometry!, after = apartment.geometry!;
     expect(JSON.stringify(source)).toBe(snapshots.get(unit));
+    if (unit === '55B') {
+      expect(after.bundangGeometryRevision).toBe('bundang-55b-geometry-v2');
+      expect(after.floorPolygon).not.toEqual(before.floorPolygon);
+      for (const reference of bundangMeasuredDimensions(unit)) {
+        expect(Math.abs(resolveBundangMeasuredDimension(after, reference).errorMm!)).toBeLessThanOrEqual(20);
+      }
+      const once = JSON.stringify(apartment);
+      expect(applyBundangMeasuredGeometry(apartment)).toBe(false);
+      expect(JSON.stringify(apartment)).toBe(once);
+      return;
+    }
     expect(after.floorPolygon).toEqual(before.floorPolygon);
     expect(after.wallSegments!.filter(wall => wall.kind === 'exterior')).toEqual(before.wallSegments!.filter(wall => wall.kind === 'exterior'));
     expect(after.openings!.filter(opening => String(opening.id).startsWith('outer-'))).toEqual(before.openings!.filter(opening => String(opening.id).startsWith('outer-')));

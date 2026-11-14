@@ -35,10 +35,17 @@ import {
 } from './bundang-floor-finish';
 import {
   applyBundangWallFinishUVs,
+  applyBundangSurfaceMetricUVs,
+  BUNDANG_WALLPAPER_PROFILES,
+  bundangBoxFaceMaterialIndex,
+  bundangWallpaperKindAt,
   bundangWallFaceFinishes,
   bundangWallFaceMaterialIndex,
+  compactBundangMaterialGroups,
   createBundangDesignWallMaterial,
-  createBundangDesignWallTexture,
+  createBundangDesignWallTextures,
+  createBundangWallpaperMaterial,
+  createBundangWallpaperTextures,
   createBundangWallFinishSelectionSurface,
   isBundangWallFinishSelectionProxy,
 } from './bundang-wall-finish';
@@ -221,10 +228,10 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
     defaultDimensionsMeters: [0.9, 0.08, 2.2],
     parts: [
       { shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5], materialRole: 'primary' },
-      { shape: 'box', scale: [0.018, 1.08, 0.96], offset: [-0.491, 0.04, 0.5], materialRole: 'door-outline' },
-      { shape: 'box', scale: [0.018, 1.08, 0.96], offset: [0.491, 0.04, 0.5], materialRole: 'door-outline' },
-      { shape: 'box', scale: [1, 1.08, 0.018], offset: [0, 0.04, 0.982], materialRole: 'door-outline' },
-      { shape: 'box', scale: [1, 1.08, 0.014], offset: [0, 0.04, 0.007], materialRole: 'door-outline' },
+      { shape: 'box', scale: [0.012, 1.08, 0.96], offset: [-0.494, 0.04, 0.5], materialRole: 'door-outline' },
+      { shape: 'box', scale: [0.012, 1.08, 0.96], offset: [0.494, 0.04, 0.5], materialRole: 'door-outline' },
+      { shape: 'box', scale: [1, 1.08, 0.012], offset: [0, 0.06, 0.984], materialRole: 'door-outline' },
+      { shape: 'box', scale: [1, 1.08, 0.010], offset: [0, 0.06, 0.006], materialRole: 'door-outline' },
     ],
   },
   {
@@ -687,7 +694,8 @@ export class ThreeWorldRenderer {
   private readonly renderedProps = new Map<string, ApartmentInteriorProp>();
   private readonly textureCache = new Map<string, THREE.Texture>();
   private readonly woodFloorTexture = createBundangWoodFloorTexture();
-  private readonly designWallTexture = createBundangDesignWallTexture();
+  private readonly designWallTextures = createBundangDesignWallTextures();
+  private readonly wallpaperTextures = { common: createBundangWallpaperTextures('common'), bedroom: createBundangWallpaperTextures('bedroom') };
   private readonly assets = new Map<string, RuntimeAsset>();
   private readonly variants = new Map<string, Record<string, string>>(Object.entries(DEFAULT_VARIANTS));
   private optionRuntime: OptionRuntimeModule | null = null;
@@ -1364,7 +1372,9 @@ export class ThreeWorldRenderer {
     this.textureCache.forEach((texture) => texture.dispose());
     this.textureCache.clear();
     this.woodFloorTexture.dispose();
-    this.designWallTexture.dispose();
+    for (const maps of [this.designWallTextures, ...Object.values(this.wallpaperTextures)]) {
+      maps.albedo.dispose(); maps.bump.dispose(); maps.roughness.dispose();
+    }
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
@@ -1619,12 +1629,13 @@ export class ThreeWorldRenderer {
       const blockGeometry = new THREE.ExtrudeGeometry(shape, { depth: height, steps: 1, bevelEnabled: false });
       blockGeometry.rotateX(Math.PI / 2);
       blockGeometry.translate(0, height, 0);
-      const blockRole = `${block.structuralRole || ''} ${block.role || ''} ${block.kind || ''}`.toLowerCase();
-      const serviceWall = blockRole.includes('service');
-      const mesh = new THREE.Mesh(blockGeometry, this.material(serviceWall ? '#b8b0a7' : '#c9c3bb', {
-        roughness: serviceWall ? 0.94 : 0.92,
-        mapId: serviceWall ? String(geometry.materials?.plaster || 'bundang-55b-warm-gray-wall-v1') : undefined,
-      }));
+      const mesh = new THREE.Mesh(blockGeometry, [
+        this.material('#adb3b1', { roughness: .96, metalness: 0 }),
+        createBundangWallpaperMaterial(this.wallpaperTextures.common, 'common', 1, cellSize),
+      ]);
+      applyBundangSurfaceMetricUVs(blockGeometry, mesh.matrix, object, this.world || { width: 64, height: 64 },
+        BUNDANG_WALLPAPER_PROFILES.common.textureRepeatMeters);
+      mesh.userData.wallFinishProfile = BUNDANG_WALLPAPER_PROFILES.common.id;
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       mesh.userData.laserObstacleId = String(block.id || 'solid-block');
@@ -1667,23 +1678,37 @@ export class ThreeWorldRenderer {
       const midpointLocal = { x: (ends[0][0] + ends[1][0]) / 2, y: (ends[0][1] + ends[1][1]) / 2 };
       const frontCutaway = String(segment.kind || '').includes('exterior')
         && (midpointLocal.x > localCenter.x + 2 || midpointLocal.y > localCenter.y + 2);
+      const opacity = frontCutaway ? .38 : 1;
+      const dx = ends[1][0] - ends[0][0], dy = ends[1][1] - ends[0][1];
+      const meterLength = Math.hypot(dx, dy) || 1;
+      const normal: NumericPoint = [-dy / meterLength, dx / meterLength];
+      const probeOffset = Math.max(.04, finite(segment.thicknessMeters, .12) / 2 + .025);
+      const kindAtSide = (sign: number) => bundangWallpaperKindAt(geometry,
+        [midpointLocal.x + normal[0] * probeOffset * sign, midpointLocal.y + normal[1] * probeOffset * sign]);
+      const positiveKind = kindAtSide(1), negativeKind = kindAtSide(-1);
+      const cap = this.material('#adb3b1', { roughness: .96, metalness: 0, opacity });
+      const positiveMaterial = createBundangWallpaperMaterial(this.wallpaperTextures[positiveKind], positiveKind, opacity, cellSize);
+      const negativeMaterial = positiveKind === negativeKind ? positiveMaterial
+        : createBundangWallpaperMaterial(this.wallpaperTextures[negativeKind], negativeKind, opacity, cellSize);
+      const materials = Array<THREE.Material>(6).fill(cap);
+      const positiveFace = bundangWallFaceMaterialIndex(object, ends[0], ends[1], normal);
+      materials[positiveFace] = positiveMaterial;
+      materials[positiveFace === 4 ? 5 : 4] = negativeMaterial;
       const mesh: THREE.Mesh<THREE.BoxGeometry, THREE.Material | THREE.Material[]> = new THREE.Mesh(
         new THREE.BoxGeometry(length, height, thickness),
-        this.material('#b8b0a7', {
-          roughness: 0.94,
-          mapId: String(geometry.materials?.plaster || 'bundang-55b-warm-gray-wall-v1'),
-          opacity: frontCutaway ? 0.38 : 1,
-        }),
+        materials,
       );
       mesh.position.set((start.x + end.x) / 2, span.base / cellSize + height / 2, (start.z + end.z) / 2);
       mesh.rotation.y = -Math.atan2(end.z - start.z, end.x - start.x);
+      mesh.updateMatrix();
+      applyBundangSurfaceMetricUVs(mesh.geometry, mesh.matrix, object,
+        this.world || { width: 64, height: 64 }, BUNDANG_WALLPAPER_PROFILES.common.textureRepeatMeters);
       const finish = designWallFaces.get(String(segment.id || ''));
       if (finish) {
         const faceIndex = bundangWallFaceMaterialIndex(object, ends[0], ends[1], finish.normalMeters);
-        const materials = Array<THREE.Material>(6).fill(mesh.material as THREE.Material);
-        materials[faceIndex] = createBundangDesignWallMaterial(this.designWallTexture, frontCutaway ? .38 : 1);
-        mesh.material = materials;
-        mesh.updateMatrix();
+        const covered = materials[faceIndex];
+        materials[faceIndex] = createBundangDesignWallMaterial(this.designWallTextures, opacity, cellSize);
+        if (!materials.includes(covered)) covered.dispose();
         applyBundangWallFinishUVs(mesh.geometry, mesh.matrix, object,
           this.world || { width: 64, height: 64 }, ends[0], ends[1], faceIndex);
         mesh.userData.wallFinishMaterialId = finish.materialId;
@@ -1691,6 +1716,7 @@ export class ThreeWorldRenderer {
         mesh.userData.wallFinishFaceIndex = faceIndex;
         designWallFaceCount++;
       }
+      compactBundangMaterialGroups(mesh.geometry, materials);
       const castsShadow = castsExteriorStructureShadow(segment, frontCutaway);
       mesh.castShadow = castsShadow;
       if (castsShadow) exteriorShadowCasterCount += 1;
@@ -1715,6 +1741,8 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.interiorShadowCasterCount = '0';
     this.canvas.dataset.designWallSurfaceMode = 'material-replacement';
     this.canvas.dataset.designWallFinishedFaceCount = String(designWallFaceCount);
+    this.canvas.dataset.wallpaperProfiles = 'seoul-silk-4092-2|seoul-silk-4252-5';
+    this.canvas.dataset.wallFinishTextureMaps = 'shared-albedo-bump-roughness';
 
     const replacedOpeningIds = replacedBundangOpeningIds(
       object.unitTypeId || this.world?.entry.unitType || '',
@@ -1833,6 +1861,7 @@ export class ThreeWorldRenderer {
   }
 
   private rebuildProps(): void {
+    this.canvas.dataset.infinityDoorA042FaceCount = '0';
     disposeTree(this.propRoot);
     this.ceilingMaskRevision++;
     disposeTree(this.editorSelectionRoot);
@@ -1963,6 +1992,7 @@ export class ThreeWorldRenderer {
       : mountingKind === 'room-finish' ? 0.038 : mountHeight / cellSize;
     group.position.set(center.x, baseY, center.z);
     group.rotation.y = placement.worldYaw;
+    if (assetId === 'interior-infinity-door-panel') this.applyInfinityDoorWallFinish(object, prop, group);
     group.renderOrder = mountingKind === 'room-finish' ? 3.04 : 3.1;
     group.userData.editorPropId = String(prop.id || '');
     group.userData.ceilingActorOccluder = isCeilingActorOccluder(mountingKind, prop.installationRole);
@@ -1973,6 +2003,33 @@ export class ThreeWorldRenderer {
     this.registerFinishOccluders(object, prop, group);
     this.applyEditorGhostHiddenState();
     this.refreshEditorSelection();
+  }
+
+  private applyInfinityDoorWallFinish(object: WorldObject, prop: ApartmentInteriorProp, group: THREE.Group): void {
+    const normal = points([prop.wallFaceNormalMeters])[0];
+    const segment = prop.occlusionSegmentsMeters?.[0];
+    const ends = points([segment?.[0], segment?.[1]]);
+    if (!normal || ends.length !== 2) return;
+    const cellSize = Math.max(.01, finite(object.geometry?.cellSizeMeters, .5));
+    group.updateWorldMatrix(true, true);
+    group.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData.infinityDoorBody !== true) return;
+      const faceIndex = bundangBoxFaceMaterialIndex(object, mesh.matrixWorld, normal);
+      const base = mesh.material as THREE.Material;
+      const materials = Array<THREE.Material>(6).fill(base);
+      materials[faceIndex] = createBundangDesignWallMaterial(this.designWallTextures, 1, cellSize);
+      mesh.material = materials;
+      applyBundangSurfaceMetricUVs(mesh.geometry, mesh.matrixWorld, object,
+        this.world || { width: 64, height: 64 }, BUNDANG_WALLPAPER_PROFILES.bedroom.textureRepeatMeters);
+      applyBundangWallFinishUVs(mesh.geometry, mesh.matrixWorld, object,
+        this.world || { width: 64, height: 64 }, ends[0], ends[1], faceIndex);
+      compactBundangMaterialGroups(mesh.geometry, materials);
+      mesh.userData.wallFinishMaterialId = 'design-wall-a042-lilt-gray';
+      mesh.userData.wallFinishFaceIndex = faceIndex;
+      mesh.userData.wallFinishMaps = 'shared-a042-albedo-bump-roughness';
+      this.canvas.dataset.infinityDoorA042FaceCount = String(Number(this.canvas.dataset.infinityDoorA042FaceCount || 0) + 1);
+    });
   }
 
   private registerFinishOccluders(object: WorldObject, prop: ApartmentInteriorProp, group: THREE.Group): void {
@@ -2143,7 +2200,10 @@ export class ThreeWorldRenderer {
       const finalGeometry = prop.mirrored ? this.reflectedGeometry(geometry) : geometry;
       if (prop.mirrored) geometry.dispose();
       const role = String(part.materialRole || 'primary');
-      const material = role === 'glass'
+      const infinityBody = prop.assetId === 'interior-infinity-door-panel' && role === 'primary';
+      const material = infinityBody
+        ? createBundangWallpaperMaterial(this.wallpaperTextures.bedroom, 'bedroom', 1, cellSize)
+        : role === 'glass'
         ? this.material('#d9f0ef', { glass: true })
         : role === 'mirror'
           ? this.material('#b9c7c8', { roughness: .08, metalness: .68 })
@@ -2212,12 +2272,13 @@ export class ThreeWorldRenderer {
         : asset?.assetId === 'interior-infinity-door-panel' && role === 'door-outline'
           ? this.material('#3b342d', { roughness: 0.72 })
         : this.material(palette[role] || palette.primary, { roughness: prop.materialVariantId === 'charcoal-accent' ? 0.62 : 0.88 });
-      if (roomFinish || wallFinish) {
+      if (roomFinish || wallFinish && prop.assetId !== 'interior-infinity-door-panel') {
         material.polygonOffset = true;
         material.polygonOffsetFactor = -2;
         material.polygonOffsetUnits = -2;
       }
       const mesh = new THREE.Mesh(finalGeometry, material);
+      mesh.userData.infinityDoorBody = infinityBody;
       mesh.position.set(
         size[0] * finite(part.offset?.[0]) * (prop.mirrored ? -1 : 1) / cellSize,
         size[2] * finite(part.offset?.[2], 0.5) / cellSize,

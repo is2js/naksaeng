@@ -24,6 +24,7 @@ try {
       : Math.abs(afterError) < .5 ? '1mm 표시 기준 일치'
         : Math.abs(afterError) < Math.abs(beforeError) - .001 ? '50mm 제한 보정·잔여 차이'
           : '외곽·공유벽·50mm 제한으로 유지';
+    if (reference.unitType === '55B') reason = '55B v2 도면 비례 정본·목표 일치';
     if (reference.kind === 'reference-span') reason = `열린/부분 기준선; ${reason}`;
     if (reference.provenance.targetConfidence === 'inferred-decimal') reason = `1.8m 잠정; ${reason}`;
     return { unitType: reference.unitType, id: reference.id, roomId: reference.roomId, kind: reference.kind,

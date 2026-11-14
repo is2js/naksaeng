@@ -2,6 +2,7 @@ import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
 import { isBundangMinusOption } from './minus-option';
 import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
+import { isBundang55BGeometryV2, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
 import type {
   ActorState,
   ProjectedPoint,
@@ -295,6 +296,7 @@ export async function loadWorld(
   // option generation and all render/laser consumers. Stored user furniture is
   // deliberately not part of this source-geometry pass.
   if (entry.id.startsWith('bundang-first-village-')) objects.forEach(applyBundangMeasuredGeometry);
+  normalizeBundang55BWorldMask({ objects, blocked });
 
   const minimapUrl = entry.minimapUrl
     ? resolveProjectUrl(entry.minimapUrl)
@@ -603,6 +605,13 @@ export function isWalkable(world: WorldData | null, x: number, y: number): boole
   if (!world) return false;
   const roundedX = Math.round(x);
   const roundedY = Math.round(y);
+  const rebuilt55B = world.objects.find(isBundang55BGeometryV2);
+  if (rebuilt55B) {
+    const local = apartmentWorldPointToLocalMeters(rebuilt55B, { x: roundedX, y: roundedY });
+    const floor = rebuilt55B.geometry!.floorPolygon as [number, number][];
+    if (!pointInsidePolygon(local, floor)
+      || movementPointBlocked(rebuilt55B, { x: roundedX, y: roundedY }, minusOptionCollisionWorlds.has(world))) return false;
+  }
   const insideWorld = roundedX >= 0 && roundedY >= 0 && roundedX < world.width && roundedY < world.height;
   const insideApartmentPlan = !insideWorld && world.objects.some((object) => {
     if (object.type !== 'enterable-apartment-unit-v1') return false;

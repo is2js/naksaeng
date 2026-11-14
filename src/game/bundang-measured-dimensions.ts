@@ -1,4 +1,5 @@
 import type { ApartmentGeometry } from './types';
+import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
 
 export type BundangMeasuredUnitType = '51A' | '55A' | '55B' | '59A';
 export type BundangMeasuredDimensionAxis = 'x' | 'y';
@@ -52,9 +53,10 @@ function reference(
 /**
  * 46 user-provided target spans. Values are NOT replacements for geometry or laser contacts.
  * Reference spans extend a real wall/counter/end plane through open space without adding a wall.
- * Image files remain private attachments and are not copied into the published application.
+ * Approved public floorplan images are archived under assets/floorplans; the source
+ * bindings and current 55B v2 bindings remain distinct for the before/after audit.
  */
-export const BUNDANG_MEASURED_DIMENSIONS: readonly BundangMeasuredDimensionReferenceV1[] = Object.freeze([
+const SOURCE_DIMENSIONS: readonly BundangMeasuredDimensionReferenceV1[] = Object.freeze([
   reference('51A', 'kitchen-dining', 'kitchen-dining-width', 3200, 'wall-face-span', 'x', 4.3, face('entry-kitchen-divider', 1), face('bathroom-1-west', -1)),
   reference('51A', 'kitchen-dining', 'kitchen-dining-depth', 2150, 'reference-span', 'y', 4.0, fixture('kitchen-side-base-cabinet', 3), face('kitchen-living-short-return', -1), '좌측 상판 끝에서 짧은 주방·거실 리턴벽 안쪽 면까지의 부분 구간. 주방 전체 깊이가 아니다.'),
   reference('51A', 'dress-room', 'dress-room-width', 1650, 'wall-face-span', 'x', 2.75, face('bathroom-1-east-before', 1), face('outer-east', -1)),
@@ -107,6 +109,21 @@ export const BUNDANG_MEASURED_DIMENSIONS: readonly BundangMeasuredDimensionRefer
   reference('59A', 'bedroom-3', 'bedroom-3-depth', 2850, 'wall-face-span', 'y', 12.0, face('bathroom-2-south', 1), face('outer-south-bedroom-3-before', -1), '도면의 오른쪽 화살표를 따라 욕실2 공유벽의 실제 방 쪽 면을 선택한다. 문 개구부를 통과하는 선은 사용하지 않는다.'),
 ]);
 
+const V2_55B_CROSS_COORDINATES: Record<string, number> = {
+  'bedroom-1-width': .4, 'bedroom-1-depth': .55, 'dress-room-width': .4, 'dress-room-depth': 5.4,
+  'living-north-width': 4.0, 'living-south-width': 6.8, 'living-depth': -.15,
+  'kitchen-dining-depth': 5.0, 'alpha-room-width': 6.8, 'alpha-room-depth': 7.05,
+  'bedroom-2-width': 6.8, 'bedroom-2-depth': 10.0,
+};
+
+/** Current canonical endpoints; legacy source bindings remain available only for the audit's before column. */
+export const BUNDANG_MEASURED_DIMENSIONS: readonly BundangMeasuredDimensionReferenceV1[] = Object.freeze(
+  SOURCE_DIMENSIONS.map(reference => reference.unitType !== '55B' ? reference : ({ ...reference,
+    crossCoordinate: V2_55B_CROSS_COORDINATES[reference.id],
+    provenance: { ...reference.provenance, note: `${reference.provenance.note} 55B v2 정본의 실제 면/참조선 기준.` },
+  })),
+);
+
 export function bundangMeasuredDimensions(unitType: string): readonly BundangMeasuredDimensionReferenceV1[] {
   return BUNDANG_MEASURED_DIMENSIONS.filter(reference => reference.unitType === String(unitType).toUpperCase());
 }
@@ -124,6 +141,9 @@ export function resolveBundangMeasuredDimension(
   geometry: ApartmentGeometry,
   reference: BundangMeasuredDimensionReferenceV1,
 ): BundangMeasuredDimensionResolutionV1 {
+  const binding = reference.unitType === '55B' && geometry.bundangGeometryRevision !== BUNDANG_55B_GEOMETRY_REVISION
+    ? SOURCE_DIMENSIONS.find(source => source.unitType === '55B' && source.id === reference.id) || reference
+    : reference;
   const alongIndex = reference.axis === 'x' ? 0 : 1;
   const crossIndex = 1 - alongIndex;
   const resolveSide = (side: BundangMeasuredDimensionSide): { coordinate?: number; reason?: string } => {
@@ -145,19 +165,19 @@ export function resolveBundangMeasuredDimension(
     if (Math.abs(a[alongIndex] - b[alongIndex]) > 1e-6) return { reason: `wall-axis-mismatch:${side.wallId}` };
     const thickness = Number(segment.thicknessMeters);
     if (!Number.isFinite(thickness) || thickness <= 0) return { reason: `invalid-wall-thickness:${side.wallId}` };
-    if (reference.kind === 'wall-face-span') {
-      if (reference.crossCoordinate < Math.min(a[crossIndex], b[crossIndex]) - 1e-6
-        || reference.crossCoordinate > Math.max(a[crossIndex], b[crossIndex]) + 1e-6) return { reason: `outside-wall-face:${side.wallId}` };
+    if (binding.kind === 'wall-face-span') {
+      if (binding.crossCoordinate < Math.min(a[crossIndex], b[crossIndex]) - 1e-6
+        || binding.crossCoordinate > Math.max(a[crossIndex], b[crossIndex]) + 1e-6) return { reason: `outside-wall-face:${side.wallId}` };
       const base = Number(segment.baseMeters || 0), height = Number(segment.heightMeters || geometry.clearHeightMeters || 2.3);
       if (base > .13 || base + height < .13) return { reason: `elevated-wall-face:${side.wallId}` };
     }
     return { coordinate: (a[alongIndex] + b[alongIndex]) / 2 + side.sign * thickness / 2 };
   };
-  const negative = resolveSide(reference.negativeSide), positive = resolveSide(reference.positiveSide);
+  const negative = resolveSide(binding.negativeSide), positive = resolveSide(binding.positiveSide);
   if (negative.coordinate === undefined || positive.coordinate === undefined) return { valid: false, reason: negative.reason || positive.reason || 'missing-endpoint' };
   if (positive.coordinate <= negative.coordinate) return { valid: false, reason: 'reversed-or-empty-span' };
   const makePoint = (along: number): [number, number] => reference.axis === 'x'
-    ? [along, reference.crossCoordinate] : [reference.crossCoordinate, along];
+    ? [along, binding.crossCoordinate] : [binding.crossCoordinate, along];
   const distanceMeters = positive.coordinate - negative.coordinate;
   const distanceMm = Math.round(distanceMeters * 1000);
   return { valid: true, startMeters: makePoint(negative.coordinate), endMeters: makePoint(positive.coordinate),

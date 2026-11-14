@@ -25,6 +25,7 @@ import { ManifestEffectPlayer } from './effect-player';
 import { interpolateCellTravel, MovementInputIntent, screenDirection, screenVectorToWorldDelta } from './grid';
 import { FrameMetrics } from './metrics';
 import { FloorPlanMinimap } from './floorplan-minimap';
+import { FloorplanReferenceDialog } from './floorplan-reference-dialog';
 import { highlightedMessageParts } from './highlighted-message';
 import { interiorSelectionName } from './interior-selection-name';
 import { optionPropsForSelection, optionSourceIdForProp } from './option-prop-selection';
@@ -258,6 +259,7 @@ export class ShowcaseApp {
   private readonly cooldowns = new Map<string, number>();
   private readonly frameMetrics = new FrameMetrics();
   private minimap!: FloorPlanMinimap;
+  private floorplanReferenceDialog: FloorplanReferenceDialog | null = null;
   private readonly abortController = new AbortController();
   private selectedOptionIds: string[] = [];
   private cursorScreenPoint: { x: number; y: number } | null = null;
@@ -432,6 +434,16 @@ export class ShowcaseApp {
       this.get<HTMLCanvasElement>('#floorplan-minimap'),
       this.get<HTMLElement>('#minimap-map-label'),
     );
+    this.floorplanReferenceDialog = new FloorplanReferenceDialog({
+      host: this.mount,
+      beforeOpen: () => {
+        this.releaseGuideMovement();
+        this.touchMapPan?.reset();
+        this.cancelInspectionLaserGesture();
+        this.clearInspectionLaserPointer();
+      },
+      afterClose: () => this.releaseGuideMovement(),
+    });
     this.renderer = this.canvasRenderer;
     this.effectPlayer = new ManifestEffectPlayer(this.get<HTMLElement>('#effect-layer'), () => this.trackAsset());
     try {
@@ -475,6 +487,7 @@ export class ShowcaseApp {
     this.destroyed = true;
     this.stopInspectionLaser('destroy');
     this.laserReferenceNotice.destroy();
+    this.floorplanReferenceDialog?.destroy();
     this.cancelInteriorGhost('', false);
     this.abortController.abort();
     cancelAnimationFrame(this.animationFrame);
@@ -579,7 +592,7 @@ export class ShowcaseApp {
           <i></i>
           <span>데이터는 이 브라우저에만 저장됩니다.</span>
         </div>
-        ${this.readOnlyShare ? `<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.${planVariantDefinition(this.currentMap.unitType, this.planVariant).experienceOnly ? ' 체험용 평면으로 실제 세대 배치와 다를 수 있습니다.' : ''}</span></div>` : ''}
+        ${this.readOnlyShare ? `<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.${planVariantDefinition(this.currentMap.unitType, this.planVariant).experienceOnly ? ' 체험용 평면으로 실제 세대 배치와 다를 수 있습니다.' : ''}</span><span id="share-geometry-notice" hidden>55B 구조가 도면 기준으로 업데이트되었습니다. 이전 공유의 가구 위치는 유지되어 벽과 겹치거나 바닥 밖에 있을 수 있습니다.</span></div>` : ''}
 
         <main class="showcase-layout">
           <section class="play-column" aria-label="RPG 렌더링 쇼케이스">
@@ -632,7 +645,7 @@ export class ShowcaseApp {
                 <em id="plan-variant-badge">${this.readOnlyShare ? escapeHtml(planFacingLabel(this.currentMap.unitType, this.planVariant)) : `${this.planVariant}형`}</em>
               </div>
 
-              <aside class="floorplan-minimap" aria-label="현재 세대 평면도 미니맵">
+              <aside class="floorplan-minimap" role="button" tabindex="0" aria-haspopup="dialog" aria-label="현재 세대 참고 평면도 크게 보기">
                 <div class="minimap-title"><span></span><b>FLOOR PLAN</b><em id="minimap-map-label">${escapeHtml(this.currentMap.unitType)} · ${this.planVariant}형</em></div>
                 <canvas id="floorplan-minimap" aria-label="평면도와 캐릭터 현재 위치"></canvas>
                 <div class="minimap-legend"><i></i><span>조작 캐릭터</span><small>LIVE</small></div>
@@ -1026,6 +1039,16 @@ export class ShowcaseApp {
       }, { signal });
     });
     this.get<HTMLDialogElement>('#help-dialog').addEventListener('close', () => this.releaseGuideMovement(), { signal });
+    const minimap = this.get<HTMLElement>('.floorplan-minimap');
+    minimap.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      this.floorplanReferenceDialog?.open(this.currentMap.unitType);
+    }, { signal });
+    minimap.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault(); event.stopPropagation();
+      this.floorplanReferenceDialog?.open(this.currentMap.unitType);
+    }, { signal });
     this.mount.querySelectorAll<HTMLButtonElement>('#share-showcase').forEach((button) => {
       button.addEventListener('click', () => this.openReadOnlyShareDialog(), { signal });
     });
@@ -2836,6 +2859,10 @@ export class ShowcaseApp {
     if (token !== this.mapLoadToken || this.destroyed) return;
     const planDefinition = applyPlanVariant(world, this.planVariant);
     this.world = world;
+    this.get<HTMLElement>('#game-stage').dataset.geometryRevision = String(
+      this.activeApartment()?.geometry?.bundangGeometryRevision
+        || this.activeApartment()?.geometry?.bundangMeasuredGeometryRevision || 'source',
+    );
     this.canvasRenderer.setWorld(world);
     let rendererLabel = world.sourceMode === 'chunks' ? 'CANVAS·ISO' : world.sourceMode === 'minimap' ? 'MINIMAP' : 'PROCEDURAL';
     const canvas = this.get<HTMLCanvasElement>('#world-canvas');
@@ -2901,6 +2928,7 @@ export class ShowcaseApp {
     this.get<HTMLElement>('#metric-chunks').textContent = `${world.loadedChunkCount}/${world.requestedChunkCount}`;
     this.get<HTMLElement>('#metric-renderer').textContent = rendererLabel;
     this.minimap.setWorld(world, planDefinition.variant);
+    this.get<HTMLElement>('.floorplan-minimap').setAttribute('aria-label', `${map.unitType} 참고 평면도 크게 보기`);
     this.get<HTMLElement>('#stage-loader').classList.add('is-hidden');
     this.renderInspectionLaserHud();
 
@@ -2910,6 +2938,11 @@ export class ShowcaseApp {
       : `${map.unitType} ${world.sourceMode === 'minimap' ? '미니맵' : '절차형'} fallback으로 렌더링합니다.`;
     this.toast(sourceMessage, world.sourceMode === 'chunks' ? 'success' : 'notice');
     this.warnRestoredFurnitureGeometryOverlap();
+    const shareGeometryNotice = this.mount.querySelector<HTMLElement>('#share-geometry-notice');
+    if (shareGeometryNotice) {
+      const revision = this.activeApartment()?.geometry?.bundangGeometryRevision;
+      shareGeometryNotice.hidden = map.unitType !== '55B' || !revision || this.sharedState?.geometryRevision === revision;
+    }
   }
 
   private warnRestoredFurnitureGeometryOverlap(): void {
@@ -2921,7 +2954,7 @@ export class ShowcaseApp {
       && validateInteriorPlacement({ prop, geometry, props, assets: this.interiorAssets, ignorePropId: String(prop.id || '') })
         .errors.some(issue => ['structural-wall-overlap', 'structural-fixture-overlap', 'outside-floor'].includes(issue.code))).length;
     if (!overlapCount) return;
-    const message = `실측 구조 보정으로 저장 가구 ${overlapCount}개가 벽·구조물과 겹칠 수 있습니다. 저장한 위치는 유지했으니 배치를 확인해 주세요.`;
+    const message = `도면 구조 보정으로 ${this.readOnlyShare ? '공유' : '저장'} 가구 ${overlapCount}개가 벽·구조물과 겹치거나 바닥 밖에 있을 수 있습니다. 원래 위치는 유지했으니 배치를 확인해 주세요.`;
     this.get<HTMLElement>('#furniture-status').textContent = message;
     this.toast(message, 'notice');
   }
@@ -4036,6 +4069,8 @@ export class ShowcaseApp {
         planVariant: this.planVariant,
         selectedOptionIds: this.selectedOptionIds,
         furniture: this.localInteriorProps.filter(isUserPlacedFurnitureProp),
+        geometryRevision: typeof this.activeApartment()?.geometry?.bundangGeometryRevision === 'string'
+          ? String(this.activeApartment()!.geometry!.bundangGeometryRevision) : undefined,
       });
       const url = bundangReadOnlyShareUrl(resolveProjectUrl(''), state);
       this.get<HTMLTextAreaElement>('#share-link-value').value = url;

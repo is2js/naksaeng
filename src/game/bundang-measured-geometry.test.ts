@@ -16,7 +16,7 @@ const distance = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - 
 const tolerance = 2e-8;
 
 describe('bounded source-only Bundang geometry calibration', () => {
-  for (const unitType of ['51A', '55A', '55B', '59A']) {
+  for (const unitType of ['51A', '55A', '59A']) {
     it(`${unitType}: clones once and preserves the entire exterior outline and source annotations`, () => {
       const apartment = structuredClone(prototypes.get(unitType)!);
       const original = apartment.geometry!;
@@ -128,18 +128,6 @@ describe('bounded source-only Bundang geometry calibration', () => {
     expect(applyBundangMeasuredGeometry(apartment)).toBe(false);
     expect(apartment.geometry).toBe(source);
     expect(applyBundangMeasuredGeometry({ type: 'other', unitTypeId: '51A', geometry: prototypes.get('51A')!.geometry })).toBe(false);
-  });
-
-  it('preserves the 55B alpha-door and adjacent jamb geometry that protects bidirectional grid approaches', () => {
-    const apartment = structuredClone(prototypes.get('55B')!);
-    const source = apartment.geometry!;
-    applyBundangMeasuredGeometry(apartment);
-    for (const id of ['alpha-west', 'alpha-north-door-before', 'alpha-north-door-after', 'alpha-north-door-lintel']) {
-      expect(apartment.geometry!.wallSegments!.find(wall => wall.id === id))
-        .toEqual(source.wallSegments!.find(wall => wall.id === id));
-    }
-    expect(apartment.geometry!.openings!.find(opening => opening.id === 'alpha-north-door-opening'))
-      .toEqual(source.openings!.find(opening => opening.id === 'alpha-north-door-opening'));
   });
 
   it('applies calibration in the actual static world loader before any variant is selected', async () => {

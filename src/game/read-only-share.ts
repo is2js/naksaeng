@@ -26,6 +26,8 @@ export interface BundangReadOnlyShareV1 {
   livingFacing: ApartmentLivingFacing;
   selectedOptionIds: string[];
   furniture: BundangReadOnlyShareFurnitureV1[];
+  /** Optional: older v1 links deliberately remain readable without this field. */
+  geometryRevision?: string;
 }
 
 export class BundangShareError extends Error {
@@ -89,6 +91,7 @@ export function createBundangReadOnlyShare(input: {
   planVariant: ApartmentPlanVariant;
   selectedOptionIds: Iterable<string>;
   furniture: ApartmentInteriorProp[];
+  geometryRevision?: string;
 }): BundangReadOnlyShareV1 {
   if (input.furniture.length > BUNDANG_SHARE_MAX_FURNITURE) throw new BundangShareError('too-large');
   return {
@@ -98,12 +101,20 @@ export function createBundangReadOnlyShare(input: {
     unitType: input.unitType,
     planVariant: input.planVariant,
     livingFacing: planVariantDefinition(input.unitType, input.planVariant).livingFacing,
+    ...(input.geometryRevision ? { geometryRevision: validateGeometryRevision(input.geometryRevision) } : {}),
     selectedOptionIds: [...new Set(input.selectedOptionIds)].map(String),
     furniture: input.furniture.flatMap((prop) => {
       const value = sanitizeFurniture(prop);
       return value ? [value] : [];
     }),
   };
+}
+
+function validateGeometryRevision(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,79}$/i.test(value)) {
+    throw new BundangShareError('invalid-state');
+  }
+  return value;
 }
 
 export function encodeBundangReadOnlyShare(value: BundangReadOnlyShareV1): string {
@@ -156,6 +167,7 @@ export function validateBundangReadOnlyShareMetadata(
   const unitType = String(row.unitType || '').toUpperCase();
   const planVariant = String(row.planVariant || '').toUpperCase() as ApartmentPlanVariant;
   const livingFacing = String(row.livingFacing || '') as ApartmentLivingFacing;
+  const geometryRevision = row.geometryRevision === undefined ? undefined : validateGeometryRevision(row.geometryRevision);
   const map = catalog.maps.find((candidate) => candidate.id === mapId && candidate.unitType === unitType);
   if (!map || !availablePlanVariants(unitType).includes(planVariant)
     || planVariantDefinition(unitType, planVariant).livingFacing !== livingFacing) throw new BundangShareError('invalid-state');
@@ -168,7 +180,8 @@ export function validateBundangReadOnlyShareMetadata(
   if (canonical.join('\u0000') !== [...new Set(selected)].join('\u0000')) throw new BundangShareError('invalid-state');
 
   if (!Array.isArray(row.furniture) || row.furniture.length > BUNDANG_SHARE_MAX_FURNITURE) throw new BundangShareError('invalid-state');
-  return { schemaVersion: 1, sharedByNickname, mapId, unitType, planVariant, livingFacing, selectedOptionIds: canonical };
+  return { schemaVersion: 1, sharedByNickname, mapId, unitType, planVariant, livingFacing, selectedOptionIds: canonical,
+    ...(geometryRevision ? { geometryRevision } : {}) };
 }
 
 export function validateBundangReadOnlyShare(

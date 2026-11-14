@@ -132,6 +132,9 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await page.locator('#touch-laser-toggle').click();
     const hud = page.locator('#inspection-laser-hud');
     await expect(hud).toBeVisible();
+    // The first-use notice reserves a temporary top row for exactly three
+    // seconds. Permanent compact HUD positions resume immediately afterwards.
+    await expect(page.locator('#inspection-laser-reference-notice')).toBeHidden();
     await expect(hud).toHaveCSS('top', '8px');
     const stageBox = (await stage.boundingBox())!;
     const hudBox = (await hud.boundingBox())!;

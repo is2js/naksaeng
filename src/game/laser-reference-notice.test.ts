@@ -12,10 +12,15 @@ class FakeElement extends EventTarget {
   parent: FakeElement | null = null;
   children: Array<FakeElement | { textContent: string }> = [];
   attributes = new Map<string, string>();
+  dataset: Record<string, string> = {};
+  style = { setProperty: vi.fn(), removeProperty: vi.fn() };
   constructor(readonly tagName: string) { super(); }
   set textContent(value: string) { this.ownText = value; }
   get textContent(): string { return this.ownText + this.children.map(child => child.textContent).join(''); }
   setAttribute(key: string, value: string): void { this.attributes.set(key, value); }
+  getBoundingClientRect(): { height: number } { return { height: 48 }; }
+  querySelector(): null { return null; }
+  focus(): void { /* focus restoration is exercised in Chromium */ }
   append(...children: Array<FakeElement | { textContent: string }>): void {
     this.children.push(...children);
     for (const child of children) if (child instanceof FakeElement) child.parent = this;
@@ -62,7 +67,7 @@ describe('first laser reference notice', () => {
     expect(link.rel).toBe('noopener noreferrer');
     controller.showOnce();
     expect(host.children).toHaveLength(1);
-    vi.advanceTimersByTime(5_999);
+    vi.advanceTimersByTime(2_999);
     expect(node.hidden).toBe(false);
     vi.advanceTimersByTime(1);
     expect(node.hidden).toBe(true);
@@ -71,7 +76,7 @@ describe('first laser reference notice', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('uses brief mobile copy and four seconds without a hover trap from touch', () => {
+  it('uses brief mobile copy and three seconds without a hover trap from touch', () => {
     const controller = make(() => host, true);
     controller.showOnce();
     const node = noticeNode(host);
@@ -79,23 +84,18 @@ describe('first laser reference notice', () => {
     const touch = new Event('pointerenter');
     Object.defineProperty(touch, 'pointerType', { value: 'touch' });
     node.dispatchEvent(touch);
-    vi.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(3_000);
     expect(node.hidden).toBe(true);
   });
 
-  it('pauses for hover/focus independently and resumes only the remaining time', () => {
+  it('expires at three seconds even while hovered or focused', () => {
     const controller = make(() => host);
     controller.showOnce();
     const node = noticeNode(host);
     vi.advanceTimersByTime(2_000);
     node.dispatchEvent(new Event('pointerenter'));
     node.dispatchEvent(new Event('focusin'));
-    vi.advanceTimersByTime(10_000);
-    node.dispatchEvent(new Event('pointerleave'));
-    vi.advanceTimersByTime(10_000);
-    expect(node.hidden).toBe(false);
-    node.dispatchEvent(new Event('focusout'));
-    vi.advanceTimersByTime(3_999);
+    vi.advanceTimersByTime(999);
     expect(node.hidden).toBe(false);
     vi.advanceTimersByTime(1);
     expect(node.hidden).toBe(true);
@@ -112,10 +112,9 @@ describe('first laser reference notice', () => {
     vi.advanceTimersByTime(50_000);
     controller.resume();
     controller.resume();
-    expect(node.hidden).toBe(false);
-    expect(host.children).toHaveLength(1);
-    vi.advanceTimersByTime(3_000);
     expect(node.hidden).toBe(true);
+    expect(host.children).toHaveLength(1);
+    expect(host.dataset.laserReferenceNotice).toBe('hidden');
     controller.pause();
     controller.resume();
     expect(node.hidden).toBe(true);

@@ -963,6 +963,11 @@ input:focus-visible {
 .minimap-title b { color: #7d9a94; font: inherit; }
 .minimap-title em { margin-left: auto; color: #d8c58e; font: 750 7px ui-monospace, monospace; font-style: normal; letter-spacing: 0; }
 .floorplan-minimap canvas { width: 100%; height: 120px; display: block; border: 1px solid rgba(135, 173, 166, .13); border-radius: 4px; background: #081216; }
+.floorplan-minimap[role="button"] { cursor: pointer; }
+.floorplan-minimap[role="button"]:hover { border-color: rgba(110, 217, 195, .6); }
+.floorplan-minimap[role="button"]:focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+#share-geometry-notice { color: #f0d18c; }
+#share-geometry-notice[hidden] { display: none; }
 .minimap-legend { padding-top: 5px; display: flex; align-items: center; gap: 4px; color: #78908b; font: 650 7px ui-monospace, monospace; }
 .minimap-legend i { width: 6px; height: 6px; border-radius: 50%; background: #ffe08a; box-shadow: 0 0 5px rgba(255, 224, 138, .55); }
 .minimap-legend small { margin-left: auto; color: #6ed9c3; font: inherit; }
@@ -1768,11 +1773,11 @@ input:focus-visible {
 .laser-reference-notice {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  top: 8px;
+  transform: translateX(-50%);
   z-index: 3150;
   width: min(430px, calc(100% - 32px));
-  padding: 14px 18px;
+  padding: 9px 14px;
   border: 1px solid rgb(251 113 133 / .8);
   border-radius: 10px;
   background: linear-gradient(145deg, rgb(82 20 32 / .96), rgb(43 17 25 / .96));
@@ -1792,8 +1797,14 @@ input:focus-visible {
 @keyframes laser-reference-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .laser-reference-notice { animation: none; } }
 @media (pointer: coarse), (max-width: 760px) {
-  .laser-reference-notice { width: min(300px, calc(100% - 32px)); padding: 10px 12px; font-size: 11px; line-height: 1.6; }
+  .laser-reference-notice { width: calc(100% - 16px); padding: 7px 10px; font-size: 11px; line-height: 1.6; }
 }
+
+/* Reserve only the short-lived top row; no warning covers a HUD control. */
+.game-stage[data-laser-reference-notice="visible"] .map-identity { top: calc(var(--laser-reference-height, 56px) + 16px); }
+.game-stage[data-laser-reference-notice="visible"] .floorplan-minimap { margin-top: calc(var(--laser-reference-height, 56px) + 8px); }
+.game-stage[data-laser-reference-notice="visible"] .stage-zoom { margin-top: calc(var(--laser-reference-height, 56px) + 8px); }
+.game-stage[data-laser-reference-notice="visible"] .istarpark-laser-hud { margin-top: calc(var(--laser-reference-height, 56px) + 8px); }
 
 .stage-loader {
   position: absolute;

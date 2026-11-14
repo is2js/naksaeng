@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-14",
+  "sourceKind": "user-provided-annotated-floorplan",
+  "publicationApproval": {
+    "approvedAt": "2026-11-14",
+    "scope": ["public-view", "download"],
+    "note": "사용자가 이번 평면도 모달 작업에서 첨부 참고도 공개 열람·다운로드를 승인했습니다. 저작권 양도나 공식 시공 치수 보증을 뜻하지 않습니다."
+  },
+  "displayPolicy": "평형에 맞는 원본 한 장을 회전·반전하지 않고 표시합니다. 원본에는 사용자 참고 치수가 포함되며 실제 시공과 다를 수 있습니다.",
+  "assets": [
+    { "unitType": "51A", "file": "assets/floorplans/51a-dimensions-v1.png", "width": 800, "height": 608, "bytes": 326879, "sha256": "257c4b990da27b665e4d552680769a52b05aebd9cff3a3fa15968fb1eb97b09e" },
+    { "unitType": "55A", "file": "assets/floorplans/55a-dimensions-v1.png", "width": 800, "height": 585, "bytes": 357064, "sha256": "01d360d3834dd55a2f60abfa452bd570e9cc656ebb4c6b91e0a6a0e00ef58cb3" },
+    { "unitType": "55B", "file": "assets/floorplans/55b-dimensions-v1.png", "width": 800, "height": 614, "bytes": 344277, "sha256": "a6d610a7f36b83b6625474f35cda958f2737b523e1d096b72bde1bd993deaa86" },
+    { "unitType": "59A", "file": "assets/floorplans/59a-dimensions-v1.png", "width": 800, "height": 594, "bytes": 367824, "sha256": "1e4dc35f20896a8ec8ebfc5af34631f8d3835f142e43765ba878ef54ea16884d" }
+  ]
+}

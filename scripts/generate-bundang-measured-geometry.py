@@ -1,7 +1,8 @@
 """Offline bounded metric calibration. Requires numpy/scipy, never used at runtime.
 
 Read immutable exported maps and the reviewed TypeScript dimension contract; solve
-the joint shared-wall problem, then write only the local static correction table.
+the three bounded shared-wall problems, then write only their correction table.
+55B v2 is authored separately; its historical v1 row is retained, never re-solved.
 Exterior meshes and floor polygons are not optimization variables. --check checks
 the committed table without running an optimizer or changing any file.
 """
@@ -25,7 +26,7 @@ def source_data():
     result = {}
     for entry in catalog["maps"]:
         unit = entry.get("unitType")
-        if (unit not in ("51A", "55A", "55B", "59A") or unit in result
+        if (unit not in ("51A", "55A", "59A") or unit in result
                 or not entry["id"].startswith("bundang-first-village-")):
             continue
         manifest = ROOT / "public" / entry["manifestUrl"]
@@ -347,7 +348,10 @@ def main():
     args = parser.parse_args()
     source, refs = source_data()
     result = {"schemaVersion": 1, "revision": "bundang-measured-geometry-v1", "units": {}}
-    existing = json.loads(OUTPUT.read_text(encoding="utf-8")) if args.check else None
+    recorded = json.loads(OUTPUT.read_text(encoding="utf-8")) if OUTPUT.exists() else None
+    existing = recorded if args.check else None
+    if not args.check and recorded and "55B" in recorded["units"]:
+        result["units"]["55B"] = recorded["units"]["55B"]
     for unit, geometry in source.items():
         problem = Problem(geometry, [ref for ref in refs if ref["unitType"] == unit])
         values = problem.restore(existing["units"][unit]) if existing else problem.solve()

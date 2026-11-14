@@ -6,12 +6,11 @@ export class LaserReferenceNotice {
   private destroyed = false;
   private finished = false;
   private suspended = false;
-  private hovering = false;
-  private focused = false;
   private element: HTMLDivElement | null = null;
+  private host: HTMLElement | null = null;
+  private observer: ResizeObserver | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private startedAt = 0;
-  private remainingMs = 0;
+  private expiresAt = 0;
 
   constructor(
     private readonly getHost: () => HTMLElement | null,
@@ -43,23 +42,22 @@ export class LaserReferenceNotice {
         ? ' 참고값입니다. 실제와 다를 수 있습니다.'
         : '를 참고한 가상 치수이며, 실제와 일치하지 않을 수 있습니다.'),
     );
-    notice.addEventListener('pointerenter', event => {
-      if (event.pointerType === 'touch') return;
-      this.hold('hovering', true);
-    });
-    notice.addEventListener('pointerleave', () => this.hold('hovering', false));
-    notice.addEventListener('focusin', () => this.hold('focused', true));
-    notice.addEventListener('focusout', event => {
-      if (!notice.contains(event.relatedTarget as Node | null)) this.hold('focused', false);
-    });
     // Native link activation is preserved, but must never place a laser point.
     for (const name of ['pointerdown', 'pointerup', 'pointermove', 'click', 'contextmenu']) {
       notice.addEventListener(name, event => event.stopPropagation());
     }
     this.element = notice;
-    this.remainingMs = mobile ? 4_000 : 6_000;
+    this.host = host;
+    this.expiresAt = Date.now() + 3_000;
     notice.hidden = this.suspended;
     host.append(notice);
+    const size = () => host.style.setProperty('--laser-reference-height', `${Math.ceil(notice.getBoundingClientRect().height)}px`);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.observer = new ResizeObserver(size);
+      this.observer.observe(notice);
+    }
+    size();
+    this.paintVisibility(!this.suspended);
     this.armTimer();
   }
 
@@ -67,49 +65,57 @@ export class LaserReferenceNotice {
     if (this.suspended || this.destroyed) return;
     this.stopTimer();
     this.suspended = true;
-    this.hovering = false;
-    if (this.element) this.element.hidden = true;
+    this.paintVisibility(false);
   }
 
   resume(): void {
     if (!this.suspended || this.destroyed) return;
     this.suspended = false;
     if (!this.element || this.finished) return;
-    this.focused = this.element.contains(document.activeElement);
-    this.element.hidden = false;
+    if (Date.now() >= this.expiresAt) { this.finish(); return; }
+    this.paintVisibility(true);
     this.armTimer();
   }
 
   destroy(): void {
     this.stopTimer();
     this.destroyed = true;
+    this.paintVisibility(false);
+    this.observer?.disconnect();
     this.element?.remove();
     this.element = null;
+    this.host?.style.removeProperty('--laser-reference-height');
+    this.host = null;
   }
 
-  private hold(key: 'hovering' | 'focused', value: boolean): void {
-    if (this.destroyed || this.finished || this[key] === value) return;
-    this.stopTimer();
-    this[key] = value;
-    this.armTimer();
+  private paintVisibility(visible: boolean): void {
+    if (this.element) this.element.hidden = !visible;
+    if (this.host) this.host.dataset.laserReferenceNotice = visible ? 'visible' : 'hidden';
+  }
+
+  private finish(): void {
+    this.finished = true;
+    // Expiry is fixed, including while the link is hovered or focused. Avoid
+    // leaving keyboard focus inside hidden content, without stealing a modal's.
+    if (this.element?.contains(document.activeElement) && !this.host?.querySelector('dialog[open]')) {
+      this.host?.focus({ preventScroll: true });
+    }
+    this.paintVisibility(false);
+    this.observer?.disconnect();
   }
 
   private stopTimer(): void {
     if (this.timer === null) return;
-    this.remainingMs = Math.max(0, this.remainingMs - (Date.now() - this.startedAt));
     clearTimeout(this.timer);
     this.timer = null;
   }
 
   private armTimer(): void {
     if (!this.element || this.timer !== null || this.destroyed || this.finished
-      || this.suspended || this.hovering || this.focused) return;
-    this.startedAt = Date.now();
+      || this.suspended) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.remainingMs = 0;
-      this.finished = true;
-      if (this.element) this.element.hidden = true;
-    }, this.remainingMs);
+      this.finish();
+    }, Math.max(0, this.expiresAt - Date.now()));
   }
 }

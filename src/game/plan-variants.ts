@@ -5,6 +5,7 @@ import {
 } from './apartment-transform';
 import type { WorldData, WorldObject } from './types';
 import { pointTouchesBundangTraversalOpening } from './world';
+import { isBundang55BGeometryV2, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
 
 import {
   planVariantDefinition,
@@ -197,6 +198,7 @@ export function applyPlanVariantInteriorOverrides(
 
 /** 원본 RPG 단지배치의 A/B 변환을 구조물, 가구와 충돌 셀에 한 번에 적용한다. */
 export function applyPlanVariant(world: WorldData, variant: ApartmentPlanVariant): ApartmentPlanVariantDefinition {
+  normalizeBundang55BWorldMask(world);
   const definition = planVariantDefinition(world.entry.unitType, variant);
   const apartment = world.objects.find((object) => object.type === 'enterable-apartment-unit-v1' && object.geometry);
   if (!apartment) return definition;
@@ -214,6 +216,14 @@ export function applyPlanVariant(world: WorldData, variant: ApartmentPlanVariant
     operations: [...definition.operations],
   };
   applyPlanVariantInteriorOverrides(apartment, definition.variant);
+  if (isBundang55BGeometryV2(apartment)) {
+    const metadata = apartment as unknown as Record<string, unknown>;
+    for (const field of ['floorCells', 'footprintCells', 'interiorCells', 'collisionCells', 'structuralBlockedCells',
+      'interiorPropBlockedCells', 'inspectionWallCells', 'occlusionCells', 'transparencyCells', 'vegetationExclusionCells', 'entranceCells']) {
+      const cells = metadata[field] as Array<{ x: number; y: number }> | undefined;
+      if (cells) metadata[field] = transformAbsoluteCells(apartment, sourceTransform, cells);
+    }
+  }
 
   const transformedBlockedCells = transformAbsoluteCells(apartment, sourceTransform, sourceBlockedCells)
     .filter((cell) => !pointTouchesBundangTraversalOpening([apartment], cell));

@@ -5,7 +5,7 @@
   "useCase": "stylized-concept",
   "references": [
     {
-      "path": "public/og.png",
+      "path": "docs/assets/reference/og-original.png",
       "role": "style and brand composition"
     },
     {

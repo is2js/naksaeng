@@ -45,6 +45,20 @@ describe('read-only share', () => {
     expect(shareTokenFromHash(new URL(url).hash)).toBe(token);
   });
 
+  it('round-trips a geometry revision without migrating the shared furniture coordinates', () => {
+    const state = createBundangReadOnlyShare({
+      sharedByNickname: '공유자', mapId: catalog.maps[0].id, unitType: '55B', planVariant: 'A', selectedOptionIds: [],
+      furniture: [{ assetId: 'sofa', positionMeters: [9.75, 6.25], yawDeg: 90, mirrored: false }],
+      geometryRevision: 'bundang-55b-geometry-v2',
+    });
+    const restored = validateBundangReadOnlyShare(decodeBundangReadOnlyShare(encodeBundangReadOnlyShare(state)), catalog, assets);
+    expect(restored.geometryRevision).toBe('bundang-55b-geometry-v2');
+    expect(restored.furniture[0].positionMeters).toEqual([9.75, 6.25]);
+    for (const geometryRevision of ['', '<script>', 'a'.repeat(81), 2]) {
+      expect(() => validateBundangReadOnlyShare({ ...state, geometryRevision }, catalog, assets)).toThrow(BundangShareError);
+    }
+  });
+
   it('rejects incompatible or malformed state', () => {
     const invalid = { schemaVersion: 1, sharedByNickname: '돌범', mapId: catalog.maps[0].id, unitType: '55B', planVariant: 'A', livingFacing: 'south-west', selectedOptionIds: ['unknown'], furniture: [] };
     expect(() => validateBundangReadOnlyShare(invalid, catalog, assets)).toThrow(BundangShareError);

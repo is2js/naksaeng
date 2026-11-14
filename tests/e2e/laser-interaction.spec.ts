@@ -22,7 +22,7 @@ async function observeReferenceNotice(page: Page): Promise<void> {
         const link = node.querySelector('a')!;
         snapshots.push({ text: node.textContent, visible: !node.hidden && getComputedStyle(node).display !== 'none' && box.height > 0,
           dx: Math.abs(box.x + box.width / 2 - parent.x - parent.width / 2),
-          dy: Math.abs(box.y + box.height / 2 - parent.y - parent.height / 2), href: link.href, target: link.target, rel: link.rel });
+          top: box.y - parent.y, href: link.href, target: link.target, rel: link.rel });
       }
     }).observe(stage, { childList: true });
   });
@@ -31,7 +31,7 @@ async function observeReferenceNotice(page: Page): Promise<void> {
 async function referenceSnapshot(page: Page) {
   await expect.poll(() => page.evaluate(() => (window as unknown as { laserReferenceSnapshots: unknown[] }).laserReferenceSnapshots.length)).toBe(1);
   return page.evaluate(() => (window as unknown as {
-    laserReferenceSnapshots: Array<{ text: string; visible: boolean; dx: number; dy: number; href: string; target: string; rel: string }>;
+    laserReferenceSnapshots: Array<{ text: string; visible: boolean; dx: number; top: number; href: string; target: string; rel: string }>;
   }).laserReferenceSnapshots[0]);
 }
 
@@ -71,7 +71,7 @@ async function expectLineAndValueAgree(page: Page): Promise<void> {
 }
 
 test('laser release/cancel, owned surfaces, camera changes and reference notice work on PC/mobile', async ({ page, context, browser }, testInfo) => {
-  test.setTimeout(process.env.CI ? 420_000 : 240_000);
+  test.setTimeout(process.env.CI ? 480_000 : 300_000);
   const errors: string[] = [];
   const seed = () => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'operator', authRevision: 2, scope: 'playground', nickname: '실측 검수',
@@ -83,12 +83,15 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   await ready(page);
   await observeReferenceNotice(page);
   const stage = page.locator('#game-stage'), canvas = page.locator('#three-world-canvas');
+  await expect(stage).toHaveAttribute('data-geometry-revision', 'bundang-55b-geometry-v2');
+  await stage.screenshot({ path: testInfo.outputPath('55b-v2-base-desktop.png') });
   await stage.focus();
   await page.keyboard.press('j');
   const desktopNotice = await referenceSnapshot(page);
   expect(desktopNotice.visible).toBe(true);
   expect(desktopNotice.dx).toBeLessThan(3);
-  expect(desktopNotice.dy).toBeLessThan(3);
+  expect(desktopNotice.top).toBeGreaterThanOrEqual(0);
+  expect(desktopNotice.top).toBeLessThanOrEqual(12);
   expect(desktopNotice.text).toContain('실제와 일치하지 않을 수');
   expect(desktopNotice.href).toContain('blogId=sale_news');
   expect(desktopNotice.target).toBe('_blank');
@@ -117,8 +120,54 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   const previewEnd = await canvas.getAttribute('data-inspection-laser-rendered-end');
   await page.mouse.click(end.x, end.y);
   await expect(page.locator('#inspection-laser-phase')).toHaveText('완료');
-  expect(await canvas.getAttribute('data-inspection-laser-rendered-end')).toBe(previewEnd);
+  const confirmedEnd = await canvas.getAttribute('data-inspection-laser-rendered-end');
+  // A camera zoom can finish its subpixel interpolation between preview and
+  // pointerup. Compare physical points at the displayed 1 mm resolution, not
+  // JSON decimal bytes; the rendered line/value contract below remains exact.
+  const previewPoint = JSON.parse(previewEnd!) as number[], confirmedPoint = JSON.parse(confirmedEnd!) as number[];
+  expect(Math.hypot(previewPoint[0] - confirmedPoint[0], previewPoint[1] - confirmedPoint[1])).toBeLessThanOrEqual(.001);
   await expectLineAndValueAgree(page);
+  await test.step('도면 모달은 게임 입력과 확정 실측을 변경하지 않는다', async () => {
+    const actor = page.locator('.rpg-actor--100');
+    const actorCell = await actor.evaluate(node => [node.dataset.cellX, node.dataset.cellY]);
+    await page.locator('.floorplan-minimap').focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('#floorplan-reference-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-unit-type', '55B');
+    await expect(dialog).toHaveAttribute('data-image-state', 'ready');
+    await expect(dialog.locator('img')).toHaveAttribute('src', /55b-dimensions-v1\.png$/);
+    await page.keyboard.press('ArrowUp');
+    expect(await actor.evaluate(node => [node.dataset.cellX, node.dataset.cellY])).toEqual(actorCell);
+    const behindScroll = await page.evaluate(() => scrollY);
+    const header = (await dialog.locator('.floorplan-reference-header').boundingBox())!;
+    await page.mouse.move(header.x + 20, header.y + 20);
+    await page.mouse.wheel(0, 150);
+    expect(await page.evaluate(() => scrollY)).toBe(behindScroll);
+    await dialog.locator('[data-floorplan-action="zoom-in"]').click();
+    await expect(dialog).toHaveAttribute('data-zoom', '1.25');
+    const viewport = (await dialog.locator('.floorplan-reference-viewport').boundingBox())!;
+    await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
+    await page.mouse.wheel(0, -180);
+    await expect.poll(() => dialog.getAttribute('data-zoom').then(Number)).toBeGreaterThan(1.25);
+    await page.mouse.down();
+    await page.mouse.move(viewport.x + viewport.width / 2 + 55, viewport.y + viewport.height / 2 + 25, { steps: 3 });
+    await page.mouse.up();
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-floorplan-action="fit"]').click();
+    await expect(dialog).toHaveAttribute('data-zoom', '1');
+    const download = page.waitForEvent('download');
+    await dialog.locator('[data-floorplan-action="download"]').click();
+    expect((await download).suggestedFilename()).toContain('55B');
+    await dialog.screenshot({ path: testInfo.outputPath('floorplan-desktop.png') });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    expect(await canvas.getAttribute('data-inspection-laser-start-point')).toBe(start);
+    expect(await canvas.getAttribute('data-inspection-laser-rendered-end')).toBe(confirmedEnd);
+    await page.locator('.floorplan-minimap').click();
+    await page.mouse.click(2, 2);
+    await expect(dialog).toBeHidden();
+  });
   await stage.screenshot({ path: testInfo.outputPath('laser-desktop.png') });
   await stage.focus();
   await page.keyboard.press('Escape');
@@ -149,6 +198,28 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   await expect(page.locator('#inspection-laser-phase')).toHaveText('시작점');
   await expect(canvas).not.toHaveAttribute('data-inspection-laser-start-point', /.+/);
 
+  // Selecting a scene prop intentionally focuses its palette category. Return
+  // to all items before looking for the unrelated wall/door options.
+  await page.locator('[data-option-category="전체"]').click();
+  await page.locator('[data-option-card-id="living-design-wall-panel"] .option-copy').click();
+  await expect(page.locator('input[data-option-id="living-design-wall-panel"]')).toBeChecked();
+  await page.locator('[data-option-card-id="infinity-door-all-bedrooms"] .option-copy').click();
+  await expect(page.locator('input[data-option-id="infinity-door-all-bedrooms"]')).toBeChecked();
+  await expect(canvas).toHaveAttribute('data-wall-finish-texture-maps', 'shared-albedo-bump-roughness');
+  await expect.poll(() => canvas.getAttribute('data-infinity-door-a042-face-count').then(Number)).toBeGreaterThan(0);
+  await stage.screenshot({ path: testInfo.outputPath('55b-v2-design-wall-door-desktop.png') });
+  for (const id of ['entry-open-premium-shoe-cabinet', 'entry-pantry-system-shelf', 'entry-sliding-partition-door']) {
+    await page.locator('[data-option-category="전체"]').click();
+    await page.locator(`[data-option-card-id="${id}"] .option-copy`).click({ timeout: 30_000 });
+    await expect(page.locator(`input[data-option-id="${id}"]`)).toBeChecked();
+  }
+  await page.locator('#zoom-out').click();
+  await page.locator('#zoom-out').click();
+  await stage.screenshot({ path: testInfo.outputPath('55b-v2-entry-and-wall-desktop.png') });
+  await page.locator('#open-help').click();
+  await expect(page.locator('#help-dialog option[value="laser-dimensions"]')).toHaveCount(1);
+  await page.locator('#help-dialog .dialog-close').click();
+
   await page.reload();
   await ready(page);
   await observeReferenceNotice(page);
@@ -161,7 +232,9 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
 
   const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   try {
-    await mobileContext.addInitScript(seed);
+    await mobileContext.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', authRevision: 2, scope: 'playground', nickname: '모바일 검수',
+    })));
     const mobile = await mobileContext.newPage();
     mobile.on('pageerror', error => errors.push(error.message));
     await mobile.goto(route);
@@ -172,7 +245,8 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     expect(mobileNotice.visible).toBe(true);
     expect(mobileNotice.text.length).toBeLessThan(desktopNotice.text.length);
     expect(mobileNotice.dx).toBeLessThan(3);
-    expect(mobileNotice.dy).toBeLessThan(3);
+    expect(mobileNotice.top).toBeGreaterThanOrEqual(0);
+    expect(mobileNotice.top).toBeLessThanOrEqual(12);
     await expect(mobile.locator('#inspection-laser-reference-notice')).toBeHidden({ timeout: 7_000 });
     await mobile.locator('#inspection-laser-point-mode').tap();
     const mobileCanvas = mobile.locator('#three-world-canvas'), touchWall = await findSurface(mobile);
@@ -199,6 +273,30 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     await mobile.touchscreen.tap(mobileEnd.x, mobileEnd.y);
     await expect(mobile.locator('#inspection-laser-phase')).toHaveText('완료');
     await expectLineAndValueAgree(mobile);
+    await test.step('모바일 도면 pinch·드래그·닫기 후 확정한 실측을 유지한다', async () => {
+      await mobile.locator('.floorplan-minimap').tap();
+      const dialog = mobile.locator('#floorplan-reference-dialog');
+      await expect(dialog).toHaveAttribute('data-image-state', 'ready');
+      const viewport = (await dialog.locator('.floorplan-reference-viewport').boundingBox())!;
+      const cx = viewport.x + viewport.width / 2, cy = viewport.y + viewport.height / 2;
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x: cx - 35, y: cy }, { id: 2, x: cx + 35, y: cy }] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 1, x: cx - 70, y: cy }, { id: 2, x: cx + 70, y: cy }] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await expect.poll(() => dialog.getAttribute('data-zoom').then(Number)).toBeGreaterThan(1.5);
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x: cx, y: cy }] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 1, x: cx + 40, y: cy + 20 }] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await expect(dialog).toBeVisible();
+      await dialog.screenshot({ path: testInfo.outputPath('floorplan-mobile.png') });
+      await dialog.locator('[data-floorplan-action="close"]').tap();
+      await expect(dialog).toBeHidden();
+      expect(await mobileCanvas.getAttribute('data-inspection-laser-start-point')).toBe(mobileStart);
+      await expect(mobile.locator('#inspection-laser-phase')).toHaveText('완료');
+      await mobile.locator('#viewer-open-help').tap();
+      await expect(mobile.locator('#help-dialog option[value="laser-dimensions"]')).toHaveCount(0);
+      await mobile.locator('#help-dialog .dialog-close').tap();
+      expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    });
     const hud = await mobile.locator('#inspection-laser-hud').boundingBox(), mobileStage = await mobile.locator('#game-stage').boundingBox();
     expect(hud!.y - mobileStage!.y).toBeLessThanOrEqual(12);
     await mobile.locator('#game-stage').screenshot({ path: testInfo.outputPath('laser-mobile.png') });

@@ -29,4 +29,13 @@ describe('guide access contract', () => {
     expect(verificationGuide?.body).toContain('인증명단');
     expect(verificationGuide?.body).toContain('다음 개정 때 확인할 순서');
   });
+
+  it('limits the detailed dimension comparison to operators without a broken public link', () => {
+    const guide = guideDocuments().find(candidate => candidate.id === 'laser-dimensions');
+    expect(guide).toMatchObject({ operatorOnly: true, category: '운영자' });
+    const publicGuide = guideDocuments().find(candidate => candidate.id === 'playground');
+    expect(publicGuide?.body).not.toContain('?guide=laser-dimensions');
+    expect(publicGuide?.body).toContain('참고 평면도 보기');
+    expect(publicGuide?.body).toContain('3초');
+  });
 });

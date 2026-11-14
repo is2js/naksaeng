@@ -1,5 +1,6 @@
 import type { ApartmentGeometry, ApartmentInteriorProp, BOptionEntry } from './types';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
+import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
 
 type UnitTypeId = '51A' | '55A' | '55B' | '59A';
 type Point = [number, number];
@@ -364,7 +365,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
       { id: 'corridor-south', roomZoneId: 'entry', segmentIds: ['kitchen-alpha-north-return', 'alpha-north-door-before', 'alpha-north-door-lintel', 'alpha-north-door-after', 'alpha-north-after-door', 'bedroom-2-north-before', 'bedroom-2-north-lintel', 'bedroom-2-north-after'], interiorNormal: [0, -1] },
     ],
     infinityDoors: [
-      { roomId: 'bedroom-1', gap: [[2.5, 4.1], [3.55, 4.1]], interiorNormal: [0, 1] },
+      { roomId: 'bedroom-1', openingId: 'bedroom-1-south-opening', gap: [[2.5, 4.1], [3.55, 4.1]], interiorNormal: [0, 1] },
       { roomId: 'bedroom-2', openingId: 'bedroom-2-north-opening', interiorNormal: [0, -1] },
       { roomId: 'alpha-room', openingId: 'alpha-north-door-opening', interiorNormal: [0, -1] },
     ],
@@ -596,7 +597,8 @@ function infinityDoorProps(
       dimensionsMeters: [placement.length, DESIGN_WALL_DEPTH_METERS, 2.2],
       yawDeg: placement.yawDeg,
       mountHeightMeters: 0,
-      materialVariantId: 'golden-shore-engineered-stone',
+      materialVariantId: BUNDANG_DESIGN_WALL_MATERIAL_ID,
+      wallFaceNormalMeters: [...anchor.interiorNormal],
       sourceOptionId: allBedrooms ? ALL_DOORS_OPTION_ID : BEDROOM_ONE_DOOR_OPTION_ID,
       anchorId: `bunfirvil.options.infinityDoor.${anchor.roomId}`,
       replacesOpeningId: anchor.openingId,
@@ -1287,6 +1289,41 @@ function islandApplianceBayProps(
   return props;
 }
 
+/** Entry joinery is fitted to the v2 physical faces, not the legacy 1.55 m cap. */
+export function bundang55BEntryOptionProps(
+  geometry: ApartmentGeometry, selectedIds: Iterable<string>, planVariant?: string,
+): ApartmentInteriorProp[] {
+  if (geometry.bundangGeometryRevision !== BUNDANG_55B_GEOMETRY_REVISION) return [];
+  const selected = new Set(selectedIds);
+  if (hasBundangMinusOptionPackage(selected)) return [];
+  const result: ApartmentInteriorProp[] = [];
+  const common = { fixedOptionLayout: true, collisionMode: 'solid', collisionDefault: 'solid', measurementObstacle: true };
+  if (selected.has('entry-sliding-partition-door')) {
+    // Pantry's east face is X6.99, the return's exposed end is X8.10.
+    // Each finished jamb has exactly 10 mm clearance; rail stays on the corridor.
+    result.push({ ...common, id: 'inspection-55B-entry-sliding-partition-door', assetId: 'entry-sliding-partition-door',
+      roomZoneId: 'entry', positionMeters: [7.545, 3.64], dimensionsMeters: [1.09 / .975, .14, 2.2], yawDeg: 0,
+      materialVariantId: 'new-apartment-warm-white-glass', sourceOptionId: 'entry-sliding-partition-door',
+      anchorId: 'entryPartition', installationRole: 'entry-partition', displayState: 'half-open', openRatio: .5,
+      trackSide: 'corridor', wallClearanceMeters: .01, trackOffsetMeters: .18,
+      sourceOpeningLengthMeters: 1.17, usableOpeningLengthMeters: 1.11, adjacentWallThicknessMeters: .20,
+      panelParkingSide: 'start' });
+  }
+  if (selected.has(OPEN_PREMIUM_SHOE_CABINET_OPTION_ID)) {
+    const cabinet: ApartmentInteriorProp = { ...common, id: 'inspection-55B-premium-shoe-cabinet',
+      assetId: 'entry-shoe-cabinet-tall', roomZoneId: 'entry', positionMeters: [8.315, 2.685],
+      dimensionsMeters: [1.55, .35, 2.2], yawDeg: 270, materialVariantId: 'pet-warm-ivory',
+      sourceOptionId: OPEN_PREMIUM_SHOE_CABINET_OPTION_ID, anchorId: 'options.entryShoeCabinet', installationRole: 'entry-storage' };
+    result.push(alignOpenPremiumShoeCabinetToEntry(cabinet, '55B', planVariant));
+  }
+  if (selected.has('entry-pantry-system-shelf')) result.push({ ...common,
+    id: 'inspection-55B-entry-pantry-system-shelf', assetId: 'entry-pantry-rounded-system-cabinet',
+    roomZoneId: 'entry-pantry', positionMeters: [6.37, 2.23], dimensionsMeters: [.82, .48, 2.15], yawDeg: 0,
+    materialVariantId: 'pet-warm-ivory', sourceOptionId: 'entry-pantry-system-shelf',
+    anchorId: 'options.entryPantrySystemShelf', installationRole: 'entry-storage' });
+  return result;
+}
+
 export function refineBundangOptionProps(
   geometry: ApartmentGeometry,
   unitTypeId: string,
@@ -1305,6 +1342,8 @@ export function refineBundangOptionProps(
     : [];
   const props = baseProps
     .filter((prop) => !isLegacyEntryLivingOptionProp(prop)
+      && !(geometry.bundangGeometryRevision === BUNDANG_55B_GEOMETRY_REVISION
+        && ['entryPartition', 'options.entryShoeCabinet', 'options.entryPantrySystemShelf'].includes(String(prop.anchorId || '')))
       && !isLegacyPrecisionStorageProp(prop)
       && (!suppressMinusOptionPackage || !isBundangMinusSuppressedProp(prop))
       && (!airPlannerRoomUnits.length || !isLegacyAirPlannerUnitProp(prop))
@@ -1317,6 +1356,7 @@ export function refineBundangOptionProps(
     .map(refineWidePlankAndVentilatorProp)
     .map(alignIntegratedBidetToDefaultFacing)
     .map((prop) => alignOpenPremiumShoeCabinetToEntry(prop, unitType, planVariant));
+  props.push(...bundang55BEntryOptionProps(geometry, selected, planVariant));
   props.push(...bundangDesignWallProps(geometry, unitType, selected));
   if (selected.has(ALL_DOORS_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, true));
   else if (selected.has(BEDROOM_ONE_DOOR_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, false));

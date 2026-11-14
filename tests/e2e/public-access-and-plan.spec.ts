@@ -180,20 +180,54 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await expect(stage).toHaveAttribute('data-plan-variant', 'B');
     await waitForPlayground(page);
     await expect(notice).toBeHidden();
+    // The real notice lasts five seconds. Slow software WebGL can spend that
+    // entire window on subsequent browser round trips, so observe its actual
+    // visible transition before clicking, and capture both rects/text together.
+    await page.evaluate(() => {
+      const stage = document.querySelector<HTMLElement>('#game-stage')!;
+      const notice = document.querySelector<HTMLElement>('#plan-experience-notice')!;
+      const observer = new MutationObserver(() => {
+        const variant = stage.dataset.planVariant;
+        if (notice.hidden || (variant !== 'C' && variant !== 'D')) return;
+        const style = getComputedStyle(notice);
+        const stageRect = stage.getBoundingClientRect();
+        const noticeRect = notice.getBoundingClientRect();
+        notice.setAttribute(`data-smoke-observed-${variant.toLowerCase()}`, JSON.stringify({
+          variant,
+          experienceOnly: stage.dataset.experienceOnly,
+          text: notice.textContent,
+          visible: style.display !== 'none' && style.visibility !== 'hidden'
+            && Number(style.opacity) > 0 && noticeRect.width > 0 && noticeRect.height > 0,
+          centerDeltaX: Math.abs(noticeRect.x + noticeRect.width / 2 - stageRect.x - stageRect.width / 2),
+          centerDeltaY: Math.abs(noticeRect.y + noticeRect.height / 2 - stageRect.y - stageRect.height / 2),
+        }));
+        if (variant === 'D') observer.disconnect();
+      });
+      observer.observe(notice, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+    });
+    const expectObservedNotice = async (variant: 'C' | 'D'): Promise<void> => {
+      const attribute = `data-smoke-observed-${variant.toLowerCase()}`;
+      await expect.poll(() => notice.getAttribute(attribute)).not.toBeNull();
+      const observed = JSON.parse((await notice.getAttribute(attribute))!) as {
+        variant: string; experienceOnly: string; text: string; visible: boolean;
+        centerDeltaX: number; centerDeltaY: number;
+      };
+      expect(observed).toMatchObject({
+        variant, experienceOnly: 'true', visible: true,
+        text: '선택한 세대의 실제 배치와 다를 수 있는 체험용 평면입니다.',
+      });
+      expect(observed.centerDeltaX).toBeLessThan(3);
+      expect(observed.centerDeltaY).toBeLessThan(3);
+    };
     await switchPlan.click();
     await expect(stage).toHaveAttribute('data-plan-variant', 'C');
     await waitForPlayground(page);
     await expect(stage).toHaveAttribute('data-experience-only', 'true');
-    await expect(notice).toBeVisible();
-    await expect(notice).toHaveText('선택한 세대의 실제 배치와 다를 수 있는 체험용 평면입니다.');
-    const stageBox = (await stage.boundingBox())!;
-    const noticeBox = (await notice.boundingBox())!;
-    expect(Math.abs(noticeBox.x + noticeBox.width / 2 - stageBox.x - stageBox.width / 2)).toBeLessThan(3);
-    expect(Math.abs(noticeBox.y + noticeBox.height / 2 - stageBox.y - stageBox.height / 2)).toBeLessThan(3);
+    await expectObservedNotice('C');
     await switchPlan.click();
     await expect(stage).toHaveAttribute('data-plan-variant', 'D');
     await waitForPlayground(page);
-    await expect(notice).toBeVisible();
+    await expectObservedNotice('D');
     await expect(page.locator('#option-selected-count')).toHaveText('1개');
     await stage.screenshot({ path: testInfo.outputPath('verified-55b-d.png') });
     await page.setViewportSize({ width: 390, height: 844 });

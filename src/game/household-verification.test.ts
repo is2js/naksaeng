@@ -4,6 +4,7 @@ import {
   HouseholdVerificationError,
   clearHouseholdVerificationSession,
   householdVerificationIsOperator,
+  householdNicknameIsValid,
   normalizeHouseholdBuilding,
   normalizeHouseholdNickname,
   normalizeHouseholdUnitType,
@@ -37,6 +38,16 @@ describe('household Google Sheet verification', () => {
     expect(normalizeHouseholdUnitType(' ５５ａ ')).toBe('55A');
     expect(normalizeHouseholdNickname('  Ａbc 이웃  ')).toBe('Abc 이웃');
     expect(normalizeHouseholdNickname('Abc 이웃')).not.toBe(normalizeHouseholdNickname('abc이웃'));
+  });
+
+  it('validates public nicknames locally using the same normalization and bounds as membership requests', () => {
+    expect(householdNicknameIsValid('  Ａbc 이웃  ')).toBe(true);
+    expect(householdNicknameIsValid('가'.repeat(20))).toBe(true);
+    expect(householdNicknameIsValid('')).toBe(false);
+    expect(householdNicknameIsValid('   ')).toBe(false);
+    expect(householdNicknameIsValid('가'.repeat(21))).toBe(false);
+    expect(householdNicknameIsValid('이웃\u007f')).toBe(false);
+    expect(householdNicknameIsValid('이\n웃')).toBe(false);
   });
 
   it('accepts only a bounded HTTPS runtime configuration', () => {
@@ -94,6 +105,19 @@ describe('household Google Sheet verification', () => {
     const storage = new MemoryStorage();
     storage.setItem(HOUSEHOLD_VERIFICATION_SESSION_KEY, JSON.stringify({ schemaVersion: 1, provider: 'google-apps-script', verifiedAt: 100, role: 'operator' }));
     expect(readHouseholdVerificationSession(storage)).toBeNull();
+  });
+
+  it('round-trips a public entry in the existing tab session without granting verified or operator privileges', () => {
+    for (const scope of ['playground', 'share'] as const) {
+      const storage = new MemoryStorage();
+      writeHouseholdVerificationSession('public', ' 공개 이웃 ', storage, 100, scope);
+      expect(readHouseholdVerificationSession(storage)).toEqual({
+        schemaVersion: 1, provider: 'google-apps-script', verifiedAt: 100,
+        role: 'public', authRevision: 2, scope, nickname: '공개 이웃',
+      });
+      expect(householdVerificationIsOperator(storage)).toBe(false);
+      expect(storage.getItem(HOUSEHOLD_VERIFICATION_SESSION_KEY)).not.toMatch(/buildingId|householdNumber|unitType|operatorCode/);
+    }
   });
 
   it('separates share viewer membership from the shared apartment type', async () => {

@@ -1743,6 +1743,28 @@ input:focus-visible {
 .game-toast[data-tone="success"] { border-color: rgba(89, 222, 197, 0.38); }
 .game-toast[data-tone="skill"] { border-color: rgba(226, 190, 98, 0.42); color: #f4deb0; }
 
+.plan-experience-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3100;
+  width: max-content;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 16px 20px;
+  border: 1px solid rgba(240, 204, 132, .72);
+  border-radius: 10px;
+  background: rgba(29, 26, 18, .94);
+  color: #ffe6af;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .36);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.65;
+  text-align: center;
+  pointer-events: none;
+}
+.plan-experience-notice[hidden], .palette-tabs button[hidden], .stage-tip > span[hidden] { display: none; }
+
 .stage-loader {
   position: absolute;
   inset: 0;
@@ -3181,4 +3203,21 @@ button.household-cell.is-selected::after { content: '✓'; position: absolute; t
 .household-share-registration a { color: var(--gold); text-decoration: underline; }
 @media (pointer: coarse), (max-width: 719px) {
   .household-operator-code input { min-height: 48px; font-size: 16px; }
+}
+
+/* Keep original key numbers when public access omits slots 3 and 4. */
+.game-stage {
+  --hotbar-slot-width: 54px;
+  --visible-hotbar-width: calc(var(--hotbar-count, 5) * (var(--hotbar-slot-width) + 5px) - 5px);
+}
+.game-stage .combat-dock { width: var(--visible-hotbar-width); }
+.game-stage .hotbar {
+  width: var(--visible-hotbar-width);
+  min-width: var(--visible-hotbar-width);
+  grid-template-columns: repeat(var(--hotbar-count, 5), var(--hotbar-slot-width));
+}
+.game-stage .stage-bottom-left { right: calc(var(--visible-hotbar-width) + 34px); }
+@media (pointer: coarse), (max-width: 760px) {
+  .game-stage { --hotbar-slot-width: 50px; }
+  .plan-experience-notice { padding: 14px 16px; font-size: 13px; }
 }

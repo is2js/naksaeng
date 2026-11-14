@@ -24,7 +24,8 @@ test('operator code, cross-type share membership and modal keyboard regression s
   await page.locator('#household-nickname').fill('운영테스트');
   await page.locator('#household-nickname').press('Enter');
   await expect(page.locator('#household-operator-code-group')).toBeVisible();
-  await expect(page.locator('#household-enter')).toBeDisabled();
+  await expect(page.locator('#household-enter')).toBeEnabled();
+  await expect(page.locator('#household-selection-dock')).toHaveAttribute('data-entry-role', 'public');
   await page.locator('#household-operator-code').fill(testCode);
   await page.locator('#household-operator-code').press('Enter');
   await expect(page.locator('#household-enter')).toBeEnabled();

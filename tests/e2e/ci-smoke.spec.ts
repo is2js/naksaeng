@@ -135,13 +135,14 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   verificationMode = 'error';
   await page.getByPlaceholder('닉네임 입력').fill('통신오류');
   await page.getByRole('button', { name: '인증 확인' }).click();
-  await expect(page.locator('#household-nickname-status')).toHaveText('인증 서비스를 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
-  await expect(page.locator('#household-enter')).toBeDisabled();
+  await expect(page.locator('#household-nickname-status')).toContainText('회원 인증 서비스를 연결할 수 없습니다.');
+  await expect(page.locator('#household-enter')).toBeEnabled();
+  await expect(page.getByPlaceholder('닉네임 입력')).toBeEnabled();
   verificationMode = 'mismatch';
   await page.getByPlaceholder('닉네임 입력').fill('잘못된닉네임');
   await page.getByRole('button', { name: '인증 확인' }).click();
-  await expect(page.locator('#household-nickname-status')).toHaveText('선택한 동·타입과 닉네임을 확인할 수 없습니다.');
-  await expect(page.locator('#household-enter')).toBeDisabled();
+  await expect(page.locator('#household-nickname-status')).toContainText('등록된 회원 정보를 확인할 수 없습니다.');
+  await expect(page.locator('#household-enter')).toBeEnabled();
   verificationMode = 'match';
   await page.getByPlaceholder('닉네임 입력').fill('돌범이웃');
   await expect(page.locator('#household-selection-summary')).toHaveText('105동 2501호 · 25층 · 51A · 돌범이웃 · 남동향');

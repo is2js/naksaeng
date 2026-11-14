@@ -4,11 +4,38 @@ import { planVariantDefinition } from './plan-variants';
 import type { ActorState, ApartmentInteriorProp } from './types';
 
 describe('installed furniture edit regressions', () => {
+  it('public access cannot reach member mutations through direct handlers or hidden controls', async () => {
+    const prop: ApartmentInteriorProp = { id: 'local-sofa', assetId: 'sofa', positionMeters: [2, 1.5], yawDeg: 0 };
+    const app = Object.create(ShowcaseApp.prototype) as any;
+    Object.assign(app, { accessRole: 'public', readOnlyShare: false, world: {}, localInteriorProps: [prop], paletteTab: 'options' });
+    app.toast = vi.fn();
+    app.ensureEditableSelectedProp = () => prop;
+    app.get = vi.fn(() => { throw new Error('public access reached editor DOM'); });
+    const original = structuredClone(prop);
+    expect(app.isEditableFurnitureProp(prop)).toBe(false);
+    app.setPaletteTab('furniture');
+    app.focusFurnitureInPalette(prop);
+    app.beginInteriorGhost('move', prop);
+    expect(app.confirmInteriorGhost()).toBe(false);
+    for (const action of ['rotate-left', 'rotate-right', 'mirror', 'delete']) app.transformLocalProp(action);
+    app.toggleFurnitureWallSnap();
+    app.saveInteriorLayout('must not save');
+    await app.selectPlanVariant('C');
+    app.activateHotbarSlot(2);
+    app.activateHotbarSlot(3);
+    expect(prop).toEqual(original);
+    expect(app.localInteriorProps).toEqual([original]);
+    expect(app.paletteTab).toBe('options');
+    expect(app.interiorGhostProp).toBeUndefined();
+    expect(app.get).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid rotation without mutating or saving, then accepts a clear rotation', () => {
     // Run the real app mutation and validation methods without rendering Three.js.
     const prop: ApartmentInteriorProp = { id: 'local-sofa', assetId: 'sofa', positionMeters: [2, .7], dimensionsMeters: [2, .8, 1], yawDeg: 0 };
     const app = Object.create(ShowcaseApp.prototype) as any;
     app.readOnlyShare = false;
+    app.accessRole = 'verified';
     app.localInteriorProps = [prop];
     app.interiorAssets = [{ assetId: 'sofa', displayNameKo: '소파', category: 'furniture', defaultDimensionsMeters: [2, .8, 1] }];
     app.ensureEditableSelectedProp = () => prop;
@@ -27,7 +54,7 @@ describe('installed furniture edit regressions', () => {
 });
 
 describe('plan switch visibility regression', () => {
-  it('does not hide the stage when switching from a four-variant plan to an A/B-only plan', () => {
+  it('does not hide the stage while painting the available four plan buttons', () => {
     const buttons = ['A', 'B', 'C', 'D'].map(variant => ({
       dataset: { planVariant: variant }, hidden: false,
       classList: { toggle: vi.fn() }, setAttribute: vi.fn(),
@@ -41,7 +68,7 @@ describe('plan switch visibility regression', () => {
     };
     app.paintPlanVariant(planVariantDefinition('59A', 'A'));
     expect(app.mount.querySelectorAll).toHaveBeenCalledWith('button[data-plan-variant]');
-    expect(buttons.map(button => button.hidden)).toEqual([false, false, true, true]);
+    expect(buttons.map(button => button.hidden)).toEqual([false, false, false, false]);
     expect(stage.hidden).toBe(false);
     expect(stage.dataset.planVariant).toBe('A');
   });

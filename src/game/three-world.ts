@@ -34,6 +34,15 @@ import {
   WIDE_PLANK_FLOOR_OPTION_ID,
 } from './bundang-floor-finish';
 import {
+  applyBundangWallFinishUVs,
+  bundangWallFaceFinishes,
+  bundangWallFaceMaterialIndex,
+  createBundangDesignWallMaterial,
+  createBundangDesignWallTexture,
+  createBundangWallFinishSelectionSurface,
+  isBundangWallFinishSelectionProxy,
+} from './bundang-wall-finish';
+import {
   ISTARPARK_LASER_HEIGHT_METERS,
   type InspectionLaserAxis,
   type InspectionLaserMeasurement,
@@ -678,6 +687,7 @@ export class ThreeWorldRenderer {
   private readonly renderedProps = new Map<string, ApartmentInteriorProp>();
   private readonly textureCache = new Map<string, THREE.Texture>();
   private readonly woodFloorTexture = createBundangWoodFloorTexture();
+  private readonly designWallTexture = createBundangDesignWallTexture();
   private readonly assets = new Map<string, RuntimeAsset>();
   private readonly variants = new Map<string, Record<string, string>>(Object.entries(DEFAULT_VARIANTS));
   private optionRuntime: OptionRuntimeModule | null = null;
@@ -1332,6 +1342,7 @@ export class ThreeWorldRenderer {
     this.textureCache.forEach((texture) => texture.dispose());
     this.textureCache.clear();
     this.woodFloorTexture.dispose();
+    this.designWallTexture.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
@@ -1612,6 +1623,12 @@ export class ThreeWorldRenderer {
     localCenter.x /= Math.max(1, floorPolygon.length);
     localCenter.y /= Math.max(1, floorPolygon.length);
     let exteriorShadowCasterCount = 0;
+    let designWallFaceCount = 0;
+    const designWallFaces = bundangWallFaceFinishes(
+      geometry,
+      object.unitTypeId || this.world?.entry.unitType || '',
+      this.selectedOptionIds,
+    );
     for (const segmentValue of geometry.wallSegments || []) {
       const segment = segmentValue as Record<string, unknown>;
       const ends = points([segment.a, segment.b]);
@@ -1625,7 +1642,7 @@ export class ThreeWorldRenderer {
       const midpointLocal = { x: (ends[0][0] + ends[1][0]) / 2, y: (ends[0][1] + ends[1][1]) / 2 };
       const frontCutaway = String(segment.kind || '').includes('exterior')
         && (midpointLocal.x > localCenter.x + 2 || midpointLocal.y > localCenter.y + 2);
-      const mesh = new THREE.Mesh(
+      const mesh: THREE.Mesh<THREE.BoxGeometry, THREE.Material | THREE.Material[]> = new THREE.Mesh(
         new THREE.BoxGeometry(length, height, thickness),
         this.material('#b8b0a7', {
           roughness: 0.94,
@@ -1635,6 +1652,20 @@ export class ThreeWorldRenderer {
       );
       mesh.position.set((start.x + end.x) / 2, span.base / cellSize + height / 2, (start.z + end.z) / 2);
       mesh.rotation.y = -Math.atan2(end.z - start.z, end.x - start.x);
+      const finish = designWallFaces.get(String(segment.id || ''));
+      if (finish) {
+        const faceIndex = bundangWallFaceMaterialIndex(object, ends[0], ends[1], finish.normalMeters);
+        const materials = Array<THREE.Material>(6).fill(mesh.material as THREE.Material);
+        materials[faceIndex] = createBundangDesignWallMaterial(this.designWallTexture, frontCutaway ? .38 : 1);
+        mesh.material = materials;
+        mesh.updateMatrix();
+        applyBundangWallFinishUVs(mesh.geometry, mesh.matrix, object,
+          this.world || { width: 64, height: 64 }, ends[0], ends[1], faceIndex);
+        mesh.userData.wallFinishMaterialId = finish.materialId;
+        mesh.userData.wallFinishPropId = finish.propId;
+        mesh.userData.wallFinishFaceIndex = faceIndex;
+        designWallFaceCount++;
+      }
       const castsShadow = castsExteriorStructureShadow(segment, frontCutaway);
       mesh.castShadow = castsShadow;
       if (castsShadow) exteriorShadowCasterCount += 1;
@@ -1657,6 +1688,8 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.structureShadowPolicy = 'exterior-walls-only';
     this.canvas.dataset.exteriorShadowCasterCount = String(exteriorShadowCasterCount);
     this.canvas.dataset.interiorShadowCasterCount = '0';
+    this.canvas.dataset.designWallSurfaceMode = 'material-replacement';
+    this.canvas.dataset.designWallFinishedFaceCount = String(designWallFaceCount);
 
     const replacedOpeningIds = replacedBundangOpeningIds(
       object.unitTypeId || this.world?.entry.unitType || '',
@@ -1877,7 +1910,7 @@ export class ThreeWorldRenderer {
     const token = this.loadToken;
     let group: THREE.Group;
     try {
-      const template = asset?.rendererKind === 'glb' ? await this.modelTemplate(asset) : null;
+      const template = !isBundangWallFinishSelectionProxy(prop) && asset?.rendererKind === 'glb' ? await this.modelTemplate(asset) : null;
       group = template && asset ? this.modelProp(template, prop, asset) : this.proceduralProp(prop, asset);
     } catch {
       group = this.proceduralProp(prop, asset);
@@ -1918,6 +1951,9 @@ export class ThreeWorldRenderer {
   }
 
   private registerFinishOccluders(object: WorldObject, prop: ApartmentInteriorProp, group: THREE.Group): void {
+    // Material-replaced design walls already share the structural wall fade and
+    // actor mask. Their invisible picking planes must never add a second mask.
+    if (isBundangWallFinishSelectionProxy(prop)) return;
     const localSegments = Array.isArray(prop.occlusionSegmentsMeters) ? prop.occlusionSegmentsMeters : [];
     const segments = localSegments.flatMap((segment): Array<[NumericPoint, NumericPoint]> => {
       const start = points([segment?.[0]])[0];
@@ -2042,6 +2078,10 @@ export class ThreeWorldRenderer {
     const group = new THREE.Group();
     const size = dimensions(prop, asset);
     const cellSize = Math.max(0.01, finite(this.apartment?.geometry?.cellSizeMeters, 0.5));
+    if (isBundangWallFinishSelectionProxy(prop)) {
+      group.add(createBundangWallFinishSelectionSurface(size[0] / cellSize, size[2] / cellSize));
+      return group;
+    }
     if (prop.assetId === WIDE_PLANK_FLOOR_OPTION_ID) {
       // The structural floor owns the visible material. Preserve the existing
       // whole-floor picking/mask group without rendering a second thick layer.

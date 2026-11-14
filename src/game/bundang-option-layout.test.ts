@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { apartmentPropPlacement, apartmentUnitWorldPoint } from './apartment-transform';
 import {
   BUNDANG_OPTION_LAYOUTS,
+  BUNDANG_DESIGN_WALL_MATERIAL_ID,
   BUNDANG_OPTION_DISPLAY_OVERRIDES,
   BUNDANG_OPTION_PRICE_VARIANT_OVERRIDES,
   BUNDANG_MINUS_OPTION_PACKAGE_ID,
@@ -392,7 +393,7 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
     }
   });
 
-  it('4개 평형의 지정 벽 조각만 얇은 비충돌 디자인 월로 감싼다', async () => {
+  it('4개 평형의 지정 벽 조각에만 무두께 마감 선택 프록시를 부여한다', async () => {
     const apartments = await apartmentsByUnit();
     for (const [unitType, layout] of Object.entries(BUNDANG_OPTION_LAYOUTS)) {
       const apartment = apartments.get(unitType);
@@ -411,22 +412,24 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
       expect(skins.some((prop) => prop.anchorWallSegmentId === 'kitchen-living-short-return'), unitType).toBe(false);
       for (const skin of skins) {
         const dimensions = Array.isArray(skin.dimensionsMeters) ? skin.dimensionsMeters : [];
-        expect(dimensions[1], `${unitType}:${skin.id}:depth`).toBeCloseTo(.02);
+        expect(dimensions[1], `${unitType}:${skin.id}:depth`).toBe(0);
+        expect(skin.wallFinishMode).toBe('material-replacement');
+        expect(skin.wallFaceNormalMeters).toHaveLength(2);
         expect(skin.collisionMode, `${unitType}:${skin.id}:collision`).toBe('visual-only');
         expect(skin.measurementObstacle, `${unitType}:${skin.id}:laser`).toBe(false);
-        expect(skin.materialVariantId, `${unitType}:${skin.id}:material`).toBe('golden-shore-engineered-stone');
+        expect(skin.materialVariantId, `${unitType}:${skin.id}:material`).toBe(BUNDANG_DESIGN_WALL_MATERIAL_ID);
         expect(skin.occlusionSegmentsMeters, `${unitType}:${skin.id}:occlusion`).toHaveLength(1);
       }
     }
   });
 
-  it('전체 12개 평면에서 냉장고 맞은편 공용면을 연속 마감하되 다용도실 개구부와 냉장고·상판면은 유지한다', async () => {
+  it('전체 16개 평면에서 냉장고 맞은편 공용면을 연속 마감하되 다용도실 개구부와 냉장고·상판면은 유지한다', async () => {
     const apartments = await apartmentsByUnit();
     const expectedFaces: Record<string, { segment: string; center: [number, number]; normals: number[][] }> = {
-      '51A': { segment: 'bathroom-1-west', center: [6.438, 3.5], normals: [[0, -1], [0, -1], [-1, 0], [1, 0]] },
-      '55A': { segment: 'bathroom-1-east', center: [3.712, 3.5], normals: [[1, 0], [0, 1], [0, -1], [-1, 0]] },
-      '55B': { segment: 'bathroom-1-south', center: [4.825, 4.212], normals: [[1, 0], [0, 1]] },
-      '59A': { segment: 'bathroom-1-east', center: [3.712, 3.7], normals: [[1, 0], [-1, 0]] },
+      '51A': { segment: 'bathroom-1-west', center: [6.45, 3.5], normals: [[0, -1], [0, -1], [-1, 0], [1, 0]] },
+      '55A': { segment: 'bathroom-1-east', center: [3.7, 3.5], normals: [[1, 0], [0, 1], [0, -1], [-1, 0]] },
+      '55B': { segment: 'bathroom-1-south', center: [4.825, 4.2], normals: [[1, 0], [0, 1], [0, -1], [-1, 0]] },
+      '59A': { segment: 'bathroom-1-east', center: [3.7, 3.7], normals: [[1, 0], [-1, 0], [0, -1], [0, 1]] },
     };
     let checked = 0;
     for (const [unitType, source] of apartments) {
@@ -463,7 +466,7 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
           const segment = geometry.wallSegments!.find(value => (value as Record<string, unknown>).id === finish.anchorWallSegmentId) as Record<string, unknown>;
           const start = segment.a as number[], end = segment.b as number[];
           const sign = unitType === '51A' ? -1 : 1;
-          expect(finish.positionMeters?.[0]).toBeCloseTo((start[0] + end[0]) / 2 + sign * .112);
+          expect(finish.positionMeters?.[0]).toBeCloseTo((start[0] + end[0]) / 2 + sign * .1);
           expect(finish.positionMeters?.[1]).toBeCloseTo((start[1] + end[1]) / 2);
           expect(finish.mountHeightMeters).toBe(segment.baseMeters);
           expect(Array.isArray(finish.dimensionsMeters) ? finish.dimensionsMeters[2] : undefined).toBe(segment.heightMeters);
@@ -480,10 +483,10 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
       }
       expect(geometry).toEqual(original);
     }
-    expect(checked).toBe(12);
+    expect(checked).toBe(16);
   });
 
-  it('전체 12개 평면의 TV벽은 기본 제공이며 마옵에서만 빠지고 유상면과 중복되지 않는다', async () => {
+  it('전체 16개 평면의 TV벽은 기본 제공이며 마옵에서만 빠지고 유상면과 중복되지 않는다', async () => {
     const apartments = await apartmentsByUnit();
     let checked = 0;
     for (const [unitType, source] of apartments) for (const variant of availablePlanVariants(unitType)) {
@@ -515,7 +518,7 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
       expect(geometry).toEqual(original);
       checked++;
     }
-    expect(checked).toBe(12);
+    expect(checked).toBe(16);
   });
 
   it('침실1 또는 전체 시공을 실제 출입구에 배치하고 욕실을 제외한다', async () => {

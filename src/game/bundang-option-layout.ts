@@ -43,6 +43,7 @@ export interface BundangOptionLayoutV1 {
 }
 
 export const BUNDANG_DESIGN_WALL_OPTION_ID = 'living-design-wall-panel';
+export const BUNDANG_DESIGN_WALL_MATERIAL_ID = 'design-wall-a042-lilt-gray';
 /**
  * A Bunfirvil-only preview switch for the local minus-option configuration.
  * It never writes to geometry or a local layout; the renderer synchronizes its
@@ -479,11 +480,18 @@ function wallSpan(segment: Record<string, unknown>): { base: number; height: num
   };
 }
 
-function offsetFinish(a: Point, b: Point, normal: Point, wallThickness: number): { position: Point; yawDeg: number; length: number } {
+function offsetFinish(
+  a: Point,
+  b: Point,
+  normal: Point,
+  wallThickness: number,
+  depthMeters = DESIGN_WALL_DEPTH_METERS,
+  clearanceMeters = FINISH_CLEARANCE_METERS,
+): { position: Point; yawDeg: number; length: number } {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const length = Math.hypot(dx, dy);
-  const offset = wallThickness / 2 + DESIGN_WALL_DEPTH_METERS / 2 + FINISH_CLEARANCE_METERS;
+  const offset = wallThickness / 2 + depthMeters / 2 + clearanceMeters;
   return {
     position: [(a[0] + b[0]) / 2 + normal[0] * offset, (a[1] + b[1]) / 2 + normal[1] * offset],
     yawDeg: Math.atan2(dy, dx) * 180 / Math.PI,
@@ -506,7 +514,10 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
       const b = point(segment?.b);
       if (!segment || !a || !b) continue;
       const thickness = Number(segment.thicknessMeters);
-      const placement = offsetFinish(a, b, run.interiorNormal, Number.isFinite(thickness) ? thickness : DEFAULT_INTERIOR_WALL_THICKNESS_METERS);
+      const wallThickness = Number.isFinite(thickness) ? thickness : DEFAULT_INTERIOR_WALL_THICKNESS_METERS;
+      // This prop is only an exact-face picking proxy. The structural wall owns
+      // the visible finish, so there is no extra panel thickness or clearance.
+      const placement = offsetFinish(a, b, run.interiorNormal, wallThickness, 0, 0);
       const span = wallSpan(segment);
       if (placement.length < 0.005 || span.height < 0.005) continue;
       props.push({
@@ -514,10 +525,12 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
         assetId: 'living-art-wall-greige-stone',
         roomZoneId: run.roomZoneId,
         positionMeters: placement.position,
-        dimensionsMeters: [placement.length, DESIGN_WALL_DEPTH_METERS, span.height],
+        dimensionsMeters: [placement.length, 0, span.height],
         yawDeg: placement.yawDeg,
         mountHeightMeters: span.base,
-        materialVariantId: 'golden-shore-engineered-stone',
+        materialVariantId: BUNDANG_DESIGN_WALL_MATERIAL_ID,
+        wallFinishMode: 'material-replacement',
+        wallFaceNormalMeters: [...run.interiorNormal],
         ...(run.baseProvided ? {
           baseProvided: true,
           displayNameKo: '기본 제공 디자인 월(TV 벽)',
@@ -535,6 +548,19 @@ function designWallProps(geometry: ApartmentGeometry, layout: BundangOptionLayou
     }
   }
   return props;
+}
+
+/** The renderer and option picking use one face assignment source of truth. */
+export function bundangDesignWallProps(
+  geometry: ApartmentGeometry,
+  unitTypeId: string,
+  selectedIds: Iterable<string>,
+): ApartmentInteriorProp[] {
+  const layout = BUNDANG_OPTION_LAYOUTS[String(unitTypeId || '').toUpperCase() as UnitTypeId];
+  if (!layout) return [];
+  const selected = new Set(selectedIds);
+  return hasBundangMinusOptionPackage(selected) ? []
+    : designWallProps(geometry, layout, selected.has(BUNDANG_DESIGN_WALL_OPTION_ID));
 }
 
 function openingEndpoints(geometry: ApartmentGeometry, anchor: InfinityDoorAnchorV1): [Point, Point] | null {
@@ -1291,7 +1317,7 @@ export function refineBundangOptionProps(
     .map(refineWidePlankAndVentilatorProp)
     .map(alignIntegratedBidetToDefaultFacing)
     .map((prop) => alignOpenPremiumShoeCabinetToEntry(prop, unitType, planVariant));
-  if (!suppressMinusOptionPackage) props.push(...designWallProps(geometry, layout, selected.has(BUNDANG_DESIGN_WALL_OPTION_ID)));
+  props.push(...bundangDesignWallProps(geometry, unitType, selected));
   if (selected.has(ALL_DOORS_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, true));
   else if (selected.has(BEDROOM_ONE_DOOR_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, false));
   if (selected.has(BEDROOM_ONE_CLOTHING_CARE_CLOSET_OPTION_ID)) {

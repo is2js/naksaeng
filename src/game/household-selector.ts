@@ -10,6 +10,8 @@ import {
 import {
   householdVerificationIsOperator,
   householdVerificationConfigured,
+  householdNicknameIsValid,
+  normalizeHouseholdNickname,
   requestHouseholdVerification,
   verifyHousehold,
   verifyShareViewer,
@@ -212,13 +214,13 @@ export function waitForHouseholdSelection(
             <div class="household-registration-request" ${shareAuthentication ? 'hidden' : ''}>
               <button type="button" id="household-request-verification" disabled>해당 닉네임으로 등록 요청</button>
             </div>
-            ${shareAuthentication ? `<p class="household-share-registration">미등록 회원은 <a href="${resolveProjectUrl('')}" target="_blank" rel="noopener">본인 세대를 선택해 등록 요청</a>한 뒤 이 화면에서 다시 인증해 주세요.</p>` : ''}
+            ${shareAuthentication ? `<p class="household-share-registration">누구나 공개 권한으로 열람할 수 있습니다. 회원 등록은 <a href="${resolveProjectUrl('')}" target="_blank" rel="noopener">본인 세대를 선택해 등록 요청</a>해 주세요.</p>` : ''}
           </div>
         </section>
         </div>
       </main>
       <aside class="household-selection-dock" id="household-selection-dock" aria-live="polite" hidden>
-        <div><small>${shareAuthentication ? '공유 놀이터 인증' : '선택 세대'}</small><b id="household-selection-summary">${shareAuthentication ? '동과 닉네임을 확인해 주세요.' : '동·층·호를 선택해 주세요.'}</b></div>
+        <div><small>${shareAuthentication ? '공유 놀이터 열람' : '선택 세대'}</small><b id="household-selection-summary">${shareAuthentication ? '동과 닉네임을 확인해 주세요.' : '동·층·호를 선택해 주세요.'}</b></div>
         <button type="button" id="household-enter" disabled>${shareAuthentication ? '공유 놀이터 열람' : '놀이터 입장'}</button>
       </aside>
       ${householdStorageDialogMarkup()}
@@ -250,7 +252,8 @@ export function waitForHouseholdSelection(
     let chosenBuildingId: string | null = null;
     let nickname = '';
     let nicknameVerified = false;
-    let verifiedRole: HouseholdVerificationRole | null = null;
+    let entryReady = false;
+    let entryRole: HouseholdVerificationRole = 'public';
     let verificationAttempt = 0;
     let verificationController: AbortController | null = null;
     const inputViewportEvents = new AbortController();
@@ -309,13 +312,19 @@ export function waitForHouseholdSelection(
       dock.classList.add('is-authenticated');
     };
 
+    const publicEntryHint = '공개 권한으로 입장할 수 있습니다. 회원 기능은 인증 후 사용할 수 있습니다.';
+
     const updateSelectionSummary = (): void => {
+      entryReady = householdNicknameIsValid(nickname) && Boolean(chosenBuildingId)
+        && (shareAuthentication || Boolean(selected));
+      enter.disabled = !entryReady;
+      dock.dataset.entryRole = entryRole;
+      dock.classList.toggle('is-entry-ready', entryReady);
       if (shareAuthentication) {
         const nicknameText = nickname.trim() ? ` · ${nickname.trim()}` : '';
         summary.textContent = chosenBuildingId
-          ? `${chosenBuildingId}동${nicknameText} · 공유 열람 인증`
+          ? `${chosenBuildingId}동${nicknameText} · 공유 열람`
           : '동과 닉네임을 확인해 주세요.';
-        enter.disabled = !nicknameVerified;
         return;
       }
       if (!selected) {
@@ -326,13 +335,12 @@ export function waitForHouseholdSelection(
       const facing = selected.facing === 'south-east' ? '남동향' : '남서향';
       const nicknameText = nickname.trim() ? ` · ${nickname.trim()}` : '';
       summary.textContent = `${selected.buildingId}동 ${selected.householdNumber}호 · ${selected.floor}층 · ${selected.unitType}${nicknameText} · ${facing}`;
-      enter.disabled = !nicknameVerified;
     };
 
     const resetNicknameVerification = (clearNickname: boolean): void => {
       invalidateVerification();
       nicknameVerified = false;
-      verifiedRole = null;
+      entryRole = 'public';
       operatorInput.value = '';
       operatorInput.disabled = false;
       operatorGroup.hidden = true;
@@ -343,14 +351,16 @@ export function waitForHouseholdSelection(
       verifyNickname.textContent = '인증 확인';
       requestVerification.textContent = '해당 닉네임으로 등록 요청';
       nicknameInput.disabled = false;
-      verifyNickname.disabled = nickname.trim().length === 0 || !householdVerificationConfigured(verificationConfig);
+      verifyNickname.disabled = !householdNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
       requestVerification.disabled = shareAuthentication || verifyNickname.disabled;
       verifyNickname.removeAttribute('aria-busy');
       requestVerification.removeAttribute('aria-busy');
       dock.classList.remove('is-authenticated');
-      nicknameStatus.textContent = householdVerificationConfigured(verificationConfig)
-        ? ''
-        : '인증 서비스 연결 주소가 아직 설정되지 않았습니다.';
+      nicknameStatus.textContent = !nickname.trim() ? '' : !householdNicknameIsValid(nickname)
+        ? '닉네임은 제어문자 없이 1~20자로 입력해 주세요.'
+        : householdVerificationConfigured(verificationConfig)
+          ? publicEntryHint
+          : `회원 인증 서비스를 사용할 수 없습니다. ${publicEntryHint}`;
       updateSelectionSummary();
     };
 
@@ -378,7 +388,7 @@ export function waitForHouseholdSelection(
       legend.hidden = true;
       title.textContent = '분당퍼스트빌리지 동 선택';
       description.textContent = shareAuthentication
-        ? '공유 놀이터 열람 인증에 사용할 동을 선택해 주세요. 세대 선택은 필요하지 않습니다.'
+        ? '공유 놀이터에서 사용할 동을 선택해 주세요. 세대 선택은 필요하지 않습니다.'
         : '먼저 확인할 동을 선택해 주세요. 다음 화면에서 해당 동의 세대를 선택할 수 있습니다.';
       buildingStep.classList.add('is-current');
       buildingStep.classList.toggle('is-complete', Boolean(chosenBuildingId));
@@ -444,8 +454,8 @@ export function waitForHouseholdSelection(
       legend.hidden = true;
       title.textContent = '닉네임 입력';
       description.textContent = shareAuthentication
-        ? '동과 닉네임 인증 후 공유받은 놀이터를 읽기 전용으로 열람할 수 있습니다.'
-        : '선택한 세대에서 사용할 닉네임을 입력하고 인증을 확인해 주세요.';
+        ? '닉네임을 입력하면 공유받은 놀이터를 읽기 전용으로 열람할 수 있습니다.'
+        : '닉네임을 입력하면 누구나 입장할 수 있습니다. 회원 기능을 사용하려면 인증을 확인해 주세요.';
       nicknameBuilding.textContent = shareAuthentication
         ? `${chosenBuildingId}동 선택됨 · 공유 열람`
         : `${selected!.buildingId}동 ${selected!.householdNumber}호 선택됨`;
@@ -505,18 +515,14 @@ export function waitForHouseholdSelection(
     nicknameInput.addEventListener('input', () => {
       nickname = nicknameInput.value;
       resetNicknameVerification(false);
-      nicknameStatus.textContent = householdVerificationConfigured(verificationConfig)
-        ? (nickname.trim() ? '인증 확인이 필요합니다.' : '')
-        : '인증 서비스 연결 주소가 아직 설정되지 않았습니다.';
-      updateSelectionSummary();
     });
 
     const authenticate = async (register: boolean): Promise<void> => {
       if (verificationController || nicknameVerified || register && shareAuthentication) return;
-      const candidate = nickname.trim();
+      const candidate = normalizeHouseholdNickname(nickname);
       const buildingId = selected?.buildingId || chosenBuildingId || '';
       const unitType = selected?.unitType || '';
-      if (!candidate || !buildingId || (!shareAuthentication && !unitType) || !householdVerificationConfigured(verificationConfig)) return;
+      if (!householdNicknameIsValid(candidate) || !buildingId || (!shareAuthentication && !unitType) || !householdVerificationConfigured(verificationConfig)) return;
       const attempt = ++verificationAttempt;
       const controller = new AbortController();
       verificationController = controller;
@@ -532,42 +538,43 @@ export function waitForHouseholdSelection(
           ? await verifyShareViewer(verificationConfig, input, undefined, controller.signal)
           : register ? await requestHouseholdVerification(verificationConfig, input, undefined, controller.signal)
             : await verifyHousehold(verificationConfig, input, undefined, controller.signal);
-        if (attempt !== verificationAttempt || nickname.trim() !== candidate) return;
+        if (attempt !== verificationAttempt || normalizeHouseholdNickname(nickname) !== candidate) return;
         nicknameVerified = response.verified;
-        verifiedRole = response.operator ? 'operator' : response.verified ? 'verified' : null;
+        entryRole = response.operator ? 'operator' : response.verified ? 'verified' : 'public';
         verifyNickname.textContent = response.verified ? '인증 완료' : '다시 확인';
         if (response.code === 'operator_code_required') {
           operatorGroup.hidden = false;
-          nicknameStatus.textContent = '운영자 인증코드를 입력해 주세요. 반복 실패 시 10분 후 다시 시도하세요.';
+          nicknameStatus.textContent = `운영자 인증코드를 입력해 주세요. 반복 실패 시 10분 후 다시 시도하세요. ${publicEntryHint}`;
         } else if (response.code === 'operator_setup_required') {
-          nicknameStatus.textContent = '운영자 인증코드가 설정되지 않았습니다. Sheet의 분퍼빌 회원 관리 메뉴에서 먼저 설정해 주세요.';
+          nicknameStatus.textContent = `운영자 인증코드가 설정되지 않았습니다. Sheet의 분퍼빌 회원 관리 메뉴에서 먼저 설정해 주세요. ${publicEntryHint}`;
         } else if (response.code === 'membership_suspended') {
-          nicknameStatus.textContent = '인증할 수 없습니다. 운영자에게 회원 상태를 확인해 주세요.';
+          nicknameStatus.textContent = `회원 기능을 사용할 수 없습니다. 운영자에게 회원 상태를 확인해 주세요. ${publicEntryHint}`;
         } else {
           nicknameStatus.textContent = response.operator ? '운영자 인증이 완료되었습니다. 관리 메뉴를 사용할 수 있습니다.'
             : response.verified ? (shareAuthentication ? '공유 열람 인증이 완료되었습니다.' : '세대 및 닉네임 인증이 완료되었습니다.')
-            : response.status === 'requested' ? '등록 요청이 확인 대기 중입니다. 승인 후 인증 확인을 눌러 주세요.'
-            : response.status === 'rejected' ? '등록 요청이 반려되었습니다. 운영자에게 문의해 주세요.'
-            : shareAuthentication ? '선택한 동과 닉네임의 회원 정보를 확인할 수 없습니다.' : '선택한 동·타입과 닉네임을 확인할 수 없습니다.';
+            : response.status === 'requested' ? `등록 요청이 확인 대기 중입니다. 승인 후 인증 확인을 눌러 주세요. ${publicEntryHint}`
+            : response.status === 'rejected' ? `등록 요청이 반려되었습니다. 운영자에게 문의해 주세요. ${publicEntryHint}`
+            : `등록된 회원 정보를 확인할 수 없습니다. ${publicEntryHint}`;
         }
         revealVerifiedDock();
       } catch (error) {
         if (attempt !== verificationAttempt) return;
         nicknameVerified = false;
-        verifiedRole = null;
+        entryRole = 'public';
         verifyNickname.textContent = '다시 확인';
         const code = error instanceof HouseholdVerificationError ? error.code : '';
-        nicknameStatus.textContent = code === 'backend-update-required' ? '인증 서비스 업데이트가 필요합니다. 운영자가 새 Code.gs를 배포한 뒤 다시 시도해 주세요.'
+        const message = code === 'backend-update-required' ? '회원 인증 서비스 업데이트가 필요합니다. 운영자가 새 Code.gs를 배포한 뒤 다시 시도해 주세요.'
           : code === 'rate_limited' ? '등록 요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.'
           : code === 'request_capacity' ? '현재 등록 요청 접수량이 많습니다. 운영자에게 문의해 주세요.'
-          : '인증 서비스를 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.';
+          : '회원 인증 서비스를 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.';
+        nicknameStatus.textContent = `${message} ${publicEntryHint}`;
       } finally {
         if (verificationController === controller) verificationController = null;
         if (attempt === verificationAttempt) {
           button.removeAttribute('aria-busy');
           operatorInput.disabled = nicknameVerified;
-          verifyNickname.disabled = nicknameVerified;
-          requestVerification.disabled = nicknameVerified || shareAuthentication;
+          verifyNickname.disabled = nicknameVerified || !householdNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
+          requestVerification.disabled = shareAuthentication || verifyNickname.disabled;
           updateSelectionSummary();
           if (!operatorGroup.hidden && !nicknameVerified) operatorInput.focus();
         }
@@ -607,11 +614,13 @@ export function waitForHouseholdSelection(
     });
 
     enter.addEventListener('click', () => {
-      if ((!selected && !shareAuthentication) || !nicknameVerified || !verifiedRole) return;
+      if ((!selected && !shareAuthentication) || !entryReady || !householdNicknameIsValid(nickname)) return;
+      invalidateVerification();
+      operatorInput.value = '';
       window.removeEventListener('popstate', onPopState);
       inputViewportEvents.abort();
       if (inputViewportFrame) cancelAnimationFrame(inputViewportFrame);
-      resolve({ selection: selected, role: verifiedRole, nickname: nickname.trim() });
+      resolve({ selection: selected, role: entryRole, nickname: normalizeHouseholdNickname(nickname) });
     });
 
     bindHouseholdStorageControls(mount);

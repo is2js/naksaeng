@@ -9,6 +9,8 @@ export interface ApartmentPlanVariantDefinition {
   sourcePlan: string;
   targetPlan: string;
   livingFacing: ApartmentLivingFacing;
+  /** True only for additional experiential plans that are not assigned to real household lines. */
+  experienceOnly: boolean;
   transform: { rotationDeg: number; mirrorX: boolean; mirrorY: boolean };
   operations: string[];
 }
@@ -17,24 +19,28 @@ const SOURCE_TRANSFORM = Object.freeze({ rotationDeg: 0, mirrorX: false, mirrorY
 
 const RPG_PLAN_VARIANTS: Record<string, Partial<Record<ApartmentPlanVariant, Omit<ApartmentPlanVariantDefinition, 'variant' | 'label' | 'sourcePlan'>>>> = {
   '51A': {
-    A: { targetPlan: '51A-A', livingFacing: 'south-east', transform: { rotationDeg: 90, mirrorX: false, mirrorY: false }, operations: ['시계 90° 회전'] },
-    B: { targetPlan: '51A-B', livingFacing: 'south-east', transform: { rotationDeg: -90, mirrorX: true, mirrorY: false }, operations: ['좌우반전', '반시계 90° 회전'] },
-    C: { targetPlan: '51A-C', livingFacing: 'south-west', transform: { ...SOURCE_TRANSFORM }, operations: [] },
-    D: { targetPlan: '51A-D', livingFacing: 'south-west', transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
+    A: { targetPlan: '51A-A', livingFacing: 'south-east', experienceOnly: false, transform: { rotationDeg: 90, mirrorX: false, mirrorY: false }, operations: ['시계 90° 회전'] },
+    B: { targetPlan: '51A-B', livingFacing: 'south-east', experienceOnly: false, transform: { rotationDeg: -90, mirrorX: true, mirrorY: false }, operations: ['좌우반전', '반시계 90° 회전'] },
+    C: { targetPlan: '51A-C', livingFacing: 'south-west', experienceOnly: false, transform: { ...SOURCE_TRANSFORM }, operations: [] },
+    D: { targetPlan: '51A-D', livingFacing: 'south-west', experienceOnly: false, transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
   },
   '55A': {
-    A: { targetPlan: '55A-A', livingFacing: 'south-west', transform: { ...SOURCE_TRANSFORM }, operations: [] },
-    B: { targetPlan: '55A-B', livingFacing: 'south-east', transform: { rotationDeg: -90, mirrorX: true, mirrorY: false }, operations: ['좌우반전', '반시계 90° 회전'] },
-    C: { targetPlan: '55A-C', livingFacing: 'south-east', transform: { rotationDeg: -90, mirrorX: false, mirrorY: false }, operations: ['반시계 90° 회전'] },
-    D: { targetPlan: '55A-D', livingFacing: 'south-west', transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
+    A: { targetPlan: '55A-A', livingFacing: 'south-west', experienceOnly: false, transform: { ...SOURCE_TRANSFORM }, operations: [] },
+    B: { targetPlan: '55A-B', livingFacing: 'south-east', experienceOnly: false, transform: { rotationDeg: -90, mirrorX: true, mirrorY: false }, operations: ['좌우반전', '반시계 90° 회전'] },
+    C: { targetPlan: '55A-C', livingFacing: 'south-east', experienceOnly: false, transform: { rotationDeg: -90, mirrorX: false, mirrorY: false }, operations: ['반시계 90° 회전'] },
+    D: { targetPlan: '55A-D', livingFacing: 'south-west', experienceOnly: false, transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
   },
   '55B': {
-    A: { targetPlan: '55B-A', livingFacing: 'south-west', transform: { rotationDeg: -90, mirrorX: false, mirrorY: false }, operations: ['반시계 90° 회전'] },
-    B: { targetPlan: '55B-B', livingFacing: 'south-east', transform: { rotationDeg: -180, mirrorX: false, mirrorY: true }, operations: ['상하반전', '반시계 180° 회전'] },
+    A: { targetPlan: '55B-A', livingFacing: 'south-west', experienceOnly: false, transform: { rotationDeg: -90, mirrorX: false, mirrorY: false }, operations: ['반시계 90° 회전'] },
+    B: { targetPlan: '55B-B', livingFacing: 'south-east', experienceOnly: false, transform: { rotationDeg: -180, mirrorX: false, mirrorY: true }, operations: ['상하반전', '반시계 180° 회전'] },
+    C: { targetPlan: '55B-C', livingFacing: 'south-east', experienceOnly: true, transform: { rotationDeg: -180, mirrorX: false, mirrorY: false }, operations: ['반시계 180° 회전'] },
+    D: { targetPlan: '55B-D', livingFacing: 'south-west', experienceOnly: true, transform: { rotationDeg: -90, mirrorX: false, mirrorY: true }, operations: ['상하반전', '반시계 90° 회전'] },
   },
   '59A': {
-    A: { targetPlan: '59A-A', livingFacing: 'south-west', transform: { ...SOURCE_TRANSFORM }, operations: [] },
-    B: { targetPlan: '59A-B', livingFacing: 'south-west', transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
+    A: { targetPlan: '59A-A', livingFacing: 'south-west', experienceOnly: false, transform: { ...SOURCE_TRANSFORM }, operations: [] },
+    B: { targetPlan: '59A-B', livingFacing: 'south-west', experienceOnly: false, transform: { rotationDeg: 0, mirrorX: true, mirrorY: false }, operations: ['좌우반전'] },
+    C: { targetPlan: '59A-C', livingFacing: 'south-east', experienceOnly: true, transform: { rotationDeg: -90, mirrorX: false, mirrorY: false }, operations: ['반시계 90° 회전'] },
+    D: { targetPlan: '59A-D', livingFacing: 'south-east', experienceOnly: true, transform: { rotationDeg: -90, mirrorX: true, mirrorY: false }, operations: ['좌우반전', '반시계 90° 회전'] },
   },
 };
 
@@ -57,6 +63,7 @@ export function planVariantDefinition(unitType: string, variant: ApartmentPlanVa
     sourcePlan: `${unit}-A`,
     targetPlan: `${unit}-A`,
     livingFacing: 'south-west',
+    experienceOnly: false,
     transform: { ...SOURCE_TRANSFORM },
     operations: [],
   };

@@ -4,7 +4,8 @@ export const HOUSEHOLD_VERIFICATION_SESSION_KEY = 'bunfirvil:household-verificat
 export const HOUSEHOLD_VERIFICATION_PROVIDER = 'google-apps-script' as const;
 const GOOGLE_APPS_SCRIPT_EXEC_URL = /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/i;
 
-export type HouseholdVerificationRole = 'verified' | 'operator';
+/** Public entry is not a successful Sheet verification. */
+export type HouseholdVerificationRole = 'public' | 'verified' | 'operator';
 export type HouseholdVerificationStatus = 'not_found' | 'requested' | 'verified' | 'operator' | 'rejected';
 export type HouseholdVerificationAction = 'verifyHousehold' | 'verifyShareViewer' | 'requestHouseholdVerification';
 export type HouseholdVerificationScope = 'playground' | 'share';
@@ -74,6 +75,12 @@ export function normalizeHouseholdUnitType(value: unknown): string {
 
 export function normalizeHouseholdNickname(value: unknown): string {
   return String(value ?? '').normalize('NFKC').trim();
+}
+
+export function householdNicknameIsValid(value: unknown): boolean {
+  const nickname = normalizeHouseholdNickname(value);
+  return Array.from(nickname).length >= 1 && Array.from(nickname).length <= 20
+    && !/[\u0000-\u001f\u007f]/u.test(nickname);
 }
 
 export function parseHouseholdVerificationConfig(value: unknown): HouseholdVerificationConfigV1 {
@@ -207,7 +214,7 @@ export function readHouseholdVerificationSession(storage: SessionStoragePort | n
     const parsed = JSON.parse(storage.getItem(HOUSEHOLD_VERIFICATION_SESSION_KEY) || 'null') as Partial<HouseholdVerificationSessionV1> | null;
     if (!parsed || parsed.schemaVersion !== 1 || parsed.provider !== HOUSEHOLD_VERIFICATION_PROVIDER
       || typeof parsed.verifiedAt !== 'number' || !Number.isFinite(parsed.verifiedAt) || parsed.verifiedAt <= 0
-      || (parsed.role !== 'verified' && parsed.role !== 'operator')
+      || (parsed.role !== 'public' && parsed.role !== 'verified' && parsed.role !== 'operator')
       || (parsed.scope !== undefined && parsed.scope !== 'share' && parsed.scope !== 'playground')) return null;
     // Old nickname-only operator sessions must authenticate again.
     if (parsed.role === 'operator' && parsed.authRevision !== 2) {

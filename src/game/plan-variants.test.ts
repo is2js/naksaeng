@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPlanVariant,
   applyPlanVariantInteriorOverrides,
+  availablePlanVariants,
   inverseTransformPlanPoint,
   planVariantDefinition,
   planVariantFromQuery,
@@ -25,10 +26,14 @@ const expected = {
   '55B': {
     A: { rotationDeg: -90, mirrorX: false, mirrorY: false },
     B: { rotationDeg: -180, mirrorX: false, mirrorY: true },
+    C: { rotationDeg: -180, mirrorX: false, mirrorY: false },
+    D: { rotationDeg: -90, mirrorX: false, mirrorY: true },
   },
   '59A': {
     A: { rotationDeg: 0, mirrorX: false, mirrorY: false },
     B: { rotationDeg: 0, mirrorX: true, mirrorY: false },
+    C: { rotationDeg: -90, mirrorX: false, mirrorY: false },
+    D: { rotationDeg: -90, mirrorX: true, mirrorY: false },
   },
 };
 
@@ -46,6 +51,43 @@ describe('RPG apartment plan variants', () => {
     expect(planVariantDefinition('51A', 'C').livingFacing).toBe('south-west');
     expect(planVariantDefinition('55A', 'C').livingFacing).toBe('south-east');
     expect(planVariantDefinition('55A', 'D').livingFacing).toBe('south-west');
+    expect(planVariantDefinition('55B', 'C').livingFacing).toBe('south-east');
+    expect(planVariantDefinition('55B', 'D').livingFacing).toBe('south-west');
+    expect(planVariantDefinition('59A', 'C').livingFacing).toBe('south-east');
+    expect(planVariantDefinition('59A', 'D').livingFacing).toBe('south-east');
+  });
+
+  it('offers four distinct invertible plans per unit while only the new 55B/59A C-D plans are experience-only', () => {
+    const experiential: string[] = [];
+    for (const unitType of Object.keys(expected)) {
+      expect(availablePlanVariants(unitType)).toEqual(['A', 'B', 'C', 'D']);
+      const signatures = new Set<string>();
+      for (const variant of availablePlanVariants(unitType)) {
+        const definition = planVariantDefinition(unitType, variant);
+        if (definition.experienceOnly) experiential.push(`${unitType}-${variant}`);
+        const origin: [number, number] = [3.25, 7.5];
+        const restored = inverseTransformPlanPoint(transformPlanPoint(origin, definition.transform), definition.transform);
+        expect(restored[0]).toBeCloseTo(origin[0]);
+        expect(restored[1]).toBeCloseTo(origin[1]);
+        const basis = [[1, 0], [0, 1]].map(point => transformPlanPoint(point as [number, number], definition.transform)
+          .map(value => Math.round(value)));
+        signatures.add(JSON.stringify(basis));
+      }
+      expect(signatures.size).toBe(4);
+    }
+    expect(experiential).toEqual(['55B-C', '55B-D', '59A-C', '59A-D']);
+  });
+
+  it.each([
+    ['55B', 'C', [-1, 0], [1, 0]],
+    ['55B', 'D', [-1, 0], [0, 1]],
+    ['59A', 'C', [0, 1], [1, 0]],
+    ['59A', 'D', [0, 1], [1, 0]],
+  ] as const)('keeps the new %s %s living-window outward vector in its declared site-facing direction', (unitType, variant, sourceNormal, expectedNormal) => {
+    const definition = planVariantDefinition(unitType, variant);
+    const actual = transformPlanPoint([...sourceNormal], definition.transform);
+    expect(actual[0]).toBeCloseTo(expectedNormal[0]);
+    expect(actual[1]).toBeCloseTo(expectedNormal[1]);
   });
 
   it('reads A-D query values and keeps point transforms invertible', () => {

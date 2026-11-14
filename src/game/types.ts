@@ -165,6 +165,9 @@ export interface ApartmentInteriorProp {
   yawDeg?: number;
   mirrored?: boolean;
   materialVariantId?: string;
+  /** Pure face finish: geometry/measurement remain owned by the structural wall. */
+  wallFinishMode?: 'material-replacement';
+  wallFaceNormalMeters?: [number, number];
   mountHeightMeters?: number;
   sourceOptionId?: string;
   anchorId?: string;

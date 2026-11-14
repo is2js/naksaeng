@@ -57,6 +57,7 @@ describe('Bundang household catalog', () => {
     expect(lines).toHaveLength(61);
     for (const line of lines) {
       expect(line.facing).toBe(planVariantDefinition(line.unitType, line.planVariant).livingFacing);
+      expect(planVariantDefinition(line.unitType, line.planVariant).experienceOnly).toBe(false);
     }
     for (const buildingId of ['101', '102', '103', '106']) {
       expect(householdSelection(buildingId, 2, 2, maps)).toMatchObject({

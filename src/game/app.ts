@@ -9,7 +9,9 @@ import {
   readHouseholdVerificationSession,
   writeHouseholdVerificationSession,
   type HouseholdVerificationConfigV1,
+  type HouseholdVerificationRole,
 } from './household-verification';
+import { playgroundCapabilities } from './playground-access';
 import {
   clearSaleCalculatorContext,
   readSaleCalculatorHouseholdContext,
@@ -280,6 +282,9 @@ export class ShowcaseApp {
   private assetCount = 0;
   private mapLoadToken = 0;
   private planVariant: ApartmentPlanVariant = 'A';
+  private accessRole: HouseholdVerificationRole | null = null;
+  private planSwitchPending = false;
+  private planNoticeTimer = 0;
   private readOnlyShare = false;
   private shareToken = '';
   private sharedState: BundangReadOnlyShareV1 | null = null;
@@ -306,6 +311,14 @@ export class ShowcaseApp {
   private destroyed = false;
 
   constructor(private readonly mount: HTMLElement) {}
+
+  private get capabilities() {
+    return playgroundCapabilities(this.accessRole, this.readOnlyShare);
+  }
+
+  private get hasMemberAccess(): boolean {
+    return this.accessRole === 'verified' || this.accessRole === 'operator';
+  }
 
   async start(): Promise<void> {
     const { catalog, fallback } = await loadCatalog();
@@ -339,6 +352,7 @@ export class ShowcaseApp {
     const hasRequestedMap = hasValidMapQuery(catalog.maps, window.location.search);
     const requestedDeepLink = hasRequestedMap ? new URL(window.location.href) : null;
     const existingVerification = readHouseholdVerificationSession();
+    this.accessRole = existingVerification?.role || null;
     this.authenticatedNickname = existingVerification?.nickname || '';
     if (!hasRequestedMap || !existingVerification || (!this.readOnlyShare && existingVerification.scope === 'share' && existingVerification.role !== 'operator')) {
       let verificationConfig: HouseholdVerificationConfigV1;
@@ -361,6 +375,7 @@ export class ShowcaseApp {
         this.readOnlyShare,
       );
       const selection = verification.selection;
+      this.accessRole = verification.role;
       this.authenticatedNickname = verification.nickname;
       writeHouseholdVerificationSession(verification.role, verification.nickname, undefined, Date.now(), this.readOnlyShare ? 'share' : 'playground');
       // 계산기는 인증 세대의 타입과 가격 층 구간만 사용한다. 동·호·닉네임은 저장하지 않는다.
@@ -442,6 +457,7 @@ export class ShowcaseApp {
     this.abortController.abort();
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.optionFocusFrame);
+    window.clearTimeout(this.planNoticeTimer);
     this.effectPlayer?.destroy();
     this.actorViews.forEach((view) => view.dispose());
     this.childCompanionViews.forEach((view) => view.element.remove());
@@ -497,7 +513,7 @@ export class ShowcaseApp {
   }
 
   private renderShell(fallback: boolean): void {
-    const operator = readHouseholdVerificationSession()?.role === 'operator';
+    const operator = this.capabilities.isOperator;
     const openChatLink = `<a class="open-chat-link" href="https://open.kakao.com/o/gjze7GWi" target="_blank" rel="noopener noreferrer" aria-label="오픈카톡 (새 탭)"><img src="${resolveProjectUrl('assets/ui/open-kakao.svg')}" width="22" height="22" alt="" aria-hidden="true"><span>오픈카톡</span></a>`;
     const mapOptions = this.catalog.maps
       .map(
@@ -537,7 +553,7 @@ export class ShowcaseApp {
           <i></i>
           <span>데이터는 이 브라우저에만 저장됩니다.</span>
         </div>
-        ${this.readOnlyShare ? '<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.</span></div>' : ''}
+        ${this.readOnlyShare ? `<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.${planVariantDefinition(this.currentMap.unitType, this.planVariant).experienceOnly ? ' 체험용 평면으로 실제 세대 배치와 다를 수 있습니다.' : ''}</span></div>` : ''}
 
         <main class="showcase-layout">
           <section class="play-column" aria-label="RPG 렌더링 쇼케이스">
@@ -652,6 +668,7 @@ export class ShowcaseApp {
               </div>
 
               <div id="toast" class="game-toast" role="status" aria-live="polite"></div>
+              <div id="plan-experience-notice" class="plan-experience-notice" role="status" aria-live="polite" hidden></div>
               <div id="stage-loader" class="stage-loader" aria-live="polite">
                 <span class="loader-orbit"><i></i></span>
                 <b>STATIC WORLD LOADING</b>
@@ -665,7 +682,7 @@ export class ShowcaseApp {
                   <span class="shortcut-divider">· 빈 화면 드래그 ·</span>
                   <span><span class="shortcut-keys"><kbd>Ctrl</kbd><i>+</i><kbd>휠</kbd></span><b>확대·축소</b></span>
                   <span class="shortcut-divider">·</span>
-                  <span><span class="shortcut-keys"><kbd>Shift</kbd><i>+</i><kbd>휠</kbd></span><b>가구 회전</b></span>
+                  <span ${this.capabilities.canEditFurniture ? '' : 'hidden'}><span class="shortcut-keys"><kbd>Shift</kbd><i>+</i><kbd>휠</kbd></span><b>가구 회전</b></span>
                   <span class="shortcut-divider">·</span>
                   <span><kbd>Space</kbd><b>기본 공격</b></span>
                   <button type="button" id="inspection-laser-toggle" class="istarpark-laser-toggle" aria-pressed="false" title="레이저 실측 시작 (J)" hidden>
@@ -710,7 +727,7 @@ export class ShowcaseApp {
             </header>
             <div class="palette-tabs" role="tablist" aria-label="인테리어 도구">
               <button type="button" class="is-active" data-palette-tab="options">옵션</button>
-              <button type="button" data-palette-tab="furniture">가구 배치</button>
+              <button type="button" data-palette-tab="furniture" ${this.hasMemberAccess ? '' : 'hidden disabled'}>가구 배치</button>
             </div>
             <p class="option-storage-note">${this.readOnlyShare ? '' : '<span class="option-storage-description">옵션·가구는 이 브라우저의 같은 평형에서 공유되며 다른 기기에는 자동 저장되지 않습니다.</span> '}<span id="option-design-disclaimer" class="option-design-disclaimer" role="note">가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다.<span class="option-design-reference"> 계약 전 공고문과 전시관을 확인해 주세요.</span></span></p>
             <div class="palette-viewbar">
@@ -772,7 +789,7 @@ export class ShowcaseApp {
         <form method="dialog">
           <p class="eyebrow">SALE CALCULATOR</p>
           <h2>분양가 계산 기준 선택</h2>
-          <p class="option-confirm-message">선택 옵션과 인증 세대의 타입·가격 층 구간을 계산기에 전달합니다. 동·호·닉네임은 저장하거나 전달하지 않습니다.</p>
+          <p class="option-confirm-message">선택 옵션과 선택 세대의 타입·가격 층 구간을 계산기에 전달합니다. 동·호·닉네임은 저장하거나 전달하지 않습니다.</p>
           <fieldset>
             <legend>청약 구분</legend>
             <label><input type="radio" name="sale-calculator-route" value="main-subscription" checked /> 본청약 신규신청자</label>
@@ -789,7 +806,7 @@ export class ShowcaseApp {
         <form method="dialog">
           <h2>놀이터 공유</h2>
           <p>링크에는 공유자의 닉네임, 평형과 방향, 선택 옵션, 배치 가구가 포함됩니다. 동·호수와 인증코드는 포함되지 않습니다.</p>
-          <p>링크를 받은 사람에게 이 정보가 전달됩니다. 링크 데이터 자체는 암호화되지 않으며, 발급한 링크는 중앙에서 회수할 수 없습니다. 열람 전 인증이 필요합니다.</p>
+          <p>링크를 받은 사람에게 이 정보가 전달됩니다. 링크 데이터 자체는 암호화되지 않으며, 발급한 링크는 중앙에서 회수할 수 없습니다. 닉네임 입력 후 누구나 공개 권한으로 열람할 수 있습니다.</p>
           <label for="share-link-value">읽기 전용 공유 링크</label>
           <textarea id="share-link-value" rows="3" readonly spellcheck="false" aria-describedby="share-link-status"></textarea>
           <p id="share-link-status" role="status" aria-live="polite"></p>
@@ -1931,6 +1948,7 @@ export class ShowcaseApp {
   }
 
   private setPaletteTab(tab: 'options' | 'furniture'): void {
+    if (tab === 'furniture' && !this.hasMemberAccess) return;
     const wasFurniture = this.paletteTab === 'furniture';
     this.paletteTab = tab;
     this.furnitureContextMenuOpen = false;
@@ -1990,6 +2008,10 @@ export class ShowcaseApp {
   private renderFurniturePalette(): void {
     const list = this.mount.querySelector<HTMLElement>('#furniture-list');
     if (!list) return;
+    if (!this.hasMemberAccess) {
+      list.replaceChildren();
+      return;
+    }
     const query = this.mount.querySelector<HTMLInputElement>('#furniture-search')?.value.trim().toLowerCase() || '';
     const selectedSceneAssetId = String(this.selectedSceneProp()?.assetId || '');
     if (this.paletteAppliedOnly) {
@@ -2022,9 +2044,9 @@ export class ShowcaseApp {
       }).join('') || '<p class="empty-options">검색 결과가 없습니다.</p>';
     }
     list.querySelectorAll<HTMLButtonElement>('[data-furniture-asset]').forEach((button) => {
-      button.disabled = this.readOnlyShare;
+      button.disabled = !this.capabilities.canEditFurniture;
       button.addEventListener('click', () => {
-        if (this.readOnlyShare) return;
+        if (!this.capabilities.canEditFurniture) return;
         const assetId = button.dataset.furnitureAsset || '';
         if (assetId === 'entry-sliding-partition-door') {
           this.cancelInteriorGhost('', false);
@@ -2093,7 +2115,7 @@ export class ShowcaseApp {
   }
 
   private beginInteriorGhost(mode: 'add' | 'move', prop: ApartmentInteriorProp): void {
-    if (this.readOnlyShare) return;
+    if (!this.capabilities.canEditFurniture) return;
     this.interiorGhostMode = mode;
     this.interiorGhostProp = { ...prop, positionMeters: [...(prop.positionMeters || this.defaultInteriorGhostPoint())] };
     this.furnitureContextMenuOpen = false;
@@ -2107,6 +2129,7 @@ export class ShowcaseApp {
   }
 
   private updateInteriorGhost(point: NumericPoint): void {
+    if (!this.capabilities.canEditFurniture) return;
     const prop = this.interiorGhostProp;
     const apartment = this.activeApartment();
     if (!prop || !apartment?.geometry) return;
@@ -2135,7 +2158,7 @@ export class ShowcaseApp {
   }
 
   private confirmInteriorGhost(): boolean {
-    if (this.readOnlyShare) return false;
+    if (!this.capabilities.canEditFurniture) return false;
     const ghost = this.interiorGhostProp;
     if (!ghost || !this.interiorGhostValidation?.ok) {
       const message = this.interiorGhostValidation?.errors[0]?.message || '배치 가능한 초록색 위치로 옮겨주세요.';
@@ -2208,7 +2231,7 @@ export class ShowcaseApp {
   }
 
   private isEditableFurnitureProp(prop: ApartmentInteriorProp | undefined): boolean {
-    if (!prop || this.readOnlyShare) return false;
+    if (!prop || !this.capabilities.canEditFurniture) return false;
     const local = this.localInteriorProps.find((candidate) => candidate === prop
       || String(candidate.id || '') === String(prop.id || ''));
     return isUserPlacedFurnitureProp(local);
@@ -2234,7 +2257,7 @@ export class ShowcaseApp {
     this.selectedLocalPropId = String(prop.id || '');
     this.selectedScenePropSnapshot = { ...prop, positionMeters: [...(prop.positionMeters || [])] };
     this.pendingInteriorAssetId = '';
-    this.furnitureContextMenuOpen = openMenu;
+    this.furnitureContextMenuOpen = openMenu && this.capabilities.canEditFurniture;
     this.get<HTMLElement>('#game-stage').classList.remove('is-relocating-furniture');
     this.threeRenderer?.setEditorSelection(this.selectedLocalPropId);
     const optionId = optionSourceIdForProp(prop, this.selectedOptionIds);
@@ -2261,7 +2284,9 @@ export class ShowcaseApp {
       openMenu,
       message: openMenu
         ? '가구를 선택했습니다. 화면 조작창에서 재배치할 수 있습니다.'
-        : '가구를 선택했습니다. L 키로 가까운 벽에 자석처럼 붙일 수 있습니다.',
+        : this.capabilities.canEditFurniture
+          ? '가구를 선택했습니다. L 키로 가까운 벽에 자석처럼 붙일 수 있습니다.'
+          : '가구를 선택했습니다. 가구 편집은 인증 회원 전용입니다.',
     };
   }
 
@@ -2313,6 +2338,7 @@ export class ShowcaseApp {
   }
 
   private handleInteriorPointerDown(event: PointerEvent): boolean {
+    if (!this.capabilities.canEditFurniture) return false;
     if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return false;
     const apartment = this.activeApartment();
     if (!apartment) return false;
@@ -2424,8 +2450,8 @@ export class ShowcaseApp {
   }
 
   private transformLocalProp(action: 'rotate-left' | 'rotate-right' | 'mirror' | 'delete'): void {
-    if (this.readOnlyShare) {
-      this.toast('공유 열람 모드에서는 가구를 변경할 수 없습니다.', 'notice');
+    if (!this.capabilities.canEditFurniture) {
+      this.toast(this.readOnlyShare ? '공유 열람 모드에서는 가구를 변경할 수 없습니다.' : '가구 편집은 인증 회원 전용입니다.', 'notice');
       return;
     }
     const prop = this.ensureEditableSelectedProp();
@@ -2476,8 +2502,8 @@ export class ShowcaseApp {
   }
 
   private toggleFurnitureWallSnap(): void {
-    if (this.readOnlyShare) {
-      this.toast('공유 열람 모드에서는 가구를 변경할 수 없습니다.', 'notice');
+    if (!this.capabilities.canEditFurniture) {
+      this.toast(this.readOnlyShare ? '공유 열람 모드에서는 가구를 변경할 수 없습니다.' : '가구 편집은 인증 회원 전용입니다.', 'notice');
       return;
     }
     const ghost = this.interiorGhostProp;
@@ -2522,7 +2548,7 @@ export class ShowcaseApp {
   }
 
   private saveInteriorLayout(message: string): void {
-    if (!this.world || this.readOnlyShare) return;
+    if (!this.world || !this.capabilities.canEditFurniture) return;
     const layout: LocalInteriorLayoutV1 = {
       schemaVersion: 1,
       mapId: this.world.entry.id,
@@ -2672,15 +2698,37 @@ export class ShowcaseApp {
   }
 
   private async selectPlanVariant(variant: ApartmentPlanVariant): Promise<void> {
-    if (this.readOnlyShare) {
-      this.toast('공유 열람 모드에서는 평면 타입을 변경할 수 없습니다.', 'notice');
+    if (!this.capabilities.canSwitchPlan) {
+      this.toast(this.readOnlyShare ? '공유 열람 모드에서는 평면 타입을 변경할 수 없습니다.' : '평면 타입 전환은 인증 회원 전용입니다.', 'notice');
       return;
     }
+    if (this.planSwitchPending) return;
     const definition = planVariantDefinition(this.currentMap.unitType, variant);
     if (definition.variant === this.planVariant) return;
-    this.planVariant = definition.variant;
-    this.paintPlanVariant(definition);
-    await this.selectMap(this.currentMap.id);
+    this.planSwitchPending = true;
+    window.clearTimeout(this.planNoticeTimer);
+    this.get<HTMLElement>('#plan-experience-notice').hidden = true;
+    try {
+      this.planVariant = definition.variant;
+      this.paintPlanVariant(definition);
+      this.renderHotbar();
+      await this.selectMap(this.currentMap.id);
+      if (!this.destroyed) {
+        this.toast(`${definition.label} · ${planFacingLabel(this.currentMap.unitType, definition.variant)}으로 전환했습니다.`, 'success');
+        if (definition.variant === 'C' || definition.variant === 'D') this.showPlanExperienceNotice();
+      }
+    } finally {
+      this.planSwitchPending = false;
+      if (!this.destroyed) this.renderHotbar();
+    }
+  }
+
+  private showPlanExperienceNotice(): void {
+    const notice = this.get<HTMLElement>('#plan-experience-notice');
+    window.clearTimeout(this.planNoticeTimer);
+    notice.textContent = '선택한 세대의 실제 배치와 다를 수 있는 체험용 평면입니다.';
+    notice.hidden = false;
+    this.planNoticeTimer = window.setTimeout(() => { notice.hidden = true; }, 5_000);
   }
 
   private paintPlanVariant(definition: ApartmentPlanVariantDefinition): void {
@@ -2699,6 +2747,8 @@ export class ShowcaseApp {
     if (stage) {
       stage.dataset.planVariant = definition.variant;
       stage.dataset.planVariantTransform = definition.operations.join(' + ') || '원본';
+      stage.dataset.experienceOnly = String(definition.experienceOnly);
+      stage.dataset.accessRole = this.accessRole || 'public';
     }
   }
 
@@ -2706,7 +2756,8 @@ export class ShowcaseApp {
     if (!this.readOnlyShare || !this.sharedState) return;
     this.get<HTMLElement>('#map-unit').textContent = this.sharedState.unitType;
     this.get<HTMLElement>('#map-title').textContent = `${this.sharedState.sharedByNickname}님의 ${this.sharedState.unitType}타입 공유 놀이터`;
-    this.get<HTMLElement>('#map-revision').textContent = '공유 놀이터는 수정 불가입니다.';
+    const experience = planVariantDefinition(this.sharedState.unitType, this.sharedState.planVariant).experienceOnly;
+    this.get<HTMLElement>('#map-revision').textContent = `공유 놀이터는 수정 불가입니다.${experience ? ' · 체험용 평면' : ''}`;
     const badge = this.get<HTMLElement>('#plan-variant-badge');
     badge.textContent = this.sharedState.livingFacing === 'south-east' ? '남동향' : '남서향';
     badge.title = '공유한 사용자가 선택한 거실 방향';
@@ -2848,11 +2899,13 @@ export class ShowcaseApp {
       { id: 'showcase-plan-toggle', label: '평면 타입 전환', icon: '', glyph: `${this.planVariant}→${nextPlanVariant}`, state: '', active: planVariantIndex > 0 },
       { id: 'showcase-pigmy-toggle', label: '변신', icon: '<span class="pigmy-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.transformationId ? 'ON' : '', active: Boolean(this.transformationId) },
       { id: 'showcase-children', label: '자녀 인형', icon: '<span class="child-hotbar-icon" aria-hidden="true"></span>', glyph: '', state: this.childCompanionChoices.length ? String(this.childCompanionChoices.length) : '', active: this.childCompanionChoices.length > 0 },
-    ];
-    element.innerHTML = controls.map((control, index) => `
-      <span class="hotbar-slot-wrap" data-slot-wrap="${index}">
-        <button type="button" class="hotbar-slot hotbar-control ${control.active ? 'is-active' : ''}" data-slot="${index}" data-hotbar-action="${control.id}" ${control.id === 'common-teleport' ? 'data-skill-id="common-teleport"' : ''} aria-label="${index + 1}번 ${escapeHtml(control.label)}" ${this.readOnlyShare && index > 0 ? 'disabled' : ''}>
-          <span class="slot-number">${index + 1}</span>
+    ].map((control, slot) => ({ ...control, slot }))
+      .filter(control => this.hasMemberAccess || (control.slot !== 2 && control.slot !== 3));
+    this.get<HTMLElement>('#game-stage').style.setProperty('--hotbar-count', String(controls.length));
+    element.innerHTML = controls.map((control) => `
+      <span class="hotbar-slot-wrap" data-slot-wrap="${control.slot}">
+        <button type="button" class="hotbar-slot hotbar-control ${control.active ? 'is-active' : ''}" data-slot="${control.slot}" data-hotbar-action="${control.id}" ${control.id === 'common-teleport' ? 'data-skill-id="common-teleport"' : ''} aria-label="${control.slot + 1}번 ${escapeHtml(control.label)}" ${this.readOnlyShare && control.slot > 0 || this.planSwitchPending && control.slot === 2 ? 'disabled' : ''}>
+          <span class="slot-number">${control.slot + 1}</span>
           ${control.icon}<span class="skill-glyph">${escapeHtml(control.glyph)}</span>
           ${control.state ? `<span class="hotbar-control-state">${escapeHtml(control.state)}</span>` : ''}
           ${control.id === 'common-teleport' ? '<span class="cooldown-sweep"></span><span class="cooldown-number"></span>' : ''}
@@ -2916,20 +2969,21 @@ export class ShowcaseApp {
       return;
     }
     if (index === 2) {
-      if (this.readOnlyShare) {
-        this.toast('공유 열람 모드에서는 평면 타입을 변경할 수 없습니다.', 'notice');
+      if (!this.capabilities.canSwitchPlan) {
+        this.toast('평면 타입 전환은 인증 회원 전용입니다.', 'notice');
         return;
       }
       const variants = availablePlanVariants(this.currentMap.unitType);
       const currentIndex = Math.max(0, variants.indexOf(this.planVariant));
       const next = variants[(currentIndex + 1) % variants.length] || 'A';
-      void this.selectPlanVariant(next).then(() => {
-        this.renderHotbar();
-        this.toast(`${next}형 · ${planFacingLabel(this.currentMap.unitType, next)}으로 전환했습니다.`, 'success');
-      });
+      void this.selectPlanVariant(next);
       return;
     }
     if (index === 3) {
+      if (!this.capabilities.canTransform) {
+        this.toast('변신은 인증 회원 전용입니다.', 'notice');
+        return;
+      }
       const activeView = this.actorViews.get(this.activeActor);
       if (this.transformationId) {
         this.transformationId = null;
@@ -3290,6 +3344,7 @@ export class ShowcaseApp {
   }
 
   private focusFurnitureInPalette(prop: ApartmentInteriorProp): void {
+    if (!this.hasMemberAccess) return;
     const assetId = String(prop.assetId || '');
     if (!assetId || !this.interiorAssets.some((asset) => asset.assetId === assetId)) {
       this.renderFurniturePalette();

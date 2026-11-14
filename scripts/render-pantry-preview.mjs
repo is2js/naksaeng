@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 
 const base = '/naksaeng/bunfirvil/';
-const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v5.webp');
+const output = resolve('public/assets/options/previews/entry-pantry-system-shelf-v6.webp');
 const server = await createServer({
   configFile: resolve('vite.config.ts'),
   server: { host: '127.0.0.1', port: 0, strictPort: true },
@@ -30,7 +30,7 @@ try {
   await page.goto(`http://127.0.0.1:${address.port}${base}__pantry-preview`);
   const dataUrl = await page.evaluate(async (root) => {
     const THREE = await import(root + 'node_modules/three/build/three.module.js');
-    const { ThreeWorldRenderer, STRUCTURAL_PROP_ASSETS } = await import(root + 'src/game/three-world.ts');
+    const { ThreeWorldRenderer, STRUCTURAL_PROP_ASSETS, BUNDANG_INTERIOR_LIGHTING } = await import(root + 'src/game/three-world.ts');
     const asset = STRUCTURAL_PROP_ASSETS.find(item => item.assetId === 'entry-pantry-rounded-system-cabinet');
     if (!asset || asset.parts.length !== 10) throw new Error('Corrected open-entry recipe is required.');
 
@@ -48,14 +48,15 @@ try {
     renderer.setPixelRatio(1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.04;
+    renderer.toneMappingExposure = BUNDANG_INTERIOR_LIGHTING.exposure;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#e7e3da');
-    scene.add(model, new THREE.HemisphereLight('#f8fafc', '#8b7967', 2.1));
+    scene.background = new THREE.Color('#c7cfcc');
+    scene.add(model, new THREE.HemisphereLight(BUNDANG_INTERIOR_LIGHTING.sky,
+      BUNDANG_INTERIOR_LIGHTING.ground, BUNDANG_INTERIOR_LIGHTING.hemisphereIntensity));
     model.traverse(mesh => { if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; } });
-    const light = new THREE.DirectionalLight('#fff5e3', 2.4);
+    const light = new THREE.DirectionalLight(BUNDANG_INTERIOR_LIGHTING.sun, BUNDANG_INTERIOR_LIGHTING.sunIntensity);
     light.position.set(-3, 6, 5);
     light.castShadow = true;
     light.shadow.mapSize.set(1024, 1024);
@@ -63,7 +64,10 @@ try {
     light.shadow.camera.right = light.shadow.camera.top = 3;
     light.shadow.bias = -.0002;
     scene.add(light);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#d6c9b6', roughness: .95 }));
+    const fill = new THREE.DirectionalLight(BUNDANG_INTERIOR_LIGHTING.fill, BUNDANG_INTERIOR_LIGHTING.fillIntensity);
+    fill.position.set(8, 5, 8);
+    scene.add(fill);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#b9c4bf', roughness: .95 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -.004;
     floor.receiveShadow = true;

@@ -45,15 +45,21 @@ export function bundangEntrySlidingPartitionProps(
     if (Math.abs(wall.a[0] - start) < .061) start = Math.max(start, wall.a[0] + wall.half);
     if (Math.abs(wall.a[0] - end) < .061) end = Math.min(end, wall.a[0] - wall.half);
   }
-  const width = end - start + .04; // 20 mm overlap on each jamb when closed.
+  const openingWidth = end - start;
+  const requestedClosingWidth = openingWidth + .04; // 20 mm overlap on each jamb when the product can cover it.
+  // No 59A product dimensions were supplied. Use the accepted 55B-scale leaf,
+  // not a wider custom product inferred from its wider structural entrance.
+  const productWidthLimit = unit === '59A' ? 1.15 : null;
+  const width = productWidthLimit === null ? requestedClosingWidth : Math.min(requestedClosingWidth, productWidthLimit);
   const parkIds = unit === '51A' ? ['kitchen-living-short-return']
     : unit === '55B' ? ['pantry-south'] : ['pantry-kitchen-short-return', 'pantry-south'];
   const backing = horizontal.filter(wall => parkIds.includes(wall.id));
   if (width <= .3 || !backing.length) return [];
   const corner = unit === '51A' ? .05 : unit === '55B' ? .03 : .10;
   const parksRight = unit === '51A';
-  const parkStart = parksRight ? Math.max(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) - corner - width
-    : Math.min(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) + corner;
+  const parkStart = unit === '59A' ? start - .02 - width
+    : parksRight ? Math.max(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) - corner - width
+      : Math.min(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) + corner;
   const parkEnd = parkStart + width;
   if (parksRight ? parkStart < end + .009 : parkEnd > start - .009) return [];
   const faceY = Math.max(...backing.map(wall => Math.max(wall.a[1], wall.b[1]) + wall.half));
@@ -62,20 +68,32 @@ export function bundangEntrySlidingPartitionProps(
   const variant = (['A', 'B', 'C', 'D'].includes(planVariant.toUpperCase()) ? planVariant.toUpperCase() : 'A') as ApartmentPlanVariant;
   const transform = planVariantDefinition(unit, variant).transform;
   const reflected = Boolean(transform.mirrorX) !== Boolean(transform.mirrorY);
-  const railStart = Math.min(parkStart, start - .02), railEnd = Math.max(parkEnd, end + .02);
+  const closedCenter = (start + end) / 2;
+  const railStart = Math.min(parkStart, unit === '59A' ? closedCenter - width / 2 : start - .02);
+  const railEnd = Math.max(parkEnd, unit === '59A' ? closedCenter + width / 2 : end + .02);
+  const inferredProductSizing = unit === '59A' ? {
+    productWidthLimitMeters: productWidthLimit,
+    productSizingProvenance: 'photo-scale-inferred-not-manufacturer-spec',
+    panelParkingReference: 'entrance-jamb',
+    closedCoverageComplete: width >= openingWidth,
+    closedCoverageMode: width >= openingWidth ? 'full' : 'partial-inferred',
+    closedOpeningCoverageMeters: Math.min(width, openingWidth),
+    closedUncoveredOpeningMeters: Math.max(0, openingWidth - width),
+  } : {};
   const common = {
     fixedOptionLayout: true, sourceOptionId: ENTRY_PARTITION_ID, roomZoneId: 'entry',
     materialVariantId: 'black-frame-smoke-glass', yawDeg: reflected ? 180 : 0, mirrored: reflected,
     entrySlidingRevision: 'wall-slide-v2', sourceOpeningLengthMeters: Math.abs(b[0] - a[0]),
-    usableOpeningLengthMeters: end - start, entryOpeningBoundsMeters: [start, y, end, y],
+    usableOpeningLengthMeters: openingWidth, entryOpeningBoundsMeters: [start, y, end, y],
     entryParkingBoundsMeters: [parkStart, faceY, parkEnd, faceY], panelParkingSide: parksRight ? 'end' : 'start',
     displayState: 'open', openRatio: 1, trackSide: 'corridor', wallClearanceMeters: .01,
+    ...inferredProductSizing,
   };
   return [{
     ...common, id: `inspection-${unit}-entry-sliding-partition-door`, assetId: ENTRY_PARTITION_ID,
     anchorId: 'entryPartition', installationRole: 'entry-partition', positionMeters: [(parkStart + parkEnd) / 2, planeY],
     dimensionsMeters: [width, depth, height], mountHeightMeters: .018,
-    closedPositionMeters: [(start + end) / 2, planeY], partitionHandleSide: parksRight ? -1 : 1,
+    closedPositionMeters: [closedCenter, planeY], partitionHandleSide: parksRight ? -1 : 1,
     slideTravelMeters: Math.abs((start + end - parkStart - parkEnd) / 2),
     measurementObstacle: true, collisionMode: 'solid', collisionDefault: 'solid',
   }, ...(['top', 'bottom'] as const).map(side => ({

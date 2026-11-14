@@ -148,8 +148,8 @@ interface StructureOccluder {
 const DEFAULT_VARIANTS: Record<string, Record<string, string>> = {
   'warm-oak-ivory': { primary: '#b58f62', secondary: '#efe9dc', accent: '#72563c' },
   'greige-fabric': { primary: '#a9a096', secondary: '#d8d0c7', accent: '#655f59' },
-  'charcoal-accent': { primary: '#393b3e', secondary: '#77736e', accent: '#17191b' },
-  'ivory-appliance': { primary: '#e8e5dd', secondary: '#c9c7c0', accent: '#4b5054' },
+  'charcoal-accent': { primary: '#42494c', secondary: '#8b9495', accent: '#252d30' },
+  'ivory-appliance': { primary: '#f2f4f0', secondary: '#dce2dc', accent: '#697470' },
   'white-ceramic': { primary: '#f4f5f2', secondary: '#d8dcda', accent: '#9ba4a2' },
   'ceramic-white': { primary: '#f7f7f2', secondary: '#dfe3e0', accent: '#98a3a1' },
   'integrated-bidet-white': { primary: '#f8f8f4', secondary: '#e3e7e4', accent: '#aeb8b5' },
@@ -157,13 +157,28 @@ const DEFAULT_VARIANTS: Record<string, Record<string, string>> = {
   'new-apartment-warm-white-glass': { primary: '#ecebe4', secondary: '#b8d0cf', accent: '#d8d5ca' },
   'e-pyeonhansesang-wide-greige-oak': { primary: '#b7aa99', secondary: '#c9beae', accent: '#8f8273' },
   'golden-shore-engineered-stone': { primary: '#e3dfd4', secondary: '#f2efe7', accent: '#b8b1a2' },
-  'pet-warm-ivory': { primary: '#e8e5dc', secondary: '#f5f3ec', accent: '#aaa79f' },
+  'pet-warm-ivory': { primary: '#f2f5f0', secondary: '#fafbf7', accent: '#b1bcb5' },
   'mma-sanded-goose-panel': { primary: '#8f918d', secondary: '#d4d4ce', accent: '#767974' },
-  'system-ac-light-gray': { primary: '#d8dadd', secondary: '#eef0f2', accent: '#aeb3b9' },
-  'system-ac-premium-light-gray': { primary: '#e4e6e8', secondary: '#f5f6f7', accent: '#b8bdc3' },
+  'system-ac-light-gray': { primary: '#ecf0ee', secondary: '#fafcf9', accent: '#bac5c1' },
+  'system-ac-premium-light-gray': { primary: '#f1f4f2', secondary: '#fdfefa', accent: '#c0c9c5' },
   'clear-glass-chrome': { primary: '#c9cece', secondary: '#d9f0ef', accent: '#6f797a' },
-  'black-ceramic-glass': { primary: '#111416', secondary: '#5d6264', accent: '#050607' },
+  'black-ceramic-glass': { primary: '#222b2f', secondary: '#788487', accent: '#151c20' },
 };
+
+/** Balanced room fill: retain the approved exposure and existing three lights. */
+export const BUNDANG_INTERIOR_LIGHTING = Object.freeze({
+  exposure: 1.04,
+  sky: '#f8fafc', ground: '#b8c0ba', hemisphereIntensity: 1.65,
+  sun: '#fff7ec', sunIntensity: 2.2,
+  fill: '#edf4ff', fillIntensity: 1.05,
+});
+
+// These are the site's approved built-in finishes, not user-authored wood or
+// fabric variants. An older exported palette must not recolour them on load.
+const SITE_OWNED_BRIGHT_PALETTE_IDS = new Set([
+  'pet-warm-ivory', 'ivory-appliance', 'system-ac-light-gray',
+  'system-ac-premium-light-gray', 'black-ceramic-glass',
+]);
 
 // 원본 three-pbr-renderer의 구조 결합형 procedural recipes. 독립 카탈로그 행이
 // 아닌 샤워부스/기본 주방 마감도 일반 박스 fallback으로 뭉개지지 않게 한다.
@@ -752,15 +767,15 @@ export class ThreeWorldRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.04;
+    this.renderer.toneMappingExposure = BUNDANG_INTERIOR_LIGHTING.exposure;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene.background = new THREE.Color('#11100e');
     this.scene.fog = new THREE.FogExp2('#11100e', 0.009);
     this.scene.add(this.structureRoot, this.propRoot, this.editorSelectionRoot, this.editorGhostRoot);
 
-    const hemisphere = new THREE.HemisphereLight('#f8fafc', '#554a3f', 1.55);
-    const sun = new THREE.DirectionalLight('#fff1d6', 2.2);
+    const hemisphere = new THREE.HemisphereLight(BUNDANG_INTERIOR_LIGHTING.sky, BUNDANG_INTERIOR_LIGHTING.ground, BUNDANG_INTERIOR_LIGHTING.hemisphereIntensity);
+    const sun = new THREE.DirectionalLight(BUNDANG_INTERIOR_LIGHTING.sun, BUNDANG_INTERIOR_LIGHTING.sunIntensity);
     sun.position.set(-7, 13, -5);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -768,7 +783,7 @@ export class ThreeWorldRenderer {
     sun.shadow.camera.right = 22;
     sun.shadow.camera.top = 22;
     sun.shadow.camera.bottom = -22;
-    const fill = new THREE.DirectionalLight('#a5d8ff', 0.6);
+    const fill = new THREE.DirectionalLight(BUNDANG_INTERIOR_LIGHTING.fill, BUNDANG_INTERIOR_LIGHTING.fillIntensity);
     fill.position.set(12, 8, 12);
     this.scene.add(hemisphere, sun, fill);
     this.contractsReady = this.loadContracts();
@@ -1507,9 +1522,12 @@ export class ThreeWorldRenderer {
       });
     }
     const opacity = options.opacity ?? 1;
+    const map = options.mapId ? this.textureCache.get(options.mapId) || null : null;
     return new THREE.MeshStandardMaterial({
-      color,
-      map: options.mapId ? this.textureCache.get(options.mapId) || null : null,
+      // Imported albedo already owns its colour; do not multiply grey tile
+      // swatches by another grey tint. Solid colours still use their palette.
+      color: map ? '#ffffff' : color,
+      map,
       roughness: options.roughness ?? 0.88,
       metalness: options.metalness ?? 0.01,
       transparent: opacity < 1,
@@ -1604,7 +1622,7 @@ export class ThreeWorldRenderer {
       const topHeight = Math.max(0.03, finite(fixture.countertopThicknessMeters, 0.06)) / cellSize;
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(Math.abs(x2 - x1) / cellSize, totalHeight - topHeight, Math.abs(y2 - y1) / cellSize),
-        this.material('#c8c5bf', { roughness: 0.78 }),
+        this.material('#eef2ed', { roughness: 0.78 }),
       );
       body.position.set(center.x, (totalHeight - topHeight) / 2 + 0.045, center.z);
       body.rotation.y = fixturePlacement.worldYaw;
@@ -1616,7 +1634,7 @@ export class ThreeWorldRenderer {
       this.structureRoot.add(body);
       const top = new THREE.Mesh(
         new THREE.BoxGeometry(Math.abs(x2 - x1) / cellSize + 0.06, topHeight, Math.abs(y2 - y1) / cellSize + 0.06),
-        this.material('#aaa8a4', { roughness: 0.58 }),
+        this.material('#e1e4db', { roughness: 0.64 }),
       );
       top.position.set(center.x, totalHeight - topHeight / 2 + 0.045, center.z);
       top.rotation.y = fixturePlacement.worldYaw;
@@ -1690,7 +1708,10 @@ export class ThreeWorldRenderer {
       const midpointLocal = { x: (ends[0][0] + ends[1][0]) / 2, y: (ends[0][1] + ends[1][1]) / 2 };
       const frontCutaway = String(segment.kind || '').includes('exterior')
         && (midpointLocal.x > localCenter.x + 2 || midpointLocal.y > localCenter.y + 2);
-      const opacity = frontCutaway ? .38 : 1;
+      // The old cutaway hint only controls ground shadows. All solid wall and
+      // window-frame segments rest opaque; only the actor/camera sightline below
+      // may fade them. Natural window-glass transparency is separate.
+      const opacity = 1;
       const dx = ends[1][0] - ends[0][0], dy = ends[1][1] - ends[0][1];
       const meterLength = Math.hypot(dx, dy) || 1;
       const normal: NumericPoint = [-dy / meterLength, dx / meterLength];
@@ -1741,8 +1762,8 @@ export class ThreeWorldRenderer {
         mesh,
         segments: [[ [start.x, start.z], [end.x, end.z] ]],
         contactHalfThickness: thickness / 2,
-        baseOpacity: frontCutaway ? 0.38 : 1,
-        currentOpacity: frontCutaway ? 0.38 : 1,
+        baseOpacity: 1,
+        currentOpacity: 1,
         castsShadow,
       });
     }
@@ -1781,6 +1802,8 @@ export class ThreeWorldRenderer {
         );
         pane.position.set((start.x + end.x) / 2, finite(opening.baseMeters, 0.9) / cellSize + height / 2, (start.z + end.z) / 2);
         pane.rotation.y = -Math.atan2(end.z - start.z, end.x - start.x);
+        pane.userData.structureKind = 'window-glass';
+        pane.userData.naturalGlassTransparency = true;
         this.structureRoot.add(pane);
         continue;
       }
@@ -2144,7 +2167,7 @@ export class ThreeWorldRenderer {
 
   private modelProp(template: THREE.Group, prop: ApartmentInteriorProp, asset: RuntimeAsset): THREE.Group {
     const group = template.clone(true);
-    const palette = this.palette(prop.materialVariantId);
+    const palette = this.propPalette(prop);
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -2184,7 +2207,7 @@ export class ThreeWorldRenderer {
       group.add(createBundangFloorSelectionSurface(size[0] / cellSize, size[1] / cellSize));
       return group;
     }
-    const palette = this.palette(prop.materialVariantId);
+    const palette = this.propPalette(prop);
     const roomFinish = asset?.mountingKind === 'room-finish';
     const wallFinish = String(prop.installationRole || '').includes('wall-');
     for (const part of asset?.parts?.length ? asset.parts : [{ shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5] }]) {
@@ -2220,55 +2243,55 @@ export class ThreeWorldRenderer {
         : role === 'glass'
         ? this.material('#d9f0ef', { glass: true })
         : role === 'mirror'
-          ? this.material('#b9c7c8', { roughness: .08, metalness: .68 })
+          ? this.material('#d4e0df', { roughness: .16, metalness: .28 })
           : role === 'airflow-accent'
             ? this.material('#e36b36', { roughness: .38, metalness: .04 })
             : role === 'air-duct'
-              ? this.material('#d9dde0', { roughness: .56, metalness: .08 })
+              ? this.material('#f0f4f2', { roughness: .62, metalness: .04 })
               : role === 'air-duct-rim'
-                ? this.material('#f1f3f4', { roughness: .34, metalness: .06 })
+                ? this.material('#fafcf9', { roughness: .44, metalness: .04 })
           : role === 'cooktop-glass'
-            ? this.material('#07090a', { roughness: .16, metalness: .18 })
+            ? this.material('#192227', { roughness: .32, metalness: .06 })
             : role === 'cooktop-zone-ring' || role === 'cooktop-control-line' || role === 'cooktop-control-mark'
-              ? this.material('#8d9497', { roughness: .34, metalness: .42 })
+              ? this.material('#aebbbd', { roughness: .42, metalness: .18 })
               : role === 'cooktop-radiant-ring' || role === 'cooktop-control-led' || role === 'hood-display-led'
                 ? this.material('#d34a31', { roughness: .24, metalness: .06 })
                 : role === 'gas-cooktop-body' || role === 'gas-burner-rim' || role === 'gas-control-knob'
-                  ? this.material('#bcc1c2', { roughness: .34, metalness: .72 })
+                  ? this.material('#d9e1df', { roughness: .44, metalness: .28 })
                   : role === 'gas-burner' || role === 'gas-grate'
-                    ? this.material('#17191a', { roughness: .58, metalness: .44 })
+                    ? this.material('#303b3e', { roughness: .62, metalness: .18 })
                     : role === 'hood-body'
-                      ? this.material('#d6d8d7', { roughness: .42, metalness: .36 })
+                      ? this.material('#eef3ef', { roughness: .52, metalness: .16 })
                       : role === 'hood-filter'
-                        ? this.material('#777d7e', { roughness: .66, metalness: .48 })
+                        ? this.material('#9da9a7', { roughness: .7, metalness: .22 })
                         : role === 'hood-display'
-                          ? this.material('#121719', { roughness: .24, metalness: .28 })
+                          ? this.material('#243034', { roughness: .36, metalness: .08 })
                           : role === 'hood-control'
-                            ? this.material('#5f6565', { roughness: .48, metalness: .42 })
+                            ? this.material('#85918f', { roughness: .54, metalness: .20 })
           : role === 'styler-frame' || role === 'vent-dark'
-            ? this.material('#25282a', { roughness: .52, metalness: .18 })
+            ? this.material('#394347', { roughness: .58, metalness: .08 })
             : role === 'styler-front'
-              ? this.material('#f0eee8', { roughness: .26, metalness: .08 })
+              ? this.material('#f7faf5', { roughness: .42, metalness: .04 })
               : role === 'vent-light'
                 ? this.material('#fff2c8', { roughness: .18 })
                 : role === 'refrigerator-front-open'
-                  ? this.material('#dfd8ce', { roughness: .34, metalness: .04 })
+                  ? this.material('#f2f4eb', { roughness: .46, metalness: .02 })
                   : role === 'refrigerator-front'
-                    ? this.material('#d9ddd8', { roughness: .32, metalness: .05 })
+                    ? this.material('#edf4ef', { roughness: .46, metalness: .02 })
                     : role === 'refrigerator-front-alt' || role === 'refrigerator-storage-front'
-                      ? this.material('#e8dfd5', { roughness: .36, metalness: .03 })
+                      ? this.material('#f6f2e9', { roughness: .48, metalness: .02 })
                       : role === 'refrigerator-handle'
-                        ? this.material('#585b59', { roughness: .45, metalness: .48 })
+                        ? this.material('#7b8986', { roughness: .54, metalness: .20 })
                         : role === 'oven-glass' || role === 'oven-body'
-                          ? this.material('#111315', { roughness: .18, metalness: .24 })
+                          ? this.material(role === 'oven-glass' ? '#1c272b' : '#303b40', { roughness: .34, metalness: .08 })
                           : role === 'oven-control'
-                            ? this.material('#232629', { roughness: .32, metalness: .28 })
+                            ? this.material('#485458', { roughness: .42, metalness: .10 })
                             : role === 'oven-display'
-                              ? this.material('#080b0d', { roughness: .12, metalness: .15 })
+                              ? this.material('#131c21', { roughness: .28, metalness: .04 })
                               : role === 'oven-handle' || role === 'oven-dial'
-                                ? this.material('#63686a', { roughness: .34, metalness: .62 })
+                                ? this.material('#9daaa9', { roughness: .44, metalness: .24 })
                                 : role === 'cabinet-opening'
-                                  ? this.material('#7e7a72', { roughness: .93 })
+                                  ? this.material('#a9b3ac', { roughness: .93 })
                                   : role === 'island-slide-shelf' || role === 'island-lower-drawer' || role === 'island-oven-filler'
                                     ? this.material(palette.secondary, { roughness: .82 })
                                   : role === 'cabinet-light'
@@ -2293,6 +2316,7 @@ export class ThreeWorldRenderer {
       }
       const mesh = new THREE.Mesh(finalGeometry, material);
       mesh.userData.infinityDoorBody = infinityBody;
+      mesh.userData.materialRole = role;
       mesh.position.set(
         size[0] * finite(part.offset?.[0]) * (prop.mirrored ? -1 : 1) / cellSize,
         size[2] * finite(part.offset?.[2], 0.5) / cellSize,
@@ -2351,7 +2375,26 @@ export class ThreeWorldRenderer {
     return geometry;
   }
 
+  private propPalette(prop: ApartmentInteriorProp): Record<string, string> {
+    const palette = this.palette(prop.materialVariantId);
+    if (prop.assetId === 'entry-pantry-rounded-system-cabinet') {
+      // Open shelves are white PET, not the generic wood furniture palette.
+      // Keep this asset override in the shared factory so previews match too.
+      return { primary: '#f7f9f5', secondary: '#fefffa', accent: '#bcc7bf' };
+    }
+    if (String(prop.assetId || '').startsWith('bunfirvil-island-integrated-cabinet')) {
+      return { primary: '#f2f5ef', secondary: prop.materialVariantId === 'golden-shore-engineered-stone'
+        ? '#ede7d9' : '#f8faf4', accent: '#b1bcb4' };
+    }
+    if (/^kitchen-(countertop|backsplash)-default-run$/.test(String(prop.assetId || ''))) {
+      return { primary: '#e7ebe2', secondary: '#f0f2ea', accent: '#c2ccc3' };
+    }
+    return palette;
+  }
+
   private palette(variantId: unknown): Record<string, string> {
-    return this.variants.get(String(variantId || '')) || this.variants.get('warm-oak-ivory') || DEFAULT_VARIANTS['warm-oak-ivory'];
+    const id = String(variantId || '');
+    return (SITE_OWNED_BRIGHT_PALETTE_IDS.has(id) ? DEFAULT_VARIANTS[id] : null)
+      || this.variants.get(id) || this.variants.get('warm-oak-ivory') || DEFAULT_VARIANTS['warm-oak-ivory'];
   }
 }

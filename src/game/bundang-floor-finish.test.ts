@@ -29,10 +29,10 @@ describe('마루는 기존 바닥 면을 교체하며 덧깔지 않는다', () =
       red += first.data[i]; green += first.data[i + 1]; blue += first.data[i + 2];
     }
     const count = first.width * first.height;
-    expect(red / count).toBeGreaterThan(178);
-    expect(red / count).toBeLessThan(181);
-    expect((red - green) / count).toBe(10);
-    expect((green - blue) / count).toBe(8);
+    expect(red / count).toBeGreaterThan(203);
+    expect(red / count).toBeLessThan(206);
+    expect((red - green) / count).toBe(7);
+    expect((green - blue) / count).toBe(9);
   });
 
   it('선택 프록시는 옆면·두께 없는 평면이며 보이는 두 번째 바닥을 그리지 않는다', () => {

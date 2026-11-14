@@ -112,7 +112,7 @@ function designWallChannels(): { data: Uint8Array; bump: Uint8Array; roughness: 
   const bump = new Uint8Array(data.length), roughness = new Uint8Array(data.length);
   // A042 sample is lightly warm mineral, not yellow marble or a flat grey card.
   // The RGB values are visual approximations, not certified manufacturer RGB.
-  const base = [223, 218, 207];
+  const base = [224, 215, 199];
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const u = x / width, v = y / height;
     const cluster = (mineralNoise(u, v, 7) - .5) * 21

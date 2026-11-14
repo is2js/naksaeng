@@ -76,8 +76,8 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
     const count = first.width * first.height;
     expect(red / count).toBeGreaterThan(218);
     expect(red / count).toBeLessThan(228);
-    expect((red - green) / count).toBeCloseTo(5, 1);
-    expect((green - blue) / count).toBeCloseTo(11, 1);
+    expect((red - green) / count).toBeCloseTo(9, 1);
+    expect((green - blue) / count).toBeCloseTo(16, 1);
     expect(Math.sqrt(squares / count - (red / count) ** 2)).toBeGreaterThan(6);
     expect(minimumRed).toBeGreaterThan(175); // Mineral pixels clamp, never wrap Uint8 to black.
     const textures = createBundangDesignWallTextures();

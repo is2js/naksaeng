@@ -159,7 +159,7 @@ function isBundangMinusSuppressedProp(prop: ApartmentInteriorProp): boolean {
 export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<Pick<BOptionEntry, 'label' | 'description' | 'previewUrl'>>>> = Object.freeze({
   'entry-pantry-system-shelf': Object.freeze({
     description: 'L자 라운드 선반과 얇은 지지대로 구성된 개방형 시스템 선반입니다.',
-    previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v5.webp',
+    previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v6.webp',
   }),
   'entry-sliding-partition-door': Object.freeze({
     previewUrl: 'assets/options/previews/entry-sliding-partition-door-v2.webp',

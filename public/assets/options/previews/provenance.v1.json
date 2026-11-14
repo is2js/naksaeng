@@ -40,6 +40,18 @@
       "publicationApprovalCategory": "site-generated-procedural-preview"
     },
     {
+      "file": "assets/options/previews/entry-pantry-system-shelf-v6.webp",
+      "sourceScript": "scripts/render-pantry-preview.mjs",
+      "sourceRuntime": "src/game/three-world.ts",
+      "optionId": "entry-pantry-system-shelf",
+      "width": 512,
+      "height": 512,
+      "bytes": 4120,
+      "sha256": "c5aa00c0b6cba0d7cad6ae4ff4b4dbddef11096fc4c32f49d4e5d9cb44e44088",
+      "rightsClass": "maintainer-reviewed-project-asset",
+      "publicationApprovalCategory": "site-generated-procedural-preview"
+    },
+    {
       "file": "assets/options/previews/entry-sliding-partition-door-v2.webp",
       "sourceScript": "scripts/render-entry-partition-preview.mjs",
       "sourceRuntime": "src/game/entry-partition-model.ts",

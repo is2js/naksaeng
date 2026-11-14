@@ -19,7 +19,7 @@ import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog, WorldOb
 
 type Bounds = [number, number, number, number];
 const PARKING: Record<string, [number, number]> = {
-  '51A': [2.92, 4], '55A': [6.45, 7.38], '55B': [5.8, 6.95], '59A': [6.45, 7.78],
+  '51A': [2.92, 4], '55A': [6.45, 7.38], '55B': [5.8, 6.95], '59A': [7.89, 9.04],
 };
 const cases = Object.keys(PARKING).flatMap(unit => availablePlanVariants(unit).map(variant => ({ unit, variant })));
 let sources: Map<string, WorldObject>;
@@ -93,7 +93,7 @@ describe('벽 앞에 완전히 주차되는 고정 슬라이딩 중문', () => {
     expect(leaf).toMatchObject({ anchorId: 'entryPartition', installationRole: 'entry-partition',
       measurementObstacle: true, collisionMode: 'solid', mountHeightMeters: .018 });
     const size = leaf.dimensionsMeters as [number, number, number];
-    expect(size[0]).toBeCloseTo(Number(leaf.usableOpeningLengthMeters) + .04, 8);
+    expect(size[0]).toBeCloseTo(unit === '59A' ? 1.15 : Number(leaf.usableOpeningLengthMeters) + .04, 8);
     expect(size.slice(1)).toEqual([.04, 2.2]);
     const model = createEntrySlidingPanel(leaf, 1);
     const actualSize = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
@@ -131,6 +131,43 @@ describe('벽 앞에 완전히 주차되는 고정 슬라이딩 중문', () => {
     expect(assembly(produce([ENTRY_PARTITION_ID, BUNDANG_MINUS_OPTION_ID]))).toEqual([]);
     expect(JSON.stringify(geometry)).toBe(geometryBefore);
     expect(JSON.stringify(sources.get(unit))).toBe(sourceBefore);
+  });
+
+  it.each(availablePlanVariants('59A'))('59A %s: 55B 제품 규모로 제한하고 현관 jamb 바로 옆에 주차하되 넓은 통로를 줄이지 않는다', variant => {
+    const apartment = fresh('59A', variant);
+    const geometry = apartment.geometry!;
+    const before = JSON.stringify(geometry);
+    const props = refineBundangOptionProps(geometry, '59A', [ENTRY_PARTITION_ID],
+      runtime.bundangPrototypeOptionProps(geometry, '59A', [ENTRY_PARTITION_ID]), variant);
+    const leaf = props.find(prop => prop.assetId === ENTRY_PARTITION_ID)!;
+    const rails = props.filter(prop => prop.assetId === ENTRY_PARTITION_RAIL_ID);
+    const equivalent55B = fresh('55B', variant);
+    const leaf55B = refineBundangOptionProps(equivalent55B.geometry!, '55B', [ENTRY_PARTITION_ID],
+      runtime.bundangPrototypeOptionProps(equivalent55B.geometry!, '55B', [ENTRY_PARTITION_ID]), variant)
+      .find(prop => prop.assetId === ENTRY_PARTITION_ID)!;
+    const opening = leaf.entryOpeningBoundsMeters as number[];
+    const leafBounds = bounds(interiorPropCorners(leaf));
+    const size = leaf.dimensionsMeters as [number, number, number];
+    expect(size[0]).toBeCloseTo((leaf55B.dimensionsMeters as number[])[0], 8);
+    expect(leaf.usableOpeningLengthMeters).toBeCloseTo(1.29, 6);
+    expect(opening[0] - leafBounds[2]).toBeCloseTo(.02, 8);
+    expect(leaf).toMatchObject({ productWidthLimitMeters: 1.15,
+      productSizingProvenance: 'photo-scale-inferred-not-manufacturer-spec',
+      panelParkingReference: 'entrance-jamb', closedCoverageComplete: false,
+      closedCoverageMode: 'partial-inferred', closedOpeningCoverageMeters: 1.15 });
+    expect(leaf.closedUncoveredOpeningMeters).toBeCloseTo(.14, 6);
+    const closed = leaf.closedPositionMeters as number[];
+    for (const rail of rails) {
+      const railBounds = bounds(interiorPropCorners(rail));
+      expect(railBounds[0]).toBeCloseTo(leafBounds[0], 8);
+      expect(railBounds[2]).toBeCloseTo(closed[0] + size[0] / 2, 8);
+      expect((rail.dimensionsMeters as number[])[0]).toBeCloseTo(2.39, 6);
+      expect(railBounds[0]).toBeGreaterThan(7.8); // Never extend to the old 6.45 m kitchen corner.
+    }
+    const reflected = Boolean(apartment.transform?.mirrorX) !== Boolean(apartment.transform?.mirrorY);
+    expect(leaf.yawDeg).toBe(reflected ? 180 : 0);
+    expect(leaf.mirrored).toBe(reflected);
+    expect(JSON.stringify(geometry)).toBe(before);
   });
 
   it('이전 위치·회전·삭제 override가 고정 leaf와 두 rail을 덮지 않으며 저장 원문도 그대로 둔다', () => {

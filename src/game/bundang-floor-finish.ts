@@ -29,7 +29,7 @@ export function bundangWoodFloorPixels(): { data: Uint8Array; width: number; hei
   const width = 256, height = 1024, data = new Uint8Array(width * height * 4);
   const plankWidth = width / 4, plankLength = height / 2;
   const stagger = [0, .5, .25, .75];
-  const base = [180, 170, 162];
+  const base = [205, 198, 189];
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const column = Math.floor(x / plankWidth), u = x % plankWidth;
     const v = (y + stagger[column] * plankLength) % plankLength;

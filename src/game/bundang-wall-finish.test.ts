@@ -7,6 +7,7 @@ import {
   bundangWallFaceFinishes, bundangWallFaceMaterialIndex, createBundangDesignWallMaterial,
   createBundangDesignWallTextures, createBundangWallFinishSelectionSurface,
   createBundangWallpaperTextures, createBundangWallpaperMaterial, bundangWallpaperKindAt,
+  createBundangStructuralWallMaterial, BUNDANG_STRUCTURE_WALL_STYLE,
 } from './bundang-wall-finish';
 import { ThreeWorldRenderer, STRUCTURAL_PROP_ASSETS } from './three-world';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
@@ -117,6 +118,31 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
       expect(material.bumpScale).toBeLessThan(.0003);
       material.dispose(); Object.values(maps).forEach(texture => texture.dispose());
     }
+  });
+
+  it('구조 전용 회색은 벽·설비벽에만 적용하고 기본 문짝·디자인월의 밝기를 바꾸지 않는다', () => {
+    const maps = createBundangWallpaperTextures('common');
+    const original = Buffer.from(maps.albedo.image.data as Uint8Array);
+    const wall = createBundangStructuralWallMaterial(maps, 'common');
+    const door = createBundangWallpaperMaterial(maps, 'common');
+    const designMaps = createBundangDesignWallTextures();
+    const design = createBundangDesignWallMaterial(designMaps);
+    expect(wall.color.getHexString()).toBe('7d8288');
+    expect(wall.userData.wallDisplayStyle).toBe(BUNDANG_STRUCTURE_WALL_STYLE.id);
+    expect(wall.map).toBe(door.map);
+    expect(wall.bumpMap).toBe(door.bumpMap);
+    expect(wall.opacity).toBe(1);
+    expect(wall.transparent).toBe(false);
+    expect(door.color.getHexString()).toBe('ffffff');
+    expect(door.userData.wallDisplayStyle).toBeUndefined();
+    expect(design.color.getHexString()).toBe('ffffff');
+    expect(design.map).toBe(designMaps.albedo);
+    const tint = new THREE.Color(BUNDANG_STRUCTURE_WALL_STYLE.tint);
+    expect(tint.r).toBeLessThan(tint.b); // No brown cast.
+    expect(BUNDANG_STRUCTURE_WALL_STYLE.cap).toBe('#626a70');
+    expect(Buffer.compare(original, Buffer.from(maps.albedo.image.data as Uint8Array))).toBe(0);
+    [wall, door, design].forEach(material => material.dispose());
+    [maps, designMaps].forEach(set => Object.values(set).forEach(texture => texture.dispose()));
   });
 
   it('인피니티 도어 복도면은 모든 회전·반전에서 벽과 동일 A042 maps/미터UV를 쓴다', () => {

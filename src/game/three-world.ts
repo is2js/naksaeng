@@ -46,6 +46,8 @@ import {
   createBundangDesignWallMaterial,
   createBundangDesignWallTextures,
   createBundangWallpaperMaterial,
+  createBundangStructuralWallMaterial,
+  BUNDANG_STRUCTURE_WALL_STYLE,
   createBundangWallpaperTextures,
   createBundangWallFinishSelectionSurface,
   isBundangWallFinishSelectionProxy,
@@ -1660,8 +1662,8 @@ export class ThreeWorldRenderer {
       blockGeometry.rotateX(Math.PI / 2);
       blockGeometry.translate(0, height, 0);
       const mesh = new THREE.Mesh(blockGeometry, [
-        this.material('#adb3b1', { roughness: .96, metalness: 0 }),
-        createBundangWallpaperMaterial(this.wallpaperTextures.common, 'common', 1, cellSize),
+        this.material(BUNDANG_STRUCTURE_WALL_STYLE.cap, { roughness: .96, metalness: 0 }),
+        createBundangStructuralWallMaterial(this.wallpaperTextures.common, 'common', 1, cellSize),
       ]);
       applyBundangSurfaceMetricUVs(blockGeometry, mesh.matrix, object, this.world || { width: 64, height: 64 },
         BUNDANG_WALLPAPER_PROFILES.common.textureRepeatMeters);
@@ -1719,10 +1721,10 @@ export class ThreeWorldRenderer {
       const kindAtSide = (sign: number) => bundangWallpaperKindAt(geometry,
         [midpointLocal.x + normal[0] * probeOffset * sign, midpointLocal.y + normal[1] * probeOffset * sign]);
       const positiveKind = kindAtSide(1), negativeKind = kindAtSide(-1);
-      const cap = this.material('#adb3b1', { roughness: .96, metalness: 0, opacity });
-      const positiveMaterial = createBundangWallpaperMaterial(this.wallpaperTextures[positiveKind], positiveKind, opacity, cellSize);
+      const cap = this.material(BUNDANG_STRUCTURE_WALL_STYLE.cap, { roughness: .96, metalness: 0, opacity });
+      const positiveMaterial = createBundangStructuralWallMaterial(this.wallpaperTextures[positiveKind], positiveKind, opacity, cellSize);
       const negativeMaterial = positiveKind === negativeKind ? positiveMaterial
-        : createBundangWallpaperMaterial(this.wallpaperTextures[negativeKind], negativeKind, opacity, cellSize);
+        : createBundangStructuralWallMaterial(this.wallpaperTextures[negativeKind], negativeKind, opacity, cellSize);
       const materials = Array<THREE.Material>(6).fill(cap);
       const positiveFace = bundangWallFaceMaterialIndex(object, ends[0], ends[1], normal);
       materials[positiveFace] = positiveMaterial;

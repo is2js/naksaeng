@@ -40,6 +40,13 @@ export const BUNDANG_WALLPAPER_PROFILES = Object.freeze({
   bedroom: { id: 'seoul-silk-4252-5', label: '서울 실크형벽지 4252-5', textureRepeatMeters: .35, bumpHeightMeters: .00010 },
 });
 
+/** Playground readability, not a claim about the supplied wallpaper's colour. */
+export const BUNDANG_STRUCTURE_WALL_STYLE = Object.freeze({
+  id: 'neutral-gray-structure-v1',
+  tint: '#7d8288',
+  cap: '#626a70',
+});
+
 export function bundangWallpaperKindAt(geometry: ApartmentGeometry, position: NumericPoint): BundangWallpaperKind {
   for (const room of geometry.roomZones || []) {
     const bounds = room.boundsMeters;
@@ -190,6 +197,15 @@ export function createBundangWallpaperMaterial(textures: BundangSurfaceTextures,
     depthWrite: opacity >= .7, side: THREE.DoubleSide,
   });
   material.userData.wallFinishProfile = BUNDANG_WALLPAPER_PROFILES[kind].id;
+  return material;
+}
+
+/** Only physical walls/structural blocks get the subdued display tint. */
+export function createBundangStructuralWallMaterial(textures: BundangSurfaceTextures, kind: BundangWallpaperKind,
+  opacity = 1, cellSize = .5): THREE.MeshStandardMaterial {
+  const material = createBundangWallpaperMaterial(textures, kind, opacity, cellSize);
+  material.color.set(BUNDANG_STRUCTURE_WALL_STYLE.tint);
+  material.userData.wallDisplayStyle = BUNDANG_STRUCTURE_WALL_STYLE.id;
   return material;
 }
 

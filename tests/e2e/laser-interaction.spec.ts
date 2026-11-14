@@ -71,7 +71,14 @@ async function expectLineAndValueAgree(page: Page): Promise<void> {
 }
 
 test('laser release/cancel, owned surfaces, camera changes and reference notice work on PC/mobile', async ({ page, context, browser }, testInfo) => {
-  test.setTimeout(process.env.CI ? 480_000 : 300_000);
+  // The same assertions passed in 6.2 minutes on one Pages software-WebGL
+  // runner, then exceeded eight minutes on a slower runner. Keep the local
+  // five-minute budget and bound the full PC/mobile sequence separately in CI.
+  test.setTimeout(process.env.CI ? 720_000 : 300_000);
+  const beganAt = Date.now();
+  const checkpoint = (phase: string) => {
+    if (process.env.CI) console.info(`[laser smoke ${Math.round((Date.now() - beganAt) / 1000)}s] ${phase}`);
+  };
   const errors: string[] = [];
   const seed = () => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'operator', authRevision: 2, scope: 'playground', nickname: '실측 검수',
@@ -81,6 +88,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(route);
   await ready(page);
+  checkpoint('PC renderer ready');
   await observeReferenceNotice(page);
   const stage = page.locator('#game-stage'), canvas = page.locator('#three-world-canvas');
   await expect(stage).toHaveAttribute('data-geometry-revision', 'bundang-55b-geometry-v2');
@@ -169,6 +177,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     await expect(dialog).toBeHidden();
   });
   await stage.screenshot({ path: testInfo.outputPath('laser-desktop.png') });
+  checkpoint('PC measurement and floorplan gestures complete');
   await stage.focus();
   await page.keyboard.press('Escape');
   await page.keyboard.press('j');
@@ -219,6 +228,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   await page.locator('#open-help').click();
   await expect(page.locator('#help-dialog option[value="laser-dimensions"]')).toHaveCount(1);
   await page.locator('#help-dialog .dialog-close').click();
+  checkpoint('55B entry, wall and door checks complete');
 
   await page.reload();
   await ready(page);
@@ -239,6 +249,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     mobile.on('pageerror', error => errors.push(error.message));
     await mobile.goto(route);
     await ready(mobile);
+    checkpoint('mobile renderer ready');
     await observeReferenceNotice(mobile);
     await mobile.locator('#touch-laser-toggle').tap();
     const mobileNotice = await referenceSnapshot(mobile);
@@ -273,6 +284,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     await mobile.touchscreen.tap(mobileEnd.x, mobileEnd.y);
     await expect(mobile.locator('#inspection-laser-phase')).toHaveText('완료');
     await expectLineAndValueAgree(mobile);
+    checkpoint('mobile release/cancel and physical distance checks complete');
     await test.step('모바일 도면 pinch·드래그·닫기 후 확정한 실측을 유지한다', async () => {
       await mobile.locator('.floorplan-minimap').tap();
       const dialog = mobile.locator('#floorplan-reference-dialog');
@@ -305,4 +317,5 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
     await expect(mobile.locator('#inspection-laser-reference-notice')).toBeHidden();
   } finally { await mobileContext.close(); }
   expect(errors).toEqual([]);
+  checkpoint('PC/mobile flow complete');
 });

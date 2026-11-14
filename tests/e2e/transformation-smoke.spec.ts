@@ -205,8 +205,13 @@ test('each loaded species can be selected and returns to the same actor', async 
       expect(top).toBeCloseTo(-25 + (122 - 92) * 102 / 128, 3);
     }
     await toggle.click();
-    await expect(actor).toHaveAttribute('data-transformation', '');
-    await expect.poll(() => actor.locator('.actor-sprite').evaluate(element => (element as HTMLElement).style.top)).toBe('');
+    // Both values are cleared synchronously in applyTransformed(). Read them
+    // together: a software-WebGL frame can delay a second page.evaluate past
+    // the default five-second polling deadline even after state was cleared.
+    await expect.poll(() => actor.evaluate(element => ({
+      transformation: (element as HTMLElement).dataset.transformation,
+      top: element.querySelector<HTMLElement>('.actor-sprite')!.style.top,
+    })), { timeout: process.env.CI ? 30_000 : 5_000 }).toEqual({ transformation: '', top: '' });
   }
 });
 

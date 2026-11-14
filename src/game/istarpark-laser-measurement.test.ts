@@ -6,6 +6,7 @@ import {
   ISTARPARK_LASER_HEIGHT_METERS,
   istarparkLaserAxisTowardPointer,
   istarparkLaserObstacles,
+  istarparkLaserSurfaceHitIsCurrent,
   measureIstarparkLaserDirectionalGap,
   measureIstarparkLaserFreePointPair,
   measureIstarparkLaserGap,
@@ -55,6 +56,57 @@ const roughRoomCappedByFloorLabel = {
 };
 
 describe('이스타파크 레이저 실측 계약', () => {
+  it('직접 클릭한 owner와 면을 유지하며 가까운 다른 가구로 옮겨 붙지 않는다', () => {
+    const props = [
+      { id: 'chosen', assetId: 'cabinet', positionMeters: [2, 1.5], dimensionsMeters: [1, 1, 1] },
+      { id: 'closer', assetId: 'cabinet', positionMeters: [3.1, 1.5], dimensionsMeters: [.2, 1, 1] },
+    ];
+    const chosen = snapIstarparkLaserPoint({ geometry: room, props, candidatePlanPoint: [3, 1.5],
+      preferredObstacleId: 'chosen', preferredSurfaceNormal: [1, 0], maxSnapDistanceMeters: null, requireSurface: true });
+    expect(chosen).toMatchObject({ valid: true, obstacleId: 'chosen', point: [2.5, 1.5] });
+    const sameFace = snapIstarparkLaserPoint({ geometry: room, props, candidatePlanPoint: [1.55, 1.5],
+      preferredObstacleId: 'chosen', preferredSurfaceNormal: [1, 0], maxSnapDistanceMeters: null, requireSurface: true });
+    expect(sameFace).toMatchObject({ point: [2.5, 1.5], obstacleId: 'chosen' });
+    expect(snapIstarparkLaserPoint({ geometry: room, props: [], candidatePlanPoint: [3, 1.5],
+      preferredObstacleId: 'chosen', maxSnapDistanceMeters: null, requireSurface: true }).valid).toBe(false);
+  });
+
+  it('표면 없는 평면 투영은 내부·외부 모두 150mm 이내에서만 시작 면으로 붙는다', () => {
+    const props = [{ id: 'cabinet', assetId: 'cabinet', positionMeters: [2, 1.5], dimensionsMeters: [1, 1, 1] }];
+    for (const candidatePlanPoint of [[-2, 1.5], [2, 1.5], [.3, 1.5]]) {
+      expect(snapIstarparkLaserPoint({ geometry: room, props, candidatePlanPoint, maxSnapDistanceMeters: .15, requireSurface: true }).valid).toBe(false);
+    }
+    expect(snapIstarparkLaserPoint({ geometry: room, candidatePlanPoint: [.25, 1.5], maxSnapDistanceMeters: .15, requireSurface: true }))
+      .toMatchObject({ valid: true, point: [.1, 1.5] });
+  });
+
+  it('자유 끝점은 유지하면서 직접 선택한 두 번째 가구 면만 정확하게 보정한다', () => {
+    const props = [{ id: 'cabinet', assetId: 'cabinet', positionMeters: [2, 1.5], dimensionsMeters: [1, 1, 1] }];
+    const startHit = snapIstarparkLaserPoint({ geometry: room, props, candidatePlanPoint: [.1, 1.5], requireSurface: true });
+    const endSurfaceHit = snapIstarparkLaserPoint({ geometry: room, props, candidatePlanPoint: [2.05, 1.5],
+      preferredObstacleId: 'cabinet', preferredSurfaceNormal: [-1, 0], maxSnapDistanceMeters: null, requireSurface: true });
+    expect(measureIstarparkLaserFreePointPair({ geometry: room, props, startHit, endPlanPoint: [2.05, 1.5], endSurfaceHit }))
+      .toMatchObject({ valid: true, distanceMm: 1400, endHit: { point: [1.5, 1.5], obstacleId: 'cabinet' } });
+    expect(measureIstarparkLaserFreePointPair({ geometry: room, props, startHit, endPlanPoint: [4.5, 1.5] }))
+      .toMatchObject({ valid: true, distanceMm: 4400, endHit: { point: [4.5, 1.5], obstacleId: '' } });
+  });
+
+  it('삭제·이동한 시작/끝 owner는 거절하고 무관한 가구 변경은 고정점을 유지한다', () => {
+    const cabinet = { id: 'cabinet', assetId: 'cabinet', positionMeters: [2, 1.5], dimensionsMeters: [1, 1, 1] };
+    const hit = snapIstarparkLaserPoint({ geometry: room, props: [cabinet], candidatePlanPoint: [2.5, 1.5], requireSurface: true });
+    const moved = { ...cabinet, positionMeters: [2.2, 1.5] };
+    for (const props of [[], [moved]]) {
+      expect(istarparkLaserSurfaceHitIsCurrent(hit, istarparkLaserObstacles({ geometry: room, props }))).toBe(false);
+      expect(measureIstarparkLaserDirectionalGap({ geometry: room, props, startHit: hit, pointerPlanPoint: [3, 1.5] }))
+        .toMatchObject({ valid: false, reason: 'start-surface-changed' });
+    }
+    const startHit = snapIstarparkLaserPoint({ geometry: room, candidatePlanPoint: [.1, 1.5], requireSurface: true });
+    expect(measureIstarparkLaserFreePointPair({ geometry: room, props: [], startHit, endPlanPoint: [2.5, 1.5], endSurfaceHit: hit }))
+      .toMatchObject({ valid: false, reason: 'end-surface-changed' });
+    const unrelated = { ...cabinet, id: 'unrelated', positionMeters: [3, .5] };
+    expect(istarparkLaserSurfaceHitIsCurrent(hit, istarparkLaserObstacles({ geometry: room, props: [cabinet, unrelated] }))).toBe(true);
+  });
+
   it('130mm 높이에서 양쪽 벽의 순수 폭을 mm로 측정한다', () => {
     const result = measureIstarparkLaserGap({ anchorPlanPoint: [2, 1.5], axis: 'x', geometry: room });
     expect(result).toMatchObject({

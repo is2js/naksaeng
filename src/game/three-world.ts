@@ -1087,6 +1087,8 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.inspectionLaserVisible = 'true';
     this.canvas.dataset.inspectionLaserPhase = ghost ? 'pick-start-ghost' : 'await-second';
     delete this.canvas.dataset.inspectionLaserDistanceMm;
+    delete this.canvas.dataset.inspectionLaserRenderedStart;
+    delete this.canvas.dataset.inspectionLaserRenderedEnd;
     return true;
   }
 
@@ -1129,6 +1131,7 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.inspectionLaserVisible = 'true';
     this.canvas.dataset.inspectionLaserDistanceMm = String(Math.round(finite(measurement.distanceMm)));
     this.canvas.dataset.inspectionLaserRenderedStart = JSON.stringify(negativePoint);
+    this.canvas.dataset.inspectionLaserRenderedEnd = JSON.stringify(positivePoint);
     this.canvas.dataset.inspectionLaserAxis = String(measurement.axis || 'free');
     this.canvas.dataset.inspectionLaserPhase = measurement.measurementMode === 'point-ray'
       || measurement.measurementMode === 'point-pair-free'
@@ -1146,6 +1149,7 @@ export class ThreeWorldRenderer {
     delete this.canvas.dataset.inspectionLaserVisible;
     delete this.canvas.dataset.inspectionLaserDistanceMm;
     delete this.canvas.dataset.inspectionLaserRenderedStart;
+    delete this.canvas.dataset.inspectionLaserRenderedEnd;
     delete this.canvas.dataset.inspectionLaserPhase;
   }
 
@@ -1161,7 +1165,10 @@ export class ThreeWorldRenderer {
 
   clearApartmentInspectionLaserFrame(): void {
     const group = this.apartmentInspectionLaserGroup;
-    if (!group) return;
+    if (!group) {
+      this.hideApartmentInspectionLaserFrame();
+      return;
+    }
     const label = group.userData.distanceLabel as THREE.Mesh | null;
     (label?.userData.labelTexture as THREE.Texture | undefined)?.dispose();
     group.removeFromParent();
@@ -1170,6 +1177,7 @@ export class ThreeWorldRenderer {
     delete this.canvas.dataset.inspectionLaserVisible;
     delete this.canvas.dataset.inspectionLaserDistanceMm;
     delete this.canvas.dataset.inspectionLaserRenderedStart;
+    delete this.canvas.dataset.inspectionLaserRenderedEnd;
     delete this.canvas.dataset.inspectionLaserAxis;
     delete this.canvas.dataset.inspectionLaserPhase;
   }
@@ -1316,7 +1324,7 @@ export class ThreeWorldRenderer {
     y: number,
     apartment: WorldObject,
     measurableIds: ReadonlySet<string> | null,
-  ): ProjectedPoint | null {
+  ): (ProjectedPoint & { obstacleId?: string; kind?: string; surfaceNormal?: [number, number] }) | null {
     if (!this.world || !apartment.geometry) return null;
     this.resize();
     this.camera.updateMatrixWorld();
@@ -1324,7 +1332,7 @@ export class ThreeWorldRenderer {
     raycaster.setFromCamera(new THREE.Vector2((x / this.cssWidth) * 2 - 1, 1 - (y / this.cssHeight) * 2), this.camera);
     const cellSize = Math.max(.01, finite(apartment.geometry.cellSizeMeters, .5));
     const elevation = finite(apartment.elevation) + ISTARPARK_LASER_HEIGHT_METERS / cellSize;
-    const hitInfo = { obstacleId: '', kind: '' };
+    const hitInfo: { obstacleId: string; kind: string; surfaceNormal?: [number, number] } = { obstacleId: '', kind: '' };
     const intersection = laserPointerWorldPoint(raycaster, [this.structureRoot, this.propRoot], elevation, measurableIds, hitInfo);
     this.canvas.dataset.inspectionLaserPointerSurface = hitInfo.obstacleId;
     this.canvas.dataset.inspectionLaserPointerKind = hitInfo.kind || 'plane';
@@ -1332,6 +1340,7 @@ export class ThreeWorldRenderer {
     return {
       x: intersection.x + this.world.width / 2 - .5,
       y: intersection.z + this.world.height / 2 - .5,
+      ...(hitInfo.obstacleId ? { obstacleId: hitInfo.obstacleId, kind: hitInfo.kind, surfaceNormal: hitInfo.surfaceNormal } : {}),
     };
   }
 

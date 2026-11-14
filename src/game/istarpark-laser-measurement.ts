@@ -601,7 +601,7 @@ function nearestPointOnSegment(target = [], start = [], end = []) {
   return [a[0] + dx * ratio, a[1] + dy * ratio];
 }
 
-function laserSurfaceCandidates(obstacle = {}, candidate = [], axisLock = null) {
+function laserSurfaceCandidates(obstacle = {}, candidate = [], axisLock = null, preferredNormal = null) {
   const polygon = Array.isArray(obstacle.polygon) ? obstacle.polygon : [];
   if (polygon.length < 3) return [];
   if (axisLock === "x" || axisLock === "y") {
@@ -614,9 +614,41 @@ function laserSurfaceCandidates(obstacle = {}, candidate = [], axisLock = null) 
         contactPoint(axisLock, end, cross),
       ]);
   }
-  return polygon.map((start, index) => (
-    nearestPointOnSegment(candidate, start, polygon[(index + 1) % polygon.length])
+  let edges = polygon.map((start, index) => ({ start, end: polygon[(index + 1) % polygon.length] }));
+  const normalLength = Array.isArray(preferredNormal) ? Math.hypot(...preferredNormal) : 0;
+  if (normalLength > EPSILON) {
+    const area = polygon.reduce((sum, start, index) => {
+      const end = polygon[(index + 1) % polygon.length];
+      return sum + start[0] * end[1] - end[0] * start[1];
+    }, 0);
+    const facing = edges.map(edge => {
+      const dx = edge.end[0] - edge.start[0], dy = edge.end[1] - edge.start[1];
+      const length = Math.hypot(dx, dy) || 1;
+      const sign = area >= 0 ? 1 : -1;
+      return { ...edge, score: sign * (dy * preferredNormal[0] - dx * preferredNormal[1]) / length / normalLength };
+    });
+    const best = Math.max(...facing.map(edge => edge.score));
+    if (best > .1) edges = facing.filter(edge => edge.score >= best - EPSILON);
+  }
+  return edges.map(({ start, end }) => (
+    nearestPointOnSegment(candidate, start, end)
   ));
+}
+
+function obstacleSignature(obstacle = {}) {
+  return JSON.stringify([String(obstacle.id || ''), String(obstacle.kind || ''),
+    (obstacle.polygon || []).map(p => point(p).map(value => Number(value.toFixed(6))))]);
+}
+
+/** Physical owners must still exist at the captured face; never move a saved hit to another owner. */
+export function istarparkLaserSurfaceHitIsCurrent(hit: InspectionLaserSurfaceHit | null, obstacles: any[]): boolean {
+  if (!hit?.valid || !hit.point || !hit.obstacleId) return false;
+  const owner = obstacles.find(obstacle => String(obstacle.id || '') === hit.obstacleId);
+  if (!owner || hit.obstacleSignature && hit.obstacleSignature !== obstacleSignature(owner)) return false;
+  return owner.polygon.some((start, index) => {
+    const nearest = nearestPointOnSegment(hit.point, start, owner.polygon[(index + 1) % owner.polygon.length]);
+    return Math.hypot(nearest[0] - hit.point[0], nearest[1] - hit.point[1]) <= .0001;
+  });
 }
 
 export function snapIstarparkLaserPoint({
@@ -629,6 +661,8 @@ export function snapIstarparkLaserPoint({
   referencePlanPoint = null,
   maxSnapDistanceMeters = 0.15,
   requireSurface = false,
+  preferredObstacleId = '',
+  preferredSurfaceNormal = null,
   laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS,
 }: any = {}): InspectionLaserSurfaceHit {
   const sourcePlanPoint = point(candidatePlanPoint);
@@ -647,13 +681,13 @@ export function snapIstarparkLaserPoint({
     : Math.max(0, finite(maxSnapDistanceMeters, 0.15));
   const surfaceCandidates = [];
   for (const obstacle of obstacles) {
-    const insideObstacle = istarparkLaserPointInPolygon(candidate, obstacle.polygon);
-    for (const surfacePoint of laserSurfaceCandidates(obstacle, candidate, normalizedAxisLock)) {
+    if (preferredObstacleId && String(obstacle.id || '') !== preferredObstacleId) continue;
+    for (const surfacePoint of laserSurfaceCandidates(obstacle, candidate, normalizedAxisLock, preferredSurfaceNormal)) {
       const distanceMeters = Math.hypot(
         surfacePoint[0] - candidate[0],
         surfacePoint[1] - candidate[1],
       );
-      if (!insideObstacle && distanceMeters > maximumSnapDistance + EPSILON) continue;
+      if (distanceMeters > maximumSnapDistance + EPSILON) continue;
       surfaceCandidates.push({
         point: surfacePoint,
         distanceMeters,
@@ -682,6 +716,7 @@ export function snapIstarparkLaserPoint({
       snapped: true,
       snapDistanceMeters: Number(surface.distanceMeters.toFixed(6)),
       obstacleId: String(surface.obstacle.id || ""),
+      obstacleSignature: obstacleSignature(surface.obstacle),
       kind: String(surface.obstacle.kind || "structure"),
       label: String(surface.obstacle.label || obstacleLabel(surface.obstacle.kind)),
     };
@@ -819,6 +854,9 @@ export function measureIstarparkLaserDirectionalGap({
   const startObstacle = obstacles.find((obstacle) => (
     String(obstacle.id || "") === String(resolvedStartHit.obstacleId || "")
   ));
+  if (resolvedStartHit.obstacleId && !istarparkLaserSurfaceHitIsCurrent(resolvedStartHit, obstacles)) {
+    return { valid: false, reason: 'start-surface-changed', measurementMode: 'point-ray', startHit: resolvedStartHit };
+  }
   // Once the user clicks a face, it is a fixed measurement point. Do not
   // silently move it to the opposite face when the pointer changes direction.
   const directionalStartHit = resolvedStartHit;
@@ -903,6 +941,7 @@ export function measureIstarparkLaserDirectionalGap({
     snapped: true,
     snapDistanceMeters: 0,
     obstacleId: String(contact.obstacle.id || ""),
+    obstacleSignature: obstacleSignature(contact.obstacle),
     kind: String(contact.obstacle.kind || "structure"),
     label: String(contact.obstacle.label || obstacleLabel(contact.obstacle.kind)),
   };
@@ -938,6 +977,7 @@ export function measureIstarparkLaserDirectionalGap({
 
 export function measureIstarparkLaserFreePointPair({
   startHit = null,
+  endSurfaceHit = null,
   startPlanPoint = [],
   endPlanPoint = [],
   geometry = {},
@@ -969,7 +1009,17 @@ export function measureIstarparkLaserFreePointPair({
     };
   }
   const normalizedAxisLock = axisLock === "x" || axisLock === "y" ? axisLock : null;
-  const rawEndPoint = point(endPlanPoint);
+  if (resolvedStartHit.obstacleId || endSurfaceHit?.obstacleId) {
+    const obstacles = istarparkLaserObstacles({ geometry, apartment, props, assets, laserHeightMeters: measurementHeight });
+    if (resolvedStartHit.obstacleId && !istarparkLaserSurfaceHitIsCurrent(resolvedStartHit, obstacles)) {
+      return { valid: false, reason: 'start-surface-changed', measurementMode: 'point-pair-free', startHit: resolvedStartHit };
+    }
+    if (endSurfaceHit?.obstacleId && !istarparkLaserSurfaceHitIsCurrent(endSurfaceHit, obstacles)) {
+      return { valid: false, reason: 'end-surface-changed', measurementMode: 'point-pair-free', startHit: resolvedStartHit };
+    }
+  }
+  const sourceEndPoint = point(endPlanPoint);
+  const rawEndPoint = endSurfaceHit?.valid && endSurfaceHit.point ? point(endSurfaceHit.point) : sourceEndPoint;
   const directionalStartHit = resolvedStartHit;
   const freeEndPoint = normalizedAxisLock === "x"
     ? [rawEndPoint[0], directionalStartHit.point[1]]
@@ -988,10 +1038,16 @@ export function measureIstarparkLaserFreePointPair({
       startHit: directionalStartHit,
     };
   }
-  const endHit = {
+  const remainsOnSelectedSurface = endSurfaceHit?.valid && endSurfaceHit.point
+    && Math.hypot(freeEndPoint[0] - endSurfaceHit.point[0], freeEndPoint[1] - endSurfaceHit.point[1]) <= EPSILON;
+  const endHit = remainsOnSelectedSurface ? {
+    ...endSurfaceHit,
+    sourcePlanPoint: sourceEndPoint,
+    constrainedPlanPoint: freeEndPoint,
+  } : {
     valid: true,
     point: freeEndPoint.map((value) => Number(value.toFixed(6))),
-    sourcePlanPoint: rawEndPoint,
+    sourcePlanPoint: sourceEndPoint,
     constrainedPlanPoint: freeEndPoint,
     snapped: false,
     snapDistanceMeters: 0,

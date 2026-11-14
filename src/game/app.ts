@@ -31,6 +31,8 @@ import { optionPropsForSelection, optionSourceIdForProp } from './option-prop-se
 import { systemAcModelConfigurations } from './system-ac-models';
 import { centeredScrollTop } from './palette-scroll';
 import { isMapPanDrag } from './pointer-gesture';
+import { laserPointerIsTap } from './laser-pointer-gesture';
+import { LaserReferenceNotice } from './laser-reference-notice';
 import { BUNDANG_MINUS_OPTION_ID, isBundangMinusOption } from './minus-option';
 import { COOKTOP_OPTION_IDS } from './bundang-option-layout';
 import { snapFurnitureToNearestWall } from './interior-wall-snap';
@@ -53,6 +55,7 @@ import {
 import {
   istarparkLaserAxisTowardPointer,
   istarparkLaserObstacles,
+  istarparkLaserSurfaceHitIsCurrent,
   measureIstarparkLaserDirectionalGap,
   measureIstarparkLaserFreePointPair,
   measureIstarparkLaserGap,
@@ -165,6 +168,14 @@ interface PendingSceneSelection {
   message: string;
 }
 
+interface InspectionLaserPlanContext {
+  apartment: WorldObject;
+  screenPoint: { x: number; y: number };
+  planPoint: NumericPoint;
+  obstacleId?: string;
+  surfaceNormal?: [number, number];
+}
+
 const BASIC_ATTACK: DemoSkill = {
   id: 'basic-attack',
   label: '기본 공격',
@@ -185,6 +196,8 @@ const SKILL_GLYPHS: Record<string, string> = {
 function isFormTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('input, textarea, select, button, a[href], summary, [role="button"], [contenteditable]:not([contenteditable="false"])'));
 }
+
+const LASER_UI_SELECTOR = '.touch-controls,.touch-ghost-actions,.stage-tip,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.laser-reference-notice,.hotbar-tooltip,[role="tooltip"],.plan-experience-notice';
 
 function mapLabelShort(map: StaticMapEntry): string {
   return map.unitType || map.label.match(/\d+[A-Z]?/i)?.[0] || map.label;
@@ -290,6 +303,11 @@ export class ShowcaseApp {
   private shareToken = '';
   private sharedState: BundangReadOnlyShareV1 | null = null;
   private authenticatedNickname = '';
+  private readonly laserReferenceNotice = new LaserReferenceNotice(
+    () => this.mount.querySelector<HTMLElement>('#game-stage'), () => this.mobileLayout,
+  );
+  private readonly laserTouchPointers = new Set<number>();
+  private laserTap: { pointerId: number; pointerType: string; x: number; y: number; cancelled: boolean } | null = null;
   private readonly inspectionLaser = {
     active: false,
     axis: 'x' as InspectionLaserAxis,
@@ -299,10 +317,12 @@ export class ShowcaseApp {
     pointPairShiftAxisHeld: false,
     secondPointAxisLock: null as InspectionLaserAxis | null,
     lastScreenPoint: null as { x: number; y: number } | null,
+    lastClientPoint: null as { x: number; y: number } | null,
     measurement: null as InspectionLaserMeasurement | null,
     firstPlanPoint: null as NumericPoint | null,
     secondPlanPoint: null as NumericPoint | null,
     firstHit: null as InspectionLaserSurfaceHit | null,
+    secondSurfaceHit: null as InspectionLaserSurfaceHit | null,
     startGhostHit: null as InspectionLaserSurfaceHit | null,
     frameRequest: 0,
     wheelDelta: 0,
@@ -454,6 +474,7 @@ export class ShowcaseApp {
     if (this.destroyed) return;
     this.destroyed = true;
     this.stopInspectionLaser('destroy');
+    this.laserReferenceNotice.destroy();
     this.cancelInteriorGhost('', false);
     this.abortController.abort();
     cancelAnimationFrame(this.animationFrame);
@@ -468,6 +489,9 @@ export class ShowcaseApp {
   suspend(): void {
     if (this.destroyed || this.suspended) return;
     this.suspended = true;
+    this.laserReferenceNotice.pause();
+    this.cancelInspectionLaserGesture();
+    this.clearInspectionLaserPointer();
     this.touchPad?.reset();
     this.touchMapPan?.reset();
     this.pressedKeys.clear();
@@ -478,6 +502,7 @@ export class ShowcaseApp {
   resume(): void {
     if (this.destroyed || !this.suspended) return;
     this.suspended = false;
+    this.laserReferenceNotice.resume();
     this.pressedKeys.clear();
     if (!this.animationFrame && this.world) this.animationFrame = requestAnimationFrame(this.tick);
   }
@@ -986,6 +1011,7 @@ export class ShowcaseApp {
     const resetActorPosition = (): void => {
       this.resumeCameraTracking();
       this.resetActors();
+      this.refreshInspectionLaserDraftAfterCameraChange();
       this.toast('두 캐릭터를 스폰 위치로 이동했습니다.', 'notice');
     };
     this.mount.querySelectorAll<HTMLButtonElement>('#reset-position, #viewer-reset-position')
@@ -1165,9 +1191,29 @@ export class ShowcaseApp {
     }, { signal });
     window.addEventListener('blur', () => {
       this.pressedKeys.clear();
+      this.cancelInspectionLaserGesture();
+      this.clearInspectionLaserPointer();
       this.setInspectionLaserPointPairShiftAxisHeld(false);
     }, { signal });
     const stage = this.get<HTMLElement>('#game-stage');
+    // Capture even touches on HUD/notice links, whose own handlers may stop
+    // bubbling. A second finger must never complete the first measurement tap.
+    window.addEventListener('pointerdown', event => {
+      if (!this.inspectionLaser.active || event.pointerType !== 'touch') return;
+      this.laserTouchPointers.add(event.pointerId);
+      if (this.laserTouchPointers.size > 1) {
+        this.cancelInspectionLaserGesture(false);
+        this.clearInspectionLaserPointer();
+      }
+    }, { signal, capture: true });
+    for (const name of ['pointerup', 'pointercancel'] as const) window.addEventListener(name, event => {
+      this.laserTouchPointers.delete(event.pointerId);
+    }, { signal, capture: true });
+    stage.addEventListener('lostpointercapture', event => {
+      if (this.laserTap?.pointerId !== event.pointerId) return;
+      this.cancelInspectionLaserGesture(false);
+      this.clearInspectionLaserPointer();
+    }, { signal });
     this.touchMapPan = new TouchMapPan(stage,
       () => this.mobileLayout && !this.inspectionLaser.active && !this.interiorGhostProp,
       () => { this.pendingSceneSelection = null; stage.classList.add('is-panning'); },
@@ -1201,19 +1247,23 @@ export class ShowcaseApp {
       }, { signal });
     });
     stage.addEventListener('pointermove', (event) => {
+      if (this.inspectionLaser.active) {
+        this.moveInspectionLaserGesture(event);
+        return;
+      }
       if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       this.cursorScreenPoint = this.screenPoint(event.clientX, event.clientY);
-      if (this.inspectionLaser.active) {
-        this.scheduleInspectionLaserMeasurement(event);
-        return;
-      }
       if (event.pointerType === 'touch') {
         if (this.pendingSceneSelection?.pointerId === event.pointerId
           && isMapPanDrag(this.mapPanStartX, this.mapPanStartY, event.clientX, event.clientY)) this.pendingSceneSelection = null;
       } else this.handleMapPanMove(event);
     }, { signal });
     stage.addEventListener('pointerdown', (event) => {
+      if (this.inspectionLaser.active) {
+        this.beginInspectionLaserGesture(event);
+        return;
+      }
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('.touch-controls,.touch-ghost-actions,.stage-tip')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
@@ -1233,13 +1283,6 @@ export class ShowcaseApp {
       // Actors are buttons too: their native pointer focus otherwise steals
       // keyboard control again after the scene focus above.
       if (target?.closest('.rpg-actor')) event.preventDefault();
-      if (this.inspectionLaser.active) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.handleInspectionLaserPointerDown(event);
-        if (event.pointerType === 'touch' && this.inspectionLaser.phase === 'hover') this.refreshInspectionLaserMeasurement();
-        return;
-      }
       if (event.button === 0) {
         if (this.interiorGhostProp && this.handleInteriorPointerDown(event)) return;
         this.prepareSceneSelection(event);
@@ -1257,6 +1300,10 @@ export class ShowcaseApp {
       if (!this.inspectionLaser.active) this.handleInteriorPointerMove(event);
     }, { signal });
     stage.addEventListener('pointerup', (event) => {
+      if (this.inspectionLaser.active) {
+        this.finishInspectionLaserGesture(event);
+        return;
+      }
       if (event.pointerType === 'touch' && !this.inspectionLaser.active && !this.interiorGhostProp) {
         const pending = this.pendingSceneSelection;
         this.pendingSceneSelection = null;
@@ -1268,6 +1315,12 @@ export class ShowcaseApp {
       this.finishMapPan(event);
     }, { signal });
     stage.addEventListener('pointercancel', (event) => {
+      if (this.inspectionLaser.active) {
+        this.laserTouchPointers.delete(event.pointerId);
+        this.cancelInspectionLaserGesture(false);
+        this.clearInspectionLaserPointer();
+        return;
+      }
       if (event.pointerType === 'touch') {
         this.pendingSceneSelection = null;
         stage.classList.remove('is-panning');
@@ -1297,12 +1350,15 @@ export class ShowcaseApp {
       if (point) this.applyCameraZoom(event.deltaY, point.x, point.y);
     }, { signal, passive: false });
     stage.addEventListener('pointerleave', () => this.clearInspectionLaserPointer(), { signal });
+    window.addEventListener('resize', () => this.refreshInspectionLaserDraftAfterCameraChange(), { signal });
+    window.visualViewport?.addEventListener('resize', () => this.refreshInspectionLaserDraftAfterCameraChange(), { signal });
     stage.addEventListener('auxclick', (event) => {
       if (event.button === 1) event.preventDefault();
     }, { signal });
     window.addEventListener('contextmenu', (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.closest('#game-stage')) return;
+      if (target.closest('.laser-reference-notice')) return;
       // 캡처 단계에서 차단해 자식 UI가 이벤트를 가로채도 Chrome 기본 메뉴가 열리지 않는다.
       event.preventDefault();
       if (this.inspectionLaser.active) return;
@@ -1323,6 +1379,96 @@ export class ShowcaseApp {
     const value = this.mount.querySelector<HTMLElement>('#zoom-value');
     if (value) value.textContent = `${cameraZoomPercent(zoom)}%`;
     this.updateFurnitureToolbar();
+    this.refreshInspectionLaserDraftAfterCameraChange();
+  }
+
+  private inspectionLaserEventIsUi(event: PointerEvent): boolean {
+    const target = event.target instanceof Element ? event.target : null;
+    // Pointer capture retargets pointerup to the stage; still reject release on HUD.
+    const physicalTarget = document.elementFromPoint(event.clientX, event.clientY);
+    return Boolean(target?.closest(LASER_UI_SELECTOR) || physicalTarget?.closest(LASER_UI_SELECTOR));
+  }
+
+  private beginInspectionLaserGesture(event: PointerEvent): void {
+    if (event.pointerType === 'touch') {
+      this.laserTouchPointers.add(event.pointerId);
+      if (this.laserTouchPointers.size > 1 || !event.isPrimary) {
+        this.cancelInspectionLaserGesture(false);
+        this.clearInspectionLaserPointer();
+        return;
+      }
+    }
+    if (this.inspectionLaserEventIsUi(event)) {
+      this.cancelInspectionLaserGesture(false);
+      this.clearInspectionLaserPointer();
+      return;
+    }
+    if (event.button !== 0) return;
+    this.cancelInspectionLaserGesture(false);
+    this.laserTap = { pointerId: event.pointerId, pointerType: event.pointerType, x: event.clientX, y: event.clientY, cancelled: false };
+    const stage = this.get<HTMLElement>('#game-stage');
+    stage.focus({ preventScroll: true });
+    stage.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    this.scheduleInspectionLaserMeasurement(event);
+  }
+
+  private moveInspectionLaserGesture(event: PointerEvent): void {
+    if (this.laserTouchPointers.size > 1 || event.pointerType === 'touch' && !event.isPrimary) return;
+    const tap = this.laserTap;
+    if (tap && event.pointerId !== tap.pointerId) return;
+    if (tap && !laserPointerIsTap(tap, { x: event.clientX, y: event.clientY }, tap.pointerType)) tap.cancelled = true;
+    if (tap?.cancelled || this.inspectionLaserEventIsUi(event)) {
+      this.clearInspectionLaserPointer();
+      return;
+    }
+    this.scheduleInspectionLaserMeasurement(event);
+  }
+
+  private finishInspectionLaserGesture(event: PointerEvent): void {
+    const tap = this.laserTap;
+    const canCommit = tap?.pointerId === event.pointerId && !tap.cancelled
+      && this.laserTouchPointers.size <= 1
+      && laserPointerIsTap(tap, { x: event.clientX, y: event.clientY }, tap.pointerType)
+      && !this.inspectionLaserEventIsUi(event);
+    this.laserTouchPointers.delete(event.pointerId);
+    if (tap?.pointerId !== event.pointerId) return;
+    this.cancelInspectionLaserGesture(false);
+    if (!canCommit) {
+      this.clearInspectionLaserPointer();
+      return;
+    }
+    event.preventDefault();
+    this.commitInspectionLaserPoint(event);
+    if (this.inspectionLaser.phase === 'hover') this.refreshInspectionLaserMeasurement();
+  }
+
+  private cancelInspectionLaserGesture(clearTouches = true): void {
+    const pointerId = this.laserTap?.pointerId;
+    this.laserTap = null;
+    if (clearTouches) this.laserTouchPointers.clear();
+    const stage = this.mount.querySelector<HTMLElement>('#game-stage');
+    if (pointerId != null && stage?.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId);
+  }
+
+  private refreshInspectionLaserDraftAfterCameraChange(): void {
+    if (!this.inspectionLaser.active) return;
+    this.cancelInspectionLaserGesture();
+    if (this.inspectionLaser.phase === 'complete') return;
+    if (!this.inspectionLaser.lastClientPoint) {
+      this.clearInspectionLaserPointer();
+      return;
+    }
+    if (this.inspectionLaser.frameRequest) cancelAnimationFrame(this.inspectionLaser.frameRequest);
+    this.inspectionLaser.frameRequest = requestAnimationFrame(() => {
+      this.inspectionLaser.frameRequest = 0;
+      const pointer = this.inspectionLaser.lastClientPoint;
+      const target = pointer ? document.elementFromPoint(pointer.x, pointer.y) : null;
+      const validPointer = Boolean(target?.closest('#game-stage') && !target.closest(LASER_UI_SELECTOR));
+      this.inspectionLaser.lastScreenPoint = pointer && validPointer ? this.screenPoint(pointer.x, pointer.y) : null;
+      if (this.inspectionLaser.lastScreenPoint) this.refreshInspectionLaserMeasurement();
+      else this.clearInspectionLaserPointer();
+    });
   }
 
   private startMapPan(event: PointerEvent): void {
@@ -1454,17 +1600,21 @@ export class ShowcaseApp {
     this.inspectionLaser.pointPairShiftAxisHeld = false;
     this.inspectionLaser.secondPointAxisLock = null;
     this.inspectionLaser.lastScreenPoint = null;
+    this.inspectionLaser.lastClientPoint = null;
     this.inspectionLaser.measurement = null;
     this.inspectionLaser.firstPlanPoint = null;
     this.inspectionLaser.secondPlanPoint = null;
     this.inspectionLaser.firstHit = null;
+    this.inspectionLaser.secondSurfaceHit = null;
     this.inspectionLaser.startGhostHit = null;
-    delete this.get<HTMLCanvasElement>('#three-world-canvas').dataset.inspectionLaserStartPoint;
+    this.clearInspectionLaserStartDiagnostic();
     this.get<HTMLElement>('#game-stage').dataset.istarparkLaserActive = 'true';
     this.renderInspectionLaserHud();
+    this.laserReferenceNotice.showOnce();
   }
 
   private stopInspectionLaser(_reason: string): void {
+    this.cancelInspectionLaserGesture();
     if (this.inspectionLaser.frameRequest) cancelAnimationFrame(this.inspectionLaser.frameRequest);
     if (this.inspectionLaser.wheelResetTimer) window.clearTimeout(this.inspectionLaser.wheelResetTimer);
     this.inspectionLaser.active = false;
@@ -1474,10 +1624,12 @@ export class ShowcaseApp {
     this.inspectionLaser.pointPairShiftAxisHeld = false;
     this.inspectionLaser.secondPointAxisLock = null;
     this.inspectionLaser.lastScreenPoint = null;
+    this.inspectionLaser.lastClientPoint = null;
     this.inspectionLaser.measurement = null;
     this.inspectionLaser.firstPlanPoint = null;
     this.inspectionLaser.secondPlanPoint = null;
     this.inspectionLaser.firstHit = null;
+    this.inspectionLaser.secondSurfaceHit = null;
     this.inspectionLaser.startGhostHit = null;
     this.inspectionLaser.frameRequest = 0;
     this.inspectionLaser.wheelDelta = 0;
@@ -1486,12 +1638,16 @@ export class ShowcaseApp {
     const stage = this.mount.querySelector<HTMLElement>('#game-stage');
     if (stage) delete stage.dataset.istarparkLaserActive;
     this.threeRenderer?.clearApartmentInspectionLaserFrame();
+    this.clearInspectionLaserStartDiagnostic();
     this.renderInspectionLaserHud();
   }
 
   private clearInspectionLaserPointer(): void {
     if (!this.inspectionLaser.active) return;
+    if (this.inspectionLaser.frameRequest) cancelAnimationFrame(this.inspectionLaser.frameRequest);
+    this.inspectionLaser.frameRequest = 0;
     this.inspectionLaser.lastScreenPoint = null;
+    this.inspectionLaser.lastClientPoint = null;
     if (this.inspectionLaser.phase === 'hover') {
       this.inspectionLaser.measurement = null;
       this.threeRenderer?.hideApartmentInspectionLaserFrame();
@@ -1508,16 +1664,26 @@ export class ShowcaseApp {
 
   private clearInspectionLaserPointPair(keepPointMode = false): void {
     if (!this.inspectionLaser.active) return;
+    this.cancelInspectionLaserGesture();
     this.inspectionLaser.phase = keepPointMode ? 'pick-start' : 'hover';
     this.inspectionLaser.measurement = null;
     this.inspectionLaser.firstPlanPoint = null;
     this.inspectionLaser.secondPlanPoint = null;
     this.inspectionLaser.secondPointAxisLock = null;
     this.inspectionLaser.firstHit = null;
+    this.inspectionLaser.secondSurfaceHit = null;
     this.inspectionLaser.startGhostHit = null;
+    this.clearInspectionLaserStartDiagnostic();
     this.threeRenderer?.hideApartmentInspectionLaserFrame();
     if (this.inspectionLaser.lastScreenPoint) this.refreshInspectionLaserMeasurement();
     else this.renderInspectionLaserHud();
+  }
+
+  private clearInspectionLaserStartDiagnostic(): void {
+    const canvas = this.mount.querySelector<HTMLCanvasElement>('#three-world-canvas');
+    if (!canvas) return;
+    delete canvas.dataset.inspectionLaserStartPoint;
+    delete canvas.dataset.inspectionLaserStartOwner;
   }
 
   private toggleInspectionLaserPointMode(force?: boolean): void {
@@ -1586,24 +1752,36 @@ export class ShowcaseApp {
     });
   }
 
-  private inspectionLaserPlanContext(event: PointerEvent): {
-    apartment: WorldObject;
-    screenPoint: { x: number; y: number };
-    planPoint: NumericPoint;
-  } | null {
-    const apartment = this.activeApartment();
+  private inspectionLaserPlanContext(event: PointerEvent): InspectionLaserPlanContext | null {
     const screenPoint = this.screenPoint(event.clientX, event.clientY);
+    return screenPoint ? this.inspectionLaserContextAtScreenPoint(screenPoint) : null;
+  }
+
+  private inspectionLaserContextAtScreenPoint(screenPoint: { x: number; y: number }): InspectionLaserPlanContext | null {
+    const apartment = this.activeApartment();
     if (!apartment?.geometry || !screenPoint || !this.threeRenderer) return null;
     const worldPoint = this.inspectionLaserPointerWorldPoint(apartment, screenPoint);
     if (!worldPoint) return null;
+    const planPoint = apartmentWorldPointToLocalMeters(apartment, worldPoint);
+    let surfaceNormal: [number, number] | undefined;
+    if (worldPoint.surfaceNormal) {
+      const next = apartmentWorldPointToLocalMeters(apartment, {
+        x: worldPoint.x + worldPoint.surfaceNormal[0], y: worldPoint.y + worldPoint.surfaceNormal[1],
+      });
+      const dx = next[0] - planPoint[0], dy = next[1] - planPoint[1];
+      const length = Math.hypot(dx, dy);
+      if (length > .00001) surfaceNormal = [dx / length, dy / length];
+    }
     return {
       apartment,
       screenPoint,
-      planPoint: apartmentWorldPointToLocalMeters(apartment, worldPoint),
+      planPoint,
+      obstacleId: worldPoint.obstacleId,
+      surfaceNormal,
     };
   }
 
-  private inspectionLaserPointerWorldPoint(apartment: WorldObject, screenPoint: { x: number; y: number }): { x: number; y: number } | null {
+  private inspectionLaserPointerWorldPoint(apartment: WorldObject, screenPoint: { x: number; y: number }) {
     if (!apartment.geometry || !this.threeRenderer) return null;
     const surfaceIds = this.inspectionLaser.phase === 'hover' ? null : new Set<string>(
       istarparkLaserObstacles({
@@ -1615,6 +1793,20 @@ export class ShowcaseApp {
     );
     const world = this.threeRenderer.unprojectApartmentInspectionLaser(screenPoint.x, screenPoint.y, apartment, surfaceIds);
     return world;
+  }
+
+  private snapInspectionLaserContext(context: InspectionLaserPlanContext): InspectionLaserSurfaceHit {
+    return snapIstarparkLaserPoint({
+      apartment: context.apartment,
+      candidatePlanPoint: context.planPoint,
+      geometry: context.apartment.geometry,
+      props: this.threeRenderer?.getRenderedProps() || [],
+      assets: this.interiorAssets,
+      preferredObstacleId: context.obstacleId || '',
+      preferredSurfaceNormal: context.surfaceNormal,
+      maxSnapDistanceMeters: context.obstacleId ? null : .15,
+      requireSurface: true,
+    });
   }
 
   private renderInspectionLaserFirstPoint(ghost = false): boolean {
@@ -1653,6 +1845,7 @@ export class ShowcaseApp {
           }
         : {
             endPlanPoint: secondPlanPoint,
+            endSurfaceHit: this.inspectionLaser.secondSurfaceHit,
             axisLock: freeAxisLock,
           }),
       geometry: apartment.geometry,
@@ -1666,15 +1859,46 @@ export class ShowcaseApp {
     return measurement.valid;
   }
 
-  private handleInspectionLaserPointerDown(event: PointerEvent): boolean {
+  private refreshInspectionLaserGeometryState(): boolean {
+    const state = this.inspectionLaser;
+    const apartment = this.activeApartment();
+    if (!state.active || !apartment?.geometry || !this.threeRenderer) return false;
+    this.cancelInspectionLaserGesture();
+    const input = { apartment, geometry: apartment.geometry, props: this.threeRenderer.getRenderedProps(), assets: this.interiorAssets };
+    const obstacles = istarparkLaserObstacles(input);
+    const owners = [state.firstHit, state.phase === 'complete' ? state.secondSurfaceHit : null,
+      state.phase === 'complete' ? state.measurement?.endHit : null];
+    let changed = owners.some(hit => hit?.obstacleId && !istarparkLaserSurfaceHitIsCurrent(hit, obstacles));
+    // In L ON a new intermediate obstacle also invalidates the completed ray;
+    // it must not silently shorten a measurement the user already confirmed.
+    if (!changed && state.phase === 'complete' && state.lineSnap && state.firstHit && state.secondPlanPoint) {
+      const next = measureIstarparkLaserDirectionalGap({ ...input, startHit: state.firstHit,
+        pointerPlanPoint: state.secondPlanPoint, axisLock: this.resolveInspectionLaserLineSnapAxis(state.secondPlanPoint) });
+      const previousEnd = state.measurement?.endHit?.point;
+      changed = !next.valid || !next.endHit?.point || !previousEnd
+        || Math.hypot(next.endHit.point[0] - previousEnd[0], next.endHit.point[1] - previousEnd[1]) > .0001;
+    }
+    if (changed) {
+      this.inspectionLaser.lastScreenPoint = null;
+      this.inspectionLaser.lastClientPoint = null;
+      this.clearInspectionLaserPointPair(true);
+      this.toast('측정한 면의 배치가 변경되어 실측점을 초기화했습니다. 다시 선택해 주세요.', 'notice');
+      return true;
+    } else if (state.phase !== 'complete') this.refreshInspectionLaserDraftAfterCameraChange();
+    return false;
+  }
+
+  private commitInspectionLaserPoint(event: PointerEvent): boolean {
     if (!this.inspectionLaser.active || event.button !== 0) return false;
     this.setInspectionLaserPointPairShiftAxisHeld(event.shiftKey === true, false);
     const context = this.inspectionLaserPlanContext(event);
     if (!context) return false;
     this.inspectionLaser.lastScreenPoint = context.screenPoint;
+    this.inspectionLaser.lastClientPoint = { x: event.clientX, y: event.clientY };
     if (this.inspectionLaser.phase === 'hover') return true;
     if (this.inspectionLaser.phase === 'await-second' && this.inspectionLaser.firstPlanPoint) {
       this.inspectionLaser.secondPlanPoint = context.planPoint;
+      this.inspectionLaser.secondSurfaceHit = context.obstacleId ? this.snapInspectionLaserContext(context) : null;
       this.inspectionLaser.secondPointAxisLock = this.resolveInspectionLaserFreePointAxis(context.planPoint);
       if (this.recalculateInspectionLaserPointPair(this.inspectionLaser.secondPointAxisLock)) {
         this.inspectionLaser.phase = 'complete';
@@ -1684,15 +1908,7 @@ export class ShowcaseApp {
       this.renderInspectionLaserHud();
       return true;
     }
-    const firstHit = snapIstarparkLaserPoint({
-      apartment: context.apartment,
-      candidatePlanPoint: context.planPoint,
-      geometry: context.apartment.geometry,
-      props: this.threeRenderer?.getRenderedProps() || [],
-      assets: this.interiorAssets,
-      maxSnapDistanceMeters: null,
-      requireSurface: true,
-    }) as InspectionLaserSurfaceHit;
+    const firstHit = this.snapInspectionLaserContext(context);
     if (!firstHit.valid || !firstHit.point) {
       this.inspectionLaser.measurement = {
         valid: false,
@@ -1705,9 +1921,11 @@ export class ShowcaseApp {
     this.inspectionLaser.phase = 'await-second';
     this.inspectionLaser.firstPlanPoint = [...firstHit.point] as NumericPoint;
     this.inspectionLaser.secondPlanPoint = null;
+    this.inspectionLaser.secondSurfaceHit = null;
     this.inspectionLaser.secondPointAxisLock = null;
     this.inspectionLaser.firstHit = firstHit;
     this.get<HTMLCanvasElement>('#three-world-canvas').dataset.inspectionLaserStartPoint = JSON.stringify(firstHit.point);
+    this.get<HTMLCanvasElement>('#three-world-canvas').dataset.inspectionLaserStartOwner = firstHit.obstacleId || '';
     this.inspectionLaser.startGhostHit = null;
     this.inspectionLaser.measurement = null;
     this.renderInspectionLaserFirstPoint();
@@ -1819,12 +2037,12 @@ export class ShowcaseApp {
     // Persist the modifier before the RAF coalescing guard so a stationary
     // pointer still switches between free and four-direction projection.
     this.setInspectionLaserPointPairShiftAxisHeld(event.shiftKey === true, false);
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('.istarpark-laser-toggle,.istarpark-laser-hud')) return;
+    if (this.inspectionLaserEventIsUi(event)) return;
     if (this.inspectionLaser.phase === 'complete') return;
     const point = this.screenPoint(event.clientX, event.clientY);
     if (!point) return;
     this.inspectionLaser.lastScreenPoint = point;
+    this.inspectionLaser.lastClientPoint = { x: event.clientX, y: event.clientY };
     if (this.inspectionLaser.frameRequest) return;
     this.inspectionLaser.frameRequest = requestAnimationFrame(() => {
       this.inspectionLaser.frameRequest = 0;
@@ -1847,8 +2065,8 @@ export class ShowcaseApp {
       this.renderInspectionLaserHud();
       return;
     }
-    const worldPoint = this.inspectionLaserPointerWorldPoint(apartment, screenPoint);
-    const anchorPlanPoint = worldPoint ? apartmentWorldPointToLocalMeters(apartment, worldPoint) : null;
+    const context = this.inspectionLaserContextAtScreenPoint(screenPoint);
+    const anchorPlanPoint = context?.planPoint;
     const props = this.threeRenderer.getRenderedProps();
     let measurement: InspectionLaserMeasurement = {
       valid: false,
@@ -1856,15 +2074,7 @@ export class ShowcaseApp {
       axis: this.inspectionLaser.axis,
     };
     if (anchorPlanPoint && this.inspectionLaser.phase === 'pick-start') {
-      const startGhostHit = snapIstarparkLaserPoint({
-        apartment,
-        candidatePlanPoint: anchorPlanPoint,
-        geometry: apartment.geometry,
-        props,
-        assets: this.interiorAssets,
-        maxSnapDistanceMeters: null,
-        requireSurface: true,
-      }) as InspectionLaserSurfaceHit;
+      const startGhostHit = this.snapInspectionLaserContext(context!);
       this.inspectionLaser.startGhostHit = startGhostHit.valid ? startGhostHit : null;
       measurement = {
         valid: false,
@@ -1873,6 +2083,7 @@ export class ShowcaseApp {
       };
     } else if (anchorPlanPoint && this.inspectionLaser.phase === 'await-second' && this.inspectionLaser.firstHit) {
       this.inspectionLaser.secondPlanPoint = anchorPlanPoint;
+      this.inspectionLaser.secondSurfaceHit = context?.obstacleId ? this.snapInspectionLaserContext(context) : null;
       const freeAxisLock = this.resolveInspectionLaserFreePointAxis(anchorPlanPoint);
       measurement = (this.inspectionLaser.lineSnap
         ? measureIstarparkLaserDirectionalGap
@@ -1887,6 +2098,7 @@ export class ShowcaseApp {
             }
           : {
               endPlanPoint: anchorPlanPoint,
+              endSurfaceHit: this.inspectionLaser.secondSurfaceHit,
               axisLock: freeAxisLock,
             }),
         geometry: apartment.geometry,
@@ -2558,6 +2770,7 @@ export class ShowcaseApp {
     };
     writeLayout(layout);
     this.threeRenderer?.setEditorProps(this.localInteriorProps);
+    this.refreshInspectionLaserGeometryState();
     this.threeRenderer?.setEditorSelection(this.selectedLocalPropId);
     this.renderFurniturePalette();
     this.updateFurnitureToolbar();
@@ -2696,6 +2909,21 @@ export class ShowcaseApp {
       ? `${map.unitType} ${planDefinition.label} 정적 월드 · ${world.loadedChunkCount}개 chunk 준비 완료`
       : `${map.unitType} ${world.sourceMode === 'minimap' ? '미니맵' : '절차형'} fallback으로 렌더링합니다.`;
     this.toast(sourceMessage, world.sourceMode === 'chunks' ? 'success' : 'notice');
+    this.warnRestoredFurnitureGeometryOverlap();
+  }
+
+  private warnRestoredFurnitureGeometryOverlap(): void {
+    const apartment = this.activeApartment();
+    if (!apartment?.geometry || !('bundangMeasuredGeometryRevision' in apartment.geometry)) return;
+    const geometry = apartment.geometry;
+    const props = this.threeRenderer?.getRenderedProps() || this.localInteriorProps;
+    const overlapCount = this.localInteriorProps.filter(prop => isUserPlacedFurnitureProp(prop)
+      && validateInteriorPlacement({ prop, geometry, props, assets: this.interiorAssets, ignorePropId: String(prop.id || '') })
+        .errors.some(issue => ['structural-wall-overlap', 'structural-fixture-overlap', 'outside-floor'].includes(issue.code))).length;
+    if (!overlapCount) return;
+    const message = `실측 구조 보정으로 저장 가구 ${overlapCount}개가 벽·구조물과 겹칠 수 있습니다. 저장한 위치는 유지했으니 배치를 확인해 주세요.`;
+    this.get<HTMLElement>('#furniture-status').textContent = message;
+    this.toast(message, 'notice');
   }
 
   private async selectPlanVariant(variant: ApartmentPlanVariant): Promise<void> {
@@ -3389,8 +3617,9 @@ export class ShowcaseApp {
     writeSelectedOptions(this.currentMap.id, this.selectedOptionIds);
     this.canvasRenderer.setSelectedOptions(this.selectedOptionIds);
     this.threeRenderer?.setSelectedOptions(this.selectedOptionIds);
+    const measurementInvalidated = this.refreshInspectionLaserGeometryState();
     this.renderOptions();
-    this.toast('옵션 프리뷰를 로컬에 저장했습니다.', 'success');
+    if (!measurementInvalidated) this.toast('옵션 프리뷰를 로컬에 저장했습니다.', 'success');
   }
 
   private selectStageOptionInWorld(optionId: string): void {

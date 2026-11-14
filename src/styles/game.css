@@ -1765,6 +1765,36 @@ input:focus-visible {
 }
 .plan-experience-notice[hidden], .palette-tabs button[hidden], .stage-tip > span[hidden] { display: none; }
 
+.laser-reference-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3150;
+  width: min(430px, calc(100% - 32px));
+  padding: 14px 18px;
+  border: 1px solid rgb(251 113 133 / .8);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgb(82 20 32 / .96), rgb(43 17 25 / .96));
+  box-shadow: 0 10px 28px rgb(0 0 0 / .38), 0 0 16px rgb(244 63 94 / .14);
+  color: #fff1f2;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+  text-align: center;
+  pointer-events: auto;
+  animation: laser-reference-enter 160ms ease-out;
+}
+.laser-reference-notice[hidden] { display: none; }
+.laser-reference-notice a { color: #ffdbbb; text-decoration: underline; text-underline-offset: 3px; }
+.laser-reference-notice a:hover { color: #fff; }
+.laser-reference-notice a:focus-visible { outline: 2px solid #ffdbbb; outline-offset: 4px; border-radius: 2px; }
+@keyframes laser-reference-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .laser-reference-notice { animation: none; } }
+@media (pointer: coarse), (max-width: 760px) {
+  .laser-reference-notice { width: min(300px, calc(100% - 32px)); padding: 10px 12px; font-size: 11px; line-height: 1.6; }
+}
+
 .stage-loader {
   position: absolute;
   inset: 0;

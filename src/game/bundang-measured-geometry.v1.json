@@ -1,0 +1,1022 @@
+{
+  "schemaVersion": 1,
+  "revision": "bundang-measured-geometry-v1",
+  "units": {
+    "51A": {
+      "sourceSignature": "{\"floor\":[[3.15,0],[8.45,0],[8.45,0.6],[10.2,0.6],[10.2,8.2],[6.75,8.2],[6.75,9.05],[0,9.05],[0,2.8],[3.15,2.8]],\"walls\":[[\"outer-north-kitchen-before\",[3.15,0],[4.675,0],0.25],[\"outer-north-kitchen-after\",[5.775,0],[6.65,0],0.25],[\"outer-north-kitchen-sill\",[4.675,0],[5.775,0],0.25],[\"outer-north-kitchen-lintel\",[4.675,0],[5.775,0],0.25],[\"outer-north-utility-before\",[6.65,0],[7.25,0],0.25],[\"outer-north-utility-after\",[8.05,0],[8.45,0],0.25],[\"outer-north-utility-sill\",[7.25,0],[8.05,0],0.25],[\"outer-north-utility-lintel\",[7.25,0],[8.05,0],0.25],[\"outer-north-step\",[8.45,0],[8.45,0.6],0.25],[\"outer-north-outdoor-before\",[8.45,0.6],[8.9,0.6],0.25],[\"outer-north-outdoor-after\",[9.8,0.6],[10.2,0.6],0.25],[\"outer-north-outdoor-sill\",[8.9,0.6],[9.8,0.6],0.25],[\"outer-north-outdoor-lintel\",[8.9,0.6],[9.8,0.6],0.25],[\"outer-east\",[10.2,0.6],[10.2,8.2],0.25],[\"outer-south-bedroom-1-before\",[10.2,8.2],[8.9,8.2],0.25],[\"outer-south-bedroom-1-after\",[7.2,8.2],[6.75,8.2],0.25],[\"outer-south-bedroom-1-sill\",[8.9,8.2],[7.2,8.2],0.25],[\"outer-south-bedroom-1-lintel\",[8.9,8.2],[7.2,8.2],0.25],[\"outer-south-step\",[6.75,8.2],[6.75,9.05],0.25],[\"outer-south-living-before\",[6.75,9.05],[5.85,9.05],0.25],[\"outer-south-living-after\",[3.3,9.05],[2.8,9.05],0.25],[\"outer-south-living-sill\",[5.85,9.05],[3.3,9.05],0.25],[\"outer-south-living-lintel\",[5.85,9.05],[3.3,9.05],0.25],[\"outer-south-bedroom-2-before\",[2.8,9.05],[2.2,9.05],0.25],[\"outer-south-bedroom-2-after\",[0.75,9.05],[0,9.05],0.25],[\"outer-south-bedroom-2-sill\",[2.2,9.05],[0.75,9.05],0.25],[\"outer-south-bedroom-2-lintel\",[2.2,9.05],[0.75,9.05],0.25],[\"outer-west\",[0,9.05],[0,2.8],0.25],[\"outer-entry-before\",[0,2.8],[1.85,2.8],0.25],[\"outer-entry-after\",[2.75,2.8],[3.15,2.8],0.25],[\"outer-entry-lintel\",[1.85,2.8],[2.75,2.8],0.25],[\"outer-kitchen-west\",[3.15,2.8],[3.15,0],0.25],[\"utility-kitchen-west-before\",[6.6,0],[6.6,1.2],0.2],[\"utility-kitchen-west-after\",[6.6,2.1],[6.6,2.2],0.2],[\"utility-kitchen-west-lintel\",[6.6,1.2],[6.6,2.1],0.2],[\"utility-south\",[6.6,2.2],[8.4,2.2],0.2],[\"outdoor-unit-west-before\",[8.4,0.6],[8.4,1.25],0.2],[\"outdoor-unit-west-after\",[8.4,2.1],[8.4,2.2],0.2],[\"outdoor-unit-west-lintel\",[8.4,1.25],[8.4,2.1],0.2],[\"outdoor-unit-south\",[8.4,2.2],[10.2,2.2],0.2],[\"bathroom-1-west\",[6.55,2.2],[6.55,4.8],0.2],[\"bathroom-1-east-before\",[8.3,2.2],[8.3,3.65],0.12],[\"bathroom-1-east-after\",[8.3,4.5],[8.3,4.8],0.12],[\"bathroom-1-east-lintel\",[8.3,3.65],[8.3,4.5],0.12],[\"bathroom-1-south\",[6.55,4.8],[8.3,4.8],0.2],[\"dress-south-after\",[9.7,4.8],[10.2,4.8],0.12],[\"bedroom-1-west-before\",[6.65,4.8],[6.65,4.9],0.12],[\"bedroom-1-west-after\",[6.65,5.8],[6.65,8.2],0.12],[\"bedroom-1-west-lintel\",[6.65,4.9],[6.65,5.8],0.12],[\"entry-kitchen-divider\",[3.15,2.8],[3.15,4.7],0.2],[\"kitchen-living-short-return\",[2.9,4.7],[4.05,4.7],0.12],[\"bathroom-2-east-before\",[1.8,3.55],[1.8,4.9],0.12],[\"bathroom-2-east-lintel\",[1.8,4.9],[1.8,5.8],0.12],[\"bedroom-2-north-before\",[0,5.8],[1.8,5.8],0.12],[\"bedroom-2-north-after\",[2.7,5.8],[2.8,5.8],0.12],[\"bedroom-2-north-lintel\",[1.8,5.8],[2.7,5.8],0.12],[\"bedroom-2-east\",[2.8,5.8],[2.8,9.05],0.12]],\"fixtures\":[[\"kitchen-window-base-cabinet\",[3.35,0.15,6.55,0.87]],[\"kitchen-side-base-cabinet\",[3.35,0.75,4.07,2.55]]]}",
+      "coordinateOffsets": {
+        "x": [
+          [
+            0,
+            0.0
+          ],
+          [
+            1.8,
+            0.0
+          ],
+          [
+            2.7,
+            0.0
+          ],
+          [
+            2.8,
+            -0.012499975
+          ],
+          [
+            2.9,
+            0.0
+          ],
+          [
+            3.15,
+            -0.0
+          ],
+          [
+            4.05,
+            0.0
+          ],
+          [
+            6.55,
+            0.0
+          ],
+          [
+            6.6,
+            0.0
+          ],
+          [
+            6.65,
+            0.02999994
+          ],
+          [
+            8.3,
+            0.014206065
+          ],
+          [
+            8.4,
+            0.0
+          ],
+          [
+            9.7,
+            0.0
+          ],
+          [
+            10.2,
+            0.0
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.6,
+            0.0
+          ],
+          [
+            1.2,
+            0.0
+          ],
+          [
+            1.25,
+            0.0
+          ],
+          [
+            2.1,
+            0.0
+          ],
+          [
+            2.2,
+            -0.031030294
+          ],
+          [
+            2.55,
+            -0.026666667
+          ],
+          [
+            2.8,
+            0.0
+          ],
+          [
+            3.55,
+            0.0
+          ],
+          [
+            3.65,
+            0.0
+          ],
+          [
+            4.5,
+            0.0
+          ],
+          [
+            4.7,
+            0.026666667
+          ],
+          [
+            4.8,
+            0.031030294
+          ],
+          [
+            4.9,
+            0.0
+          ],
+          [
+            5.8,
+            0.033071825
+          ],
+          [
+            8.2,
+            0.0
+          ],
+          [
+            9.05,
+            0.0
+          ]
+        ]
+      },
+      "thicknessOffsets": {
+        "utility-kitchen-west-before": 0.0,
+        "utility-kitchen-west-after": 0.0,
+        "utility-kitchen-west-lintel": 0.0,
+        "utility-south": -0.033818038,
+        "outdoor-unit-west-before": 0.0,
+        "outdoor-unit-west-after": 0.0,
+        "outdoor-unit-west-lintel": 0.0,
+        "outdoor-unit-south": -0.033818038,
+        "bathroom-1-west": 0.0,
+        "bathroom-1-east-before": 0.049999881,
+        "bathroom-1-east-after": 0.049999881,
+        "bathroom-1-east-lintel": 0.049999881,
+        "bathroom-1-south": 0.0,
+        "dress-south-after": 0.037939213,
+        "bedroom-1-west-before": 0.01499997,
+        "bedroom-1-west-after": 0.01499997,
+        "bedroom-1-west-lintel": 0.01499997,
+        "entry-kitchen-divider": 0.0,
+        "kitchen-living-short-return": -0.013333333,
+        "bathroom-2-east-before": 0.0,
+        "bathroom-2-east-lintel": 0.0,
+        "bedroom-2-north-before": 0.03068074,
+        "bedroom-2-north-after": 0.03068074,
+        "bedroom-2-north-lintel": 0.03068074,
+        "bedroom-2-east": -0.0499999
+      },
+      "summary": {
+        "beforeTotalErrorMm": 875.0,
+        "afterTotalErrorMm": 496.81025
+      },
+      "dimensions": [
+        {
+          "id": "kitchen-dining-width",
+          "targetMm": 3200,
+          "beforeMm": 3200.0,
+          "afterMm": 3200.0
+        },
+        {
+          "id": "kitchen-dining-depth",
+          "targetMm": 2150,
+          "beforeMm": 2090.0,
+          "afterMm": 2150.000001
+        },
+        {
+          "id": "dress-room-width",
+          "targetMm": 1650,
+          "beforeMm": 1715.0,
+          "afterMm": 1675.793994
+        },
+        {
+          "id": "dress-room-depth",
+          "targetMm": 2500,
+          "beforeMm": 2440.0,
+          "afterMm": 2500.000001
+        },
+        {
+          "id": "bedroom-1-width",
+          "targetMm": 3300,
+          "beforeMm": 3365.0,
+          "afterMm": 3327.500075
+        },
+        {
+          "id": "bedroom-1-depth",
+          "targetMm": 3050,
+          "beforeMm": 3215.0,
+          "afterMm": 3165.0001
+        },
+        {
+          "id": "living-width",
+          "targetMm": 3900,
+          "beforeMm": 3765.0,
+          "afterMm": 3802.499925
+        },
+        {
+          "id": "living-depth",
+          "targetMm": 3000,
+          "beforeMm": 3125.0,
+          "afterMm": 3091.928175
+        },
+        {
+          "id": "bedroom-2-width",
+          "targetMm": 2700,
+          "beforeMm": 2615.0,
+          "afterMm": 2627.499975
+        },
+        {
+          "id": "bedroom-2-depth",
+          "targetMm": 2950,
+          "beforeMm": 3065.0,
+          "afterMm": 3016.587805
+        }
+      ]
+    },
+    "55A": {
+      "sourceSignature": "{\"floor\":[[1.8,0],[7,0],[7,2.4],[11.8,2.4],[11.8,8.6],[3.4,8.6],[3.4,8.1],[0,8.1],[0,0.55],[1.8,0.55]],\"walls\":[[\"outer-north-utility-before\",[1.8,0],[2.2,0],0.25],[\"outer-north-utility-after\",[3,0],[3.6,0],0.25],[\"outer-north-utility-sill\",[2.2,0],[3,0],0.25],[\"outer-north-utility-lintel\",[2.2,0],[3,0],0.25],[\"outer-north-kitchen-before\",[3.6,0],[4.675,0],0.25],[\"outer-north-kitchen-after\",[5.775,0],[7,0],0.25],[\"outer-north-kitchen-sill\",[4.675,0],[5.775,0],0.25],[\"outer-north-kitchen-lintel\",[4.675,0],[5.775,0],0.25],[\"outer-north-step\",[7,0],[7,2.4],0.25],[\"outer-entry-before\",[7,2.4],[8.75,2.4],0.25],[\"outer-entry-after\",[9.65,2.4],[11.8,2.4],0.25],[\"outer-entry-lintel\",[8.75,2.4],[9.65,2.4],0.25],[\"outer-east\",[11.8,2.4],[11.8,8.6],0.25],[\"outer-south-bedroom-2-before\",[11.8,8.6],[11,8.6],0.25],[\"outer-south-bedroom-2-after\",[9.55,8.6],[8.85,8.6],0.25],[\"outer-south-bedroom-2-sill\",[11,8.6],[9.55,8.6],0.25],[\"outer-south-bedroom-2-lintel\",[11,8.6],[9.55,8.6],0.25],[\"outer-south-alpha-before\",[8.85,8.6],[8.4,8.6],0.25],[\"outer-south-alpha-after\",[7.4,8.6],[7,8.6],0.25],[\"outer-south-alpha-sill\",[8.4,8.6],[7.4,8.6],0.25],[\"outer-south-alpha-lintel\",[8.4,8.6],[7.4,8.6],0.25],[\"outer-south-living-before\",[7,8.6],[6.55,8.6],0.25],[\"outer-south-living-after\",[4,8.6],[3.4,8.6],0.25],[\"outer-south-living-sill\",[6.55,8.6],[4,8.6],0.25],[\"outer-south-living-lintel\",[6.55,8.6],[4,8.6],0.25],[\"outer-south-step\",[3.4,8.6],[3.4,8.1],0.25],[\"outer-south-bedroom-1-before\",[3.4,8.1],[3.05,8.1],0.25],[\"outer-south-bedroom-1-after\",[1.35,8.1],[0,8.1],0.25],[\"outer-south-bedroom-1-sill\",[3.05,8.1],[1.35,8.1],0.25],[\"outer-south-bedroom-1-lintel\",[3.05,8.1],[1.35,8.1],0.25],[\"outer-west\",[0,8.1],[0,0.55],0.25],[\"outer-north-outdoor-before\",[0,0.55],[0.65,0.55],0.25],[\"outer-north-outdoor-after\",[1.45,0.55],[1.8,0.55],0.25],[\"outer-north-outdoor-sill\",[0.65,0.55],[1.45,0.55],0.25],[\"outer-north-outdoor-lintel\",[0.65,0.55],[1.45,0.55],0.25],[\"outer-outdoor-step\",[1.8,0.55],[1.8,0],0.25],[\"outdoor-unit-east-before\",[1.9,0.55],[1.9,1.2],0.2],[\"outdoor-unit-east-after\",[1.9,2.05],[1.9,2.2],0.2],[\"outdoor-unit-east-lintel\",[1.9,1.2],[1.9,2.05],0.2],[\"outdoor-unit-south\",[0,2.2],[1.9,2.2],0.2],[\"utility-kitchen-east-before\",[3.6,0],[3.6,1.2],0.2],[\"utility-kitchen-east-after\",[3.6,2.1],[3.6,2.2],0.2],[\"utility-kitchen-east-lintel\",[3.6,1.2],[3.6,2.1],0.2],[\"utility-south\",[1.9,2.2],[3.6,2.2],0.2],[\"dress-west\",[0,2.2],[0,4.8],0.12],[\"dress-south-before\",[0,4.8],[0.85,4.8],0.12],[\"dress-south-after\",[1.8,4.8],[1.9,4.8],0.12],[\"dress-bathroom-1-before\",[1.9,2.2],[1.9,3.65],0.12],[\"dress-bathroom-1-lintel\",[1.9,3.65],[1.9,4.8],0.12],[\"bathroom-1-north\",[1.9,2.2],[3.6,2.2],0.2],[\"bathroom-1-south\",[1.9,4.8],[3.6,4.8],0.2],[\"bathroom-1-east\",[3.6,2.2],[3.6,4.8],0.2],[\"bedroom-1-east-before\",[3.4,4.8],[3.4,4.95],0.12],[\"bedroom-1-east-after\",[3.4,5.85],[3.4,8.1],0.12],[\"pantry-north\",[7,2.4],[8.6,2.4],0.2],[\"pantry-west\",[7,2.4],[7,4.4],0.2],[\"pantry-kitchen-short-return\",[6.35,4.4],[7,4.4],0.2],[\"pantry-south\",[7,4.4],[8.6,4.4],0.2],[\"pantry-east-before\",[8.6,2.4],[8.6,2.95],0.12],[\"pantry-east-after\",[8.6,4.15],[8.6,4.4],0.12],[\"pantry-east-lintel\",[8.6,2.95],[8.6,4.15],0.12],[\"bathroom-2-west-before\",[10,2.4],[10,4.4],0.12],[\"bathroom-2-west-after\",[10,5.4],[10,5.4],0.12],[\"bathroom-2-west-lintel\",[10,4.4],[10,5.4],0.12],[\"bathroom-2-entry-return\",[10,4.4],[9.55,4.4],0.12],[\"bathroom-2-south\",[10,5.4],[11.8,5.4],0.2],[\"bedroom-2-north-before\",[8.85,5.4],[8.95,5.4],0.12],[\"bedroom-2-north-after\",[9.85,5.4],[11.8,5.4],0.12],[\"bedroom-2-north-lintel\",[8.95,5.4],[9.85,5.4],0.12],[\"bedroom-2-west\",[8.85,5.4],[8.85,8.6],0.12],[\"alpha-north-before\",[7,5.4],[7.1,5.4],0.12],[\"alpha-north-after\",[8,5.4],[8.85,5.4],0.12],[\"alpha-north-lintel\",[7.1,5.4],[8,5.4],0.12],[\"alpha-west\",[7,5.4],[7,8.6],0.12]],\"fixtures\":[[\"kitchen-window-base-cabinet\",[3.6,0.15,6.85,0.87]],[\"kitchen-side-base-cabinet\",[6.13,0.75,6.85,2.4]]]}",
+      "coordinateOffsets": {
+        "x": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.85,
+            0.0
+          ],
+          [
+            1.8,
+            0.0
+          ],
+          [
+            1.9,
+            -0.009304782
+          ],
+          [
+            3.4,
+            0.027443771999999998
+          ],
+          [
+            3.6,
+            1.3e-07
+          ],
+          [
+            6.35,
+            -0.0
+          ],
+          [
+            7,
+            -0.0
+          ],
+          [
+            7.1,
+            0.0
+          ],
+          [
+            8,
+            0.0
+          ],
+          [
+            8.6,
+            0.0
+          ],
+          [
+            8.85,
+            0.0
+          ],
+          [
+            8.95,
+            0.0
+          ],
+          [
+            9.55,
+            0.0
+          ],
+          [
+            9.85,
+            0.0
+          ],
+          [
+            10,
+            0.0
+          ],
+          [
+            11.8,
+            0.0
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.55,
+            0.0
+          ],
+          [
+            1.2,
+            0.0
+          ],
+          [
+            2.05,
+            0.0
+          ],
+          [
+            2.1,
+            0.0
+          ],
+          [
+            2.2,
+            -0.029100394999999998
+          ],
+          [
+            2.4,
+            -0.0499999
+          ],
+          [
+            2.95,
+            0.0
+          ],
+          [
+            3.65,
+            0.0
+          ],
+          [
+            4.15,
+            0.0
+          ],
+          [
+            4.4,
+            0.036375493
+          ],
+          [
+            4.8,
+            0.036375493
+          ],
+          [
+            4.95,
+            0.0
+          ],
+          [
+            5.4,
+            0.041467148
+          ],
+          [
+            5.85,
+            -0.025
+          ],
+          [
+            8.1,
+            0.0
+          ],
+          [
+            8.6,
+            0.0
+          ]
+        ]
+      },
+      "thicknessOffsets": {
+        "outdoor-unit-east-before": 0.0,
+        "outdoor-unit-east-after": 0.0,
+        "outdoor-unit-east-lintel": 0.0,
+        "outdoor-unit-south": -0.014550197,
+        "utility-kitchen-east-before": 6.5e-08,
+        "utility-kitchen-east-after": 6.5e-08,
+        "utility-kitchen-east-lintel": 6.5e-08,
+        "utility-south": -0.014550197,
+        "dress-west": 0.0,
+        "dress-south-before": 0.025501973,
+        "dress-south-after": 0.025501973,
+        "dress-bathroom-1-before": 0.049999866,
+        "dress-bathroom-1-lintel": 0.049999866,
+        "bathroom-1-north": -0.014550197,
+        "bathroom-1-south": 0.0,
+        "bathroom-1-east": 6.5e-08,
+        "bedroom-1-east-before": -0.013721885999999999,
+        "bedroom-1-east-after": -0.013721885999999999,
+        "pantry-north": -0.0,
+        "pantry-west": -3.2499999999999996e-07,
+        "pantry-kitchen-short-return": -0.027248812999999997,
+        "pantry-south": -0.027248812999999997,
+        "pantry-east-before": 0.0,
+        "pantry-east-after": 0.0,
+        "pantry-east-lintel": 0.0,
+        "bathroom-2-west-before": 0.0,
+        "bathroom-2-west-after": 0.0,
+        "bathroom-2-west-lintel": 0.0,
+        "bathroom-2-entry-return": 0.0,
+        "bathroom-2-south": 0.017065504000000002,
+        "bedroom-2-north-before": 0.0036680709999999997,
+        "bedroom-2-north-after": 0.0036680709999999997,
+        "bedroom-2-north-lintel": 0.0036680709999999997,
+        "bedroom-2-west": -0.0499999,
+        "alpha-north-before": 0.0036680709999999997,
+        "alpha-north-after": 0.0036680709999999997,
+        "alpha-north-lintel": 0.0036680709999999997,
+        "alpha-west": -0.0499999
+      },
+      "summary": {
+        "beforeTotalErrorMm": 1030.0,
+        "afterTotalErrorMm": 533.963407
+      },
+      "dimensions": [
+        {
+          "id": "dress-room-width",
+          "targetMm": 1650,
+          "beforeMm": 1715.0,
+          "afterMm": 1680.695285
+        },
+        {
+          "id": "dress-room-depth",
+          "targetMm": 2500,
+          "beforeMm": 2440.0,
+          "afterMm": 2500.0
+        },
+        {
+          "id": "bedroom-1-width",
+          "targetMm": 3300,
+          "beforeMm": 3215.0,
+          "afterMm": 3249.304715
+        },
+        {
+          "id": "bedroom-1-depth",
+          "targetMm": 3050,
+          "beforeMm": 3115.0,
+          "afterMm": 3065.87352
+        },
+        {
+          "id": "kitchen-dining-width",
+          "targetMm": 3200,
+          "beforeMm": 3200.0,
+          "afterMm": 3200.0
+        },
+        {
+          "id": "kitchen-dining-depth",
+          "targetMm": 2050,
+          "beforeMm": 1900.0,
+          "afterMm": 1999.9998
+        },
+        {
+          "id": "living-width",
+          "targetMm": 3600,
+          "beforeMm": 3415.0,
+          "afterMm": 3439.99995
+        },
+        {
+          "id": "living-depth",
+          "targetMm": 2650,
+          "beforeMm": 2625.0,
+          "afterMm": 2650.0
+        },
+        {
+          "id": "alpha-room-width",
+          "targetMm": 1800,
+          "beforeMm": 1730.0,
+          "afterMm": 1779.9999
+        },
+        {
+          "id": "alpha-room-depth",
+          "targetMm": 2850,
+          "beforeMm": 3015.0,
+          "afterMm": 2971.698816
+        },
+        {
+          "id": "bedroom-2-width",
+          "targetMm": 2800,
+          "beforeMm": 2765.0,
+          "afterMm": 2789.99995
+        },
+        {
+          "id": "bedroom-2-depth",
+          "targetMm": 2850,
+          "beforeMm": 2975.0,
+          "afterMm": 2925.0001
+        }
+      ]
+    },
+    "55B": {
+      "sourceSignature": "{\"floor\":[[0,0],[6.1,0],[6.1,2.1],[12.35,2.1],[12.35,9],[6.9,9],[6.9,11],[-0.7,11],[-0.7,4.1],[0,4.1]],\"walls\":[[\"outer-north-bedroom\",[0,0],[6.1,0],0.25],[\"outer-step-west\",[6.1,0],[6.1,2.1],0.25],[\"outer-entry-before\",[7.2,2.1],[8.15,2.1],0.25],[\"outer-entry-after\",[9.05,2.1],[12.35,2.1],0.25],[\"outer-entry-lintel\",[8.15,2.1],[9.05,2.1],0.25],[\"outer-east\",[12.35,2.1],[12.35,9],0.25],[\"outer-south-bedroom-2-before\",[12.35,9],[11.275,9],0.25],[\"outer-south-bedroom-2-after\",[9.825,9],[9.1,9],0.25],[\"outer-south-bedroom-2-sill\",[11.275,9],[9.825,9],0.25],[\"outer-south-bedroom-2-lintel\",[11.275,9],[9.825,9],0.25],[\"outer-south-alpha-before\",[9.1,9],[8.45,9],0.25],[\"outer-south-alpha-after\",[7.45,9],[6.9,9],0.25],[\"outer-south-alpha-sill\",[8.45,9],[7.45,9],0.25],[\"outer-south-alpha-lintel\",[8.45,9],[7.45,9],0.25],[\"outer-step-east\",[6.9,9],[6.9,11],0.25],[\"outer-south-east-cap\",[6.9,11],[6.1,11],0.25],[\"outer-south-kitchen-before\",[6.1,11],[5.45,11],0.25],[\"outer-south-kitchen-after\",[4.35,11],[3.6,11],0.25],[\"outer-south-kitchen-sill\",[5.45,11],[4.35,11],0.25],[\"outer-south-kitchen-lintel\",[5.45,11],[4.35,11],0.25],[\"outer-south-utility-column\",[3.6,11],[2.7,11],0.25],[\"outer-south-utility-before\",[2.7,11],[2.4,11],0.25],[\"outer-south-utility-after\",[1.6,11],[1.2,11],0.25],[\"outer-south-utility-sill\",[2.4,11],[1.6,11],0.25],[\"outer-south-utility-lintel\",[2.4,11],[1.6,11],0.25],[\"outer-south-outdoor\",[1.2,11],[-0.7,11],0.25],[\"outer-west-outdoor-before\",[-0.7,11],[-0.7,10.45],0.25],[\"outer-west-outdoor-after\",[-0.7,9.55],[-0.7,8.55],0.25],[\"outer-west-outdoor-sill\",[-0.7,10.45],[-0.7,9.55],0.25],[\"outer-west-outdoor-lintel\",[-0.7,10.45],[-0.7,9.55],0.25],[\"outer-west-living-before\",[-0.7,8.55],[-0.7,7.625],0.25],[\"outer-west-living-after\",[-0.7,5.025],[-0.7,4.1],0.25],[\"outer-west-living-sill\",[-0.7,7.625],[-0.7,5.025],0.25],[\"outer-west-living-lintel\",[-0.7,7.625],[-0.7,5.025],0.25],[\"living-bedroom-square-junction\",[-0.7,4.1],[0.1,4.1],0.45],[\"outer-west-bedroom-before\",[0,4.1],[0,3.25],0.25],[\"outer-west-bedroom-after\",[0,1.25],[0,0],0.25],[\"outer-west-bedroom-sill\",[0,3.25],[0,1.25],0.25],[\"outer-west-bedroom-lintel\",[0,3.25],[0,1.25],0.25],[\"bedroom-1-dress-short\",[3.55,0],[3.55,0.6],0.12],[\"bedroom-1-bathroom-1\",[3.55,1.9],[3.55,4.1],0.12],[\"bedroom-1-south\",[0,4.1],[2.5,4.1],0.12],[\"dress-south-before\",[3.55,1.9],[3.7,1.9],0.12],[\"dress-south-after\",[4.5,1.9],[6.1,1.9],0.12],[\"dress-south-lintel\",[3.7,1.9],[4.5,1.9],0.12],[\"bathroom-1-south\",[3.55,4.1],[6.1,4.1],0.2],[\"pantry-west\",[6.1,2.1],[6.1,4.1],0.2],[\"pantry-north\",[6.1,2.1],[7.5,2.1],0.2],[\"pantry-south\",[6.1,4.1],[7.5,4.1],0.2],[\"pantry-east-before\",[7.5,2.1],[7.5,2.65],0.12],[\"pantry-east-after\",[7.5,3.85],[7.5,4.1],0.12],[\"pantry-east-lintel\",[7.5,2.65],[7.5,3.85],0.12],[\"bathroom-2-west-before\",[10.2,2.1],[10.2,4.7],0.12],[\"bathroom-2-west-lintel\",[10.2,4.7],[10.2,5.5],0.12],[\"bathroom-2-entry-return\",[10.2,4.1],[9.75,4.1],0.12],[\"bathroom-2-south\",[10.2,5.5],[12.35,5.5],0.2],[\"bedroom-2-north-before\",[9.1,5.5],[9.25,5.5],0.12],[\"bedroom-2-north-after\",[10.05,5.5],[12.35,5.5],0.12],[\"bedroom-2-north-lintel\",[9.25,5.5],[10.05,5.5],0.12],[\"bedroom-2-west\",[9.1,5.5],[9.1,9],0.12],[\"alpha-north-door-before\",[6.9,5.5],[7.1,5.5],0.12],[\"alpha-north-door-after\",[7.9,5.5],[8,5.5],0.12],[\"alpha-north-door-lintel\",[7.1,5.5],[7.9,5.5],0.12],[\"alpha-north-after-door\",[8,5.5],[9.1,5.5],0.12],[\"alpha-west\",[6.9,5.5],[6.9,9],0.12],[\"kitchen-alpha-north-return\",[6.9,5.5],[6.1,5.5],0.12],[\"outdoor-unit-north\",[-0.7,8.55],[1.2,8.55],0.2],[\"utility-north\",[1.2,8.55],[3.9,8.55],0.2],[\"outdoor-unit-east-after\",[1.2,9.55],[1.2,11],0.2],[\"outdoor-unit-east-lintel\",[1.2,8.55],[1.2,9.55],0.2],[\"utility-kitchen-east-lintel\",[3.9,8.55],[3.9,9.55],0.2]],\"fixtures\":[[\"kitchen-window-base-cabinet\",[4,10.23,6.6,10.95]],[\"kitchen-side-base-cabinet\",[5.88,7.5,6.6,10.35]]]}",
+      "coordinateOffsets": {
+        "x": [
+          [
+            -0.7,
+            0.0
+          ],
+          [
+            0,
+            0.0
+          ],
+          [
+            1.2,
+            0.0
+          ],
+          [
+            2.5,
+            -0.032849507
+          ],
+          [
+            3.55,
+            -0.035984426
+          ],
+          [
+            3.7,
+            0.0
+          ],
+          [
+            3.9,
+            -0.034640889
+          ],
+          [
+            4.5,
+            0.0
+          ],
+          [
+            6.1,
+            0.0
+          ],
+          [
+            6.9,
+            0.0
+          ],
+          [
+            7.1,
+            0.0
+          ],
+          [
+            7.5,
+            0.0
+          ],
+          [
+            7.9,
+            0.0
+          ],
+          [
+            8,
+            0.0
+          ],
+          [
+            9.1,
+            -0.0
+          ],
+          [
+            9.25,
+            0.0
+          ],
+          [
+            9.75,
+            0.0
+          ],
+          [
+            10.05,
+            0.0
+          ],
+          [
+            10.2,
+            0.0
+          ],
+          [
+            12.35,
+            0.0
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.6,
+            0.0
+          ],
+          [
+            1.9,
+            -0.027771768000000002
+          ],
+          [
+            2.1,
+            0.0
+          ],
+          [
+            2.65,
+            0.0
+          ],
+          [
+            3.85,
+            0.0
+          ],
+          [
+            4.1,
+            -0.030155842
+          ],
+          [
+            4.7,
+            0.0
+          ],
+          [
+            5.5,
+            0.0
+          ],
+          [
+            7.5,
+            0.040285471
+          ],
+          [
+            8.55,
+            -0.028017243
+          ],
+          [
+            9,
+            0.0
+          ],
+          [
+            9.55,
+            0.0
+          ],
+          [
+            11,
+            0.0
+          ]
+        ]
+      },
+      "thicknessOffsets": {
+        "bedroom-1-dress-short": 0.0019688509999999998,
+        "bedroom-1-bathroom-1": 0.0019688509999999998,
+        "bedroom-1-south": 0.015077968,
+        "dress-south-before": 0.013885884000000001,
+        "dress-south-after": 0.013885884000000001,
+        "dress-south-lintel": 0.013885884000000001,
+        "bathroom-1-south": 0.0,
+        "pantry-west": 0.0,
+        "pantry-north": 0.0,
+        "pantry-south": 0.0,
+        "pantry-east-before": 0.0,
+        "pantry-east-after": 0.0,
+        "pantry-east-lintel": 0.0,
+        "bathroom-2-west-before": 0.0,
+        "bathroom-2-west-lintel": 0.0,
+        "bathroom-2-entry-return": 0.015077968,
+        "bathroom-2-south": 0.0499999,
+        "bedroom-2-north-before": -0.0,
+        "bedroom-2-north-after": -0.0,
+        "bedroom-2-north-lintel": -0.0,
+        "bedroom-2-west": 0.0499999,
+        "alpha-north-door-before": -0.0,
+        "alpha-north-door-after": -0.0,
+        "alpha-north-door-lintel": -0.0,
+        "alpha-north-after-door": -0.0,
+        "alpha-west": 0.0,
+        "kitchen-alpha-north-return": -0.0,
+        "outdoor-unit-north": 0.014008622,
+        "utility-north": 0.014008622,
+        "outdoor-unit-east-after": 0.0,
+        "outdoor-unit-east-lintel": 0.0,
+        "utility-kitchen-east-lintel": 0.0
+      },
+      "summary": {
+        "beforeTotalErrorMm": 4550.0,
+        "afterTotalErrorMm": 4187.824342
+      },
+      "dimensions": [
+        {
+          "id": "bedroom-1-width",
+          "targetMm": 3050,
+          "beforeMm": 3365.0,
+          "afterMm": 3328.031148
+        },
+        {
+          "id": "bedroom-1-depth",
+          "targetMm": 3300,
+          "beforeMm": 3915.0,
+          "afterMm": 3877.305174
+        },
+        {
+          "id": "dress-room-width",
+          "targetMm": 2400,
+          "beforeMm": 2365.0,
+          "afterMm": 2400.0
+        },
+        {
+          "id": "dress-room-depth",
+          "targetMm": 1650,
+          "beforeMm": 1715.0,
+          "afterMm": 1680.28529
+        },
+        {
+          "id": "living-north-width",
+          "targetMm": 2750,
+          "beforeMm": 3075.0,
+          "afterMm": 3042.150493
+        },
+        {
+          "id": "living-south-width",
+          "targetMm": 3900,
+          "beforeMm": 4475.0,
+          "afterMm": 4440.359111
+        },
+        {
+          "id": "living-depth",
+          "targetMm": 3600,
+          "beforeMm": 4125.0,
+          "afterMm": 4089.978446
+        },
+        {
+          "id": "kitchen-dining-depth",
+          "targetMm": 2000,
+          "beforeMm": 1940.0,
+          "afterMm": 1980.285471
+        },
+        {
+          "id": "alpha-room-width",
+          "targetMm": 1800,
+          "beforeMm": 2080.0,
+          "afterMm": 2055.00005
+        },
+        {
+          "id": "alpha-room-depth",
+          "targetMm": 2550,
+          "beforeMm": 3315.0,
+          "afterMm": 3315.0
+        },
+        {
+          "id": "bedroom-2-width",
+          "targetMm": 2800,
+          "beforeMm": 3065.0,
+          "afterMm": 3040.00005
+        },
+        {
+          "id": "bedroom-2-depth",
+          "targetMm": 2550,
+          "beforeMm": 3275.0,
+          "afterMm": 3250.00005
+        }
+      ]
+    },
+    "59A": {
+      "sourceSignature": "{\"floor\":[[1.8,0],[7,0],[7,2.8],[12.6,2.8],[12.6,8.8],[3.4,8.8],[3.4,8.3],[0,8.3],[0,0.7],[1.8,0.7]],\"walls\":[[\"outer-north-utility-before\",[1.8,0],[2.2,0],0.25],[\"outer-north-utility-after\",[3,0],[3.6,0],0.25],[\"outer-north-utility-sill\",[2.2,0],[3,0],0.25],[\"outer-north-utility-lintel\",[2.2,0],[3,0],0.25],[\"outer-north-kitchen-before\",[3.6,0],[4.675,0],0.25],[\"outer-north-kitchen-after\",[5.775,0],[7,0],0.25],[\"outer-north-kitchen-sill\",[4.675,0],[5.775,0],0.25],[\"outer-north-kitchen-lintel\",[4.675,0],[5.775,0],0.25],[\"outer-north-step\",[7,0],[7,2.8],0.25],[\"outer-entry-before\",[7,2.8],[9.45,2.8],0.25],[\"outer-entry-after\",[10.35,2.8],[12.6,2.8],0.25],[\"outer-entry-lintel\",[9.45,2.8],[10.35,2.8],0.25],[\"outer-east\",[12.6,2.8],[12.6,8.8],0.25],[\"outer-south-bedroom-3-before\",[12.6,8.8],[11.85,8.8],0.25],[\"outer-south-bedroom-3-after\",[10.45,8.8],[9.9,8.8],0.25],[\"outer-south-bedroom-3-sill\",[11.85,8.8],[10.45,8.8],0.25],[\"outer-south-bedroom-3-lintel\",[11.85,8.8],[10.45,8.8],0.25],[\"outer-south-bedroom-2-before\",[9.9,8.8],[9.275,8.8],0.25],[\"outer-south-bedroom-2-after\",[7.825,8.8],[7.2,8.8],0.25],[\"outer-south-bedroom-2-sill\",[9.275,8.8],[7.825,8.8],0.25],[\"outer-south-bedroom-2-lintel\",[9.275,8.8],[7.825,8.8],0.25],[\"outer-south-living-before\",[7.2,8.8],[6.75,8.8],0.25],[\"outer-south-living-after\",[4.15,8.8],[3.4,8.8],0.25],[\"outer-south-living-sill\",[6.75,8.8],[4.15,8.8],0.25],[\"outer-south-living-lintel\",[6.75,8.8],[4.15,8.8],0.25],[\"outer-south-step\",[3.4,8.8],[3.4,8.3],0.25],[\"outer-south-bedroom-1-before\",[3.4,8.3],[3.05,8.3],0.25],[\"outer-south-bedroom-1-after\",[1.35,8.3],[0,8.3],0.25],[\"outer-south-bedroom-1-sill\",[3.05,8.3],[1.35,8.3],0.25],[\"outer-south-bedroom-1-lintel\",[3.05,8.3],[1.35,8.3],0.25],[\"outer-west\",[0,8.3],[0,0.7],0.25],[\"outer-north-outdoor-before\",[0,0.7],[0.65,0.7],0.25],[\"outer-north-outdoor-after\",[1.45,0.7],[1.8,0.7],0.25],[\"outer-north-outdoor-sill\",[0.65,0.7],[1.45,0.7],0.25],[\"outer-north-outdoor-lintel\",[0.65,0.7],[1.45,0.7],0.25],[\"outer-outdoor-step\",[1.8,0.7],[1.8,0],0.25],[\"outdoor-unit-east-before\",[1.9,0.7],[1.9,1.4],0.2],[\"outdoor-unit-east-after\",[1.9,2.25],[1.9,2.4],0.2],[\"outdoor-unit-east-lintel\",[1.9,1.4],[1.9,2.25],0.2],[\"outdoor-unit-south\",[0,2.4],[1.9,2.4],0.2],[\"utility-kitchen-east-before\",[3.6,0],[3.6,1.35],0.2],[\"utility-kitchen-east-after\",[3.6,2.25],[3.6,2.4],0.2],[\"utility-kitchen-east-lintel\",[3.6,1.35],[3.6,2.25],0.2],[\"utility-south\",[1.9,2.4],[3.6,2.4],0.2],[\"dress-south-before\",[0,5],[0.85,5],0.12],[\"dress-south-after\",[1.8,5],[1.9,5],0.12],[\"dress-bathroom-1-before\",[1.9,2.4],[1.9,3.65],0.12],[\"dress-bathroom-1-after\",[1.9,4.75],[1.9,5],0.12],[\"dress-bathroom-1-lintel\",[1.9,3.65],[1.9,4.75],0.12],[\"bathroom-1-north\",[1.9,2.4],[3.6,2.4],0.2],[\"bathroom-1-south\",[1.9,5],[3.6,5],0.2],[\"bathroom-1-east\",[3.6,2.4],[3.6,5],0.2],[\"bedroom-1-east-before\",[3.4,5],[3.4,5.15],0.12],[\"bedroom-1-east-after\",[3.4,6.05],[3.4,8.3],0.12],[\"pantry-north\",[7,2.8],[9,2.8],0.2],[\"pantry-west\",[7,2.8],[7,4.5],0.2],[\"pantry-kitchen-short-return\",[6.35,4.5],[7,4.5],0.2],[\"pantry-south\",[7,4.5],[9,4.5],0.2],[\"pantry-east-before\",[9,2.8],[9,3.05],0.12],[\"pantry-east-after\",[9,4.5],[9,4.5],0.12],[\"pantry-east-lintel\",[9,3.05],[9,4.5],0.12],[\"bathroom-2-west-before\",[10.8,2.8],[10.8,4.75],0.12],[\"bathroom-2-west-lintel\",[10.8,4.75],[10.8,5.6],0.12],[\"bathroom-2-entry-short-return\",[10.8,4.5],[10.35,4.5],0.12],[\"bathroom-2-south\",[10.8,5.6],[12.6,5.6],0.2],[\"bedroom-3-north-before\",[9.9,5.6],[10,5.6],0.12],[\"bedroom-3-north-after\",[10.9,5.6],[12.6,5.6],0.12],[\"bedroom-3-north-lintel\",[10,5.6],[10.9,5.6],0.12],[\"bedroom-3-west\",[9.9,5.6],[9.9,8.8],0.12],[\"bedroom-2-north-before\",[7.2,5.6],[7.3,5.6],0.12],[\"bedroom-2-north-after\",[8.3,5.6],[9.9,5.6],0.12],[\"bedroom-2-north-lintel\",[7.3,5.6],[8.3,5.6],0.12],[\"bedroom-2-west\",[7.2,5.6],[7.2,8.8],0.12]],\"fixtures\":[[\"kitchen-window-base-cabinet\",[3.6,0.15,6.85,0.87]],[\"kitchen-side-base-cabinet\",[6.13,0.75,6.85,2.55]]]}",
+      "coordinateOffsets": {
+        "x": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.85,
+            0.0
+          ],
+          [
+            1.8,
+            0.0
+          ],
+          [
+            1.9,
+            -0.028288245
+          ],
+          [
+            3.4,
+            0.037783544
+          ],
+          [
+            3.6,
+            -5.79e-07
+          ],
+          [
+            6.35,
+            2.8e-08
+          ],
+          [
+            7,
+            1.9999999999999997e-09
+          ],
+          [
+            7.2,
+            -0.040542364
+          ],
+          [
+            7.3,
+            0.0
+          ],
+          [
+            8.3,
+            0.0
+          ],
+          [
+            9,
+            0.0
+          ],
+          [
+            9.9,
+            7.999999999999999e-09
+          ],
+          [
+            10,
+            0.0
+          ],
+          [
+            10.35,
+            0.0
+          ],
+          [
+            10.8,
+            0.0
+          ],
+          [
+            10.9,
+            0.0
+          ],
+          [
+            12.6,
+            0.0
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0.0
+          ],
+          [
+            0.7,
+            0.0
+          ],
+          [
+            1.35,
+            0.0
+          ],
+          [
+            1.4,
+            0.0
+          ],
+          [
+            2.25,
+            0.0
+          ],
+          [
+            2.4,
+            -0.028280168
+          ],
+          [
+            2.55,
+            -0.0499999
+          ],
+          [
+            2.8,
+            0.0
+          ],
+          [
+            3.05,
+            0.0
+          ],
+          [
+            3.65,
+            0.0
+          ],
+          [
+            4.5,
+            0.03999992
+          ],
+          [
+            4.75,
+            0.0
+          ],
+          [
+            5,
+            0.032747425
+          ],
+          [
+            5.15,
+            0.0
+          ],
+          [
+            5.6,
+            0.02499995
+          ],
+          [
+            6.05,
+            -0.025
+          ],
+          [
+            8.3,
+            0.0
+          ],
+          [
+            8.8,
+            0.0
+          ]
+        ]
+      },
+      "thicknessOffsets": {
+        "outdoor-unit-east-before": 0.0,
+        "outdoor-unit-east-after": 0.0,
+        "outdoor-unit-east-lintel": 0.0,
+        "outdoor-unit-south": -0.014140084,
+        "utility-kitchen-east-before": 1.1089999999999999e-06,
+        "utility-kitchen-east-after": 1.1089999999999999e-06,
+        "utility-kitchen-east-lintel": 1.1089999999999999e-06,
+        "utility-south": -0.014140084,
+        "dress-south-before": 0.016195268999999998,
+        "dress-south-after": 0.016195268999999998,
+        "dress-bathroom-1-before": 0.014144163000000001,
+        "dress-bathroom-1-after": 0.014144163000000001,
+        "dress-bathroom-1-lintel": 0.014144163000000001,
+        "bathroom-1-north": -0.014140084,
+        "bathroom-1-south": 0.0,
+        "bathroom-1-east": 1.1089999999999999e-06,
+        "bedroom-1-east-before": -0.0,
+        "bedroom-1-east-after": -0.0,
+        "pantry-north": 0.0,
+        "pantry-west": 5.4e-08,
+        "pantry-kitchen-short-return": -0.01999996,
+        "pantry-south": -0.01999996,
+        "pantry-east-before": 0.0,
+        "pantry-east-after": 0.0,
+        "pantry-east-lintel": 0.0,
+        "bathroom-2-west-before": 0.0,
+        "bathroom-2-west-lintel": 0.0,
+        "bathroom-2-entry-short-return": 0.0,
+        "bathroom-2-south": 0.0499999,
+        "bedroom-3-north-before": 0.008525539,
+        "bedroom-3-north-after": 0.008525539,
+        "bedroom-3-north-lintel": 0.008525539,
+        "bedroom-3-west": -0.0499999,
+        "bedroom-2-north-before": 0.008525539,
+        "bedroom-2-north-after": 0.008525539,
+        "bedroom-2-north-lintel": 0.008525539,
+        "bedroom-2-west": -0.00551764
+      },
+      "summary": {
+        "beforeTotalErrorMm": 1125.0,
+        "afterTotalErrorMm": 577.88048
+      },
+      "dimensions": [
+        {
+          "id": "dress-room-width",
+          "targetMm": 1650,
+          "beforeMm": 1715.0,
+          "afterMm": 1679.639673
+        },
+        {
+          "id": "dress-room-depth",
+          "targetMm": 2500,
+          "beforeMm": 2440.0,
+          "afterMm": 2500.000001
+        },
+        {
+          "id": "bedroom-1-width",
+          "targetMm": 3300,
+          "beforeMm": 3215.0,
+          "afterMm": 3252.783544
+        },
+        {
+          "id": "bedroom-1-depth",
+          "targetMm": 3050,
+          "beforeMm": 3115.0,
+          "afterMm": 3074.154941
+        },
+        {
+          "id": "kitchen-dining-width",
+          "targetMm": 3200,
+          "beforeMm": 3200.0,
+          "afterMm": 3199.999999
+        },
+        {
+          "id": "kitchen-dining-depth",
+          "targetMm": 2000,
+          "beforeMm": 1850.0,
+          "afterMm": 1949.9998
+        },
+        {
+          "id": "living-width",
+          "targetMm": 3600,
+          "beforeMm": 3680.0,
+          "afterMm": 3604.432912
+        },
+        {
+          "id": "living-depth",
+          "targetMm": 2650,
+          "beforeMm": 2625.0,
+          "afterMm": 2650.0
+        },
+        {
+          "id": "bedroom-2-width",
+          "targetMm": 2700,
+          "beforeMm": 2580.0,
+          "afterMm": 2648.301142
+        },
+        {
+          "id": "bedroom-2-depth",
+          "targetMm": 2850,
+          "beforeMm": 3015.0,
+          "afterMm": 2985.737281
+        },
+        {
+          "id": "bedroom-3-width",
+          "targetMm": 2700,
+          "beforeMm": 2515.0,
+          "afterMm": 2539.999942
+        },
+        {
+          "id": "bedroom-3-depth",
+          "targetMm": 2850,
+          "beforeMm": 2975.0,
+          "afterMm": 2925.0001
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
 import { isBundangMinusOption } from './minus-option';
+import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
 import type {
   ActorState,
   ProjectedPoint,
@@ -289,6 +290,11 @@ export async function loadWorld(
     }
     objects.push(...(chunk.objects || []));
   }
+
+  // Local metric corrections precede variant transforms, traversal normalization,
+  // option generation and all render/laser consumers. Stored user furniture is
+  // deliberately not part of this source-geometry pass.
+  if (entry.id.startsWith('bundang-first-village-')) objects.forEach(applyBundangMeasuredGeometry);
 
   const minimapUrl = entry.minimapUrl
     ? resolveProjectUrl(entry.minimapUrl)

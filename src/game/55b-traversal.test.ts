@@ -5,6 +5,7 @@ import { apartmentUnitWorldPoint } from './apartment-transform';
 import { applyPlanVariant, availablePlanVariants } from './plan-variants';
 import type { ApartmentPointObject, StaticMapEntry, WorldChunk, WorldData, WorldObject } from './types';
 import { canTraverse, crossesApartmentWall, isWalkable } from './world';
+import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
 
 function loadWorld(unitType: string): WorldData {
   const publicRoot = resolve(process.cwd(), 'public');
@@ -23,6 +24,8 @@ function loadWorld(unitType: string): WorldData {
     for (const index of chunk.blockedCellIndices || []) blocked.add(`${originX + index % width},${originY + Math.floor(index / width)}`);
     objects.push(...(chunk.objects || []));
   }
+  // Match the production loadWorld order: source calibration, then A-D transform.
+  objects.forEach(applyBundangMeasuredGeometry);
   return {
     entry, manifest, width: entry.width, height: entry.height,
     chunkWidth: 16, chunkHeight: 16, palette: new Map(), tiles: new Map(), blocked, objects,

@@ -112,7 +112,7 @@ describe('entry pantry open-end cabinet', () => {
 
   it('uses a compact local preview rendered from the corrected recipe', async () => {
     const preview = BUNDANG_OPTION_DISPLAY_OVERRIDES[OPTION].previewUrl!;
-    expect(preview).toBe('assets/options/previews/entry-pantry-system-shelf-v5.webp');
+    expect(preview).toBe('assets/options/previews/entry-pantry-system-shelf-v6.webp');
     const file = await readFile(path.join(publicRoot, preview));
     expect(file.subarray(0, 4).toString()).toBe('RIFF');
     expect(file.subarray(8, 12).toString()).toBe('WEBP');

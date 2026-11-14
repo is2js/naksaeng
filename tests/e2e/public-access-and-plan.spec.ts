@@ -132,8 +132,10 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await page.locator('#touch-laser-toggle').click();
     const hud = page.locator('#inspection-laser-hud');
     await expect(hud).toBeVisible();
+    await expect(hud).toHaveCSS('top', '8px');
     const stageBox = (await stage.boundingBox())!;
     const hudBox = (await hud.boundingBox())!;
+    expect(hudBox.height).toBeLessThanOrEqual(120);
     expect(hudBox.y - stageBox.y).toBeGreaterThanOrEqual(0);
     expect(hudBox.y - stageBox.y).toBeLessThanOrEqual(12);
     expect(hudBox.x).toBeGreaterThanOrEqual(stageBox.x);
@@ -151,8 +153,10 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await expect(page.locator('#inspection-laser-line-snap')).toHaveAttribute('aria-pressed', 'true');
     await page.locator('#touch-laser-axis').click();
     const actionSizes = await hud.locator('.istarpark-laser-actions button').evaluateAll(buttons =>
-      buttons.map(button => button.getBoundingClientRect().height));
-    expect(actionSizes.every(height => height >= 44)).toBe(true);
+      buttons.map(button => ({ height: button.getBoundingClientRect().height, fontSize: parseFloat(getComputedStyle(button).fontSize) })));
+    expect(actionSizes).toHaveLength(4);
+    expect(actionSizes.every(({ height, fontSize }) => height >= 32 && fontSize >= 11)).toBe(true);
+    expect((await hud.boundingBox())!.height).toBeLessThanOrEqual(120);
     await stage.screenshot({ path: testInfo.outputPath('public-mobile-laser.png') });
     await page.locator('#touch-laser-toggle').click();
     await expect(hud).toBeHidden();

@@ -4,6 +4,7 @@ import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA_MOBILE_MEDIA_QUERY } from './camera';
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
+import { createEntrySlidingPanel, createEntrySlidingRail } from './entry-partition-model';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -167,6 +168,14 @@ const DEFAULT_VARIANTS: Record<string, Record<string, string>> = {
 // 원본 three-pbr-renderer의 구조 결합형 procedural recipes. 독립 카탈로그 행이
 // 아닌 샤워부스/기본 주방 마감도 일반 박스 fallback으로 뭉개지지 않게 한다.
 export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
+  {
+    assetId: 'entry-sliding-partition-door', rendererKind: 'procedural', mountingKind: 'floor',
+    defaultDimensionsMeters: [1.1, .04, 2.2], defaultMountHeightMeters: 0, parts: [],
+  },
+  {
+    assetId: 'entry-sliding-partition-rail', rendererKind: 'procedural', mountingKind: 'anchored',
+    defaultDimensionsMeters: [2.2, .048, .028], defaultMountHeightMeters: 0, parts: [],
+  },
   {
     assetId: 'entry-pantry-rounded-system-cabinet',
     rendererKind: 'procedural',
@@ -660,9 +669,9 @@ export function mergeEditorPropsWithBase(
     const sourceId = String(base.id || '');
     const override = sourceId ? overridesBySource.get(sourceId) : undefined;
     if (!override) return [base];
-    // Old editable-option saves must not put the corrected fixed pantry back on
-    // its former side wall. Keep the stored rows/user furniture untouched.
-    if (base.fixedOptionLayout === true && base.sourceOptionId === 'entry-pantry-system-shelf') return [base];
+    // Old editable-option saves must not put fixed pantry/entry joinery back
+    // on its former wall or into the clear passage. Stored/user rows stay intact.
+    if (base.fixedOptionLayout === true && ['entry-pantry-system-shelf', 'entry-sliding-partition-door'].includes(String(base.sourceOptionId))) return [base];
     if (override.localDeleted === true) return [];
     const yawDeg = Number(override.yawDeg);
     return [{
@@ -2163,6 +2172,8 @@ export class ThreeWorldRenderer {
     const group = new THREE.Group();
     const size = dimensions(prop, asset);
     const cellSize = Math.max(0.01, finite(this.apartment?.geometry?.cellSizeMeters, 0.5));
+    if (prop.assetId === 'entry-sliding-partition-door') return createEntrySlidingPanel(prop, cellSize);
+    if (prop.assetId === 'entry-sliding-partition-rail') return createEntrySlidingRail(prop, cellSize);
     if (isBundangWallFinishSelectionProxy(prop)) {
       group.add(createBundangWallFinishSelectionSurface(size[0] / cellSize, size[2] / cellSize));
       return group;

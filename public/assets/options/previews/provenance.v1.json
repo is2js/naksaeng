@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bunfirvil-local-preview-provenance-v1",
-  "reviewedAt": "2026-11-14",
+  "reviewedAt": "2026-11-15",
   "legalRightsProof": false,
   "files": [
     {
@@ -36,6 +36,18 @@
       "height": 512,
       "bytes": 5370,
       "sha256": "f07f76f244c9fbbbef3dd3db65c80f16c05b0a11331ce3486d4b3609710514b2",
+      "rightsClass": "maintainer-reviewed-project-asset",
+      "publicationApprovalCategory": "site-generated-procedural-preview"
+    },
+    {
+      "file": "assets/options/previews/entry-sliding-partition-door-v2.webp",
+      "sourceScript": "scripts/render-entry-partition-preview.mjs",
+      "sourceRuntime": "src/game/entry-partition-model.ts",
+      "optionId": "entry-sliding-partition-door",
+      "width": 512,
+      "height": 512,
+      "bytes": 3276,
+      "sha256": "4d22fa69725a93b155e9d13b44140f9cff34eed4acf219a199ce1c8f37ff23bd",
       "rightsClass": "maintainer-reviewed-project-asset",
       "publicationApprovalCategory": "site-generated-procedural-preview"
     }

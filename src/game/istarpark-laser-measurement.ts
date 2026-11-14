@@ -2,6 +2,7 @@
 // Bunfirvil 130 mm 자동·2점 레이저: 렌더링된 실제 표면을 기준으로 접점과 거리를 계산한다.
 import { bundangEffectiveKitchenFixtures } from './bundang-option-layout';
 import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
+import { entrySlidingPanelSectionPolygon } from './entry-partition-profile';
 export type InspectionLaserAxis = "x" | "y";
 export type InspectionLaserPhase = "hover" | "pick-start" | "await-second" | "complete";
 export interface InspectionLaserSurfaceHit {
@@ -178,13 +179,22 @@ function propDimensions(prop = {}, assets = []) {
   ];
 }
 
-function propPolygon(prop = {}, assets = []) {
+function propPolygon(prop = {}, assets = [], laserHeightMeters = ISTARPARK_LASER_HEIGHT_METERS) {
   const [width, depth] = propDimensions(prop, assets);
   if (width <= EPSILON || depth <= EPSILON) return [];
   const center = point(prop.positionMeters);
   const radians = finite(prop.yawDeg) * Math.PI / 180;
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
+  if (prop.assetId === 'entry-sliding-partition-door' && prop.entrySlidingRevision === 'wall-slide-v2') {
+    const base = finite(prop.baseMeters ?? prop.elevationMeters ?? prop.mountHeightMeters
+      ?? (Array.isArray(prop.positionMeters) ? prop.positionMeters[2] : undefined), 0);
+    const section = entrySlidingPanelSectionPolygon(propDimensions(prop, assets), laserHeightMeters - base);
+    return section.map(([x, y]) => {
+      const mirroredX = prop.mirrored ? -x : x;
+      return [center[0] + mirroredX * cosine - y * sine, center[1] + mirroredX * sine + y * cosine];
+    });
+  }
   return [
     [-width / 2, -depth / 2], [width / 2, -depth / 2],
     [width / 2, depth / 2], [-width / 2, depth / 2],
@@ -287,7 +297,7 @@ export function istarparkLaserObstacles({
   const effectiveProps = Array.isArray(props) ? props : (Array.isArray(geometry.interiorProps) ? geometry.interiorProps : []);
   for (const prop of effectiveProps) {
     if (!propIsMeasurable(prop, assets, measurementHeight)) continue;
-    const polygon = propPolygon(prop, assets);
+    const polygon = propPolygon(prop, assets, measurementHeight);
     if (polygon.length >= 3) rows.push({ id: String(prop.id || prop.assetId || "prop"), kind: "furniture", label: "가구", polygon });
   }
   return rows;

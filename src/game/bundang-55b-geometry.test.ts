@@ -11,6 +11,7 @@ import { readBundangPrototypeApartments } from './test-support/bundang-prototype
 import { STRUCTURAL_PROP_ASSETS } from './three-world';
 import { isWalkable, nearestWalkable, synchronizeBundangMinusOptionWorldCollision } from './world';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
+import { ENTRY_PARTITION_ID, ENTRY_PARTITION_RAIL_ID } from './bundang-entry-partition';
 import type { StaticMapEntry, WorldData, WorldObject } from './types';
 
 type Row = Record<string, any>;
@@ -90,19 +91,25 @@ describe('55B v2 canonical reconstruction', () => {
       .toEqual([1.48, .68, .72]);
   });
 
-  it('fits actual middle-door recipe edges with 10 mm joints and a flush shoe back/20 mm front-door end gap', () => {
+  it('parks one sliding leaf with 10 mm back-wall clearance and retains a flush shoe back/20 mm front-door end gap', () => {
     const apartment = structuredClone(source);
     applyBundangMeasuredGeometry(apartment);
     const props = bundang55BEntryOptionProps(apartment.geometry!, [
       'entry-sliding-partition-door', 'entry-open-premium-shoe-cabinet', 'entry-pantry-system-shelf',
     ], 'A');
     const door = props.find(prop => prop.installationRole === 'entry-partition')!;
-    const parts = recipes.find(asset => asset.assetId === door.assetId)!.parts as Row[];
+    const assembly = props.filter(prop => prop.sourceOptionId === ENTRY_PARTITION_ID);
+    expect(assembly).toHaveLength(3);
+    expect(assembly.filter(prop => prop.assetId === ENTRY_PARTITION_RAIL_ID)).toHaveLength(2);
+    expect(door).toMatchObject({ assetId: ENTRY_PARTITION_ID, fixedOptionLayout: true,
+      displayState: 'open', openRatio: 1 });
     const width = (door.dimensionsMeters as number[])[0], center = door.positionMeters![0];
-    const actualMin = Math.min(...parts.map(part => center + (part.offset[0] - part.scale[0] / 2) * width));
-    const actualMax = Math.max(...parts.map(part => center + (part.offset[0] + part.scale[0] / 2) * width));
-    expect(actualMin - 6.99).toBeCloseTo(.01, 8);
-    expect(8.10 - actualMax).toBeCloseTo(.01, 8);
+    expect(width).toBeCloseTo(1.15, 8);
+    expect((door.dimensionsMeters as number[]).slice(1)).toEqual([.04, 2.2]);
+    expect(center - width / 2).toBeCloseTo(5.80, 8);
+    expect(center + width / 2).toBeCloseTo(6.95, 8);
+    expect(6.99 - center - width / 2).toBeGreaterThan(.009);
+    expect(door.positionMeters![1] - .04 / 2 - 3.56).toBeCloseTo(.01, 8);
     const shoe = props.find(prop => prop.assetId === 'entry-shoe-cabinet-tall')!;
     const shoeParts = recipes.find(asset => asset.assetId === shoe.assetId)!.parts as Row[];
     const depth = (shoe.dimensionsMeters as number[])[1];

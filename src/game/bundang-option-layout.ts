@@ -3,6 +3,7 @@ import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
 import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
 import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
 import { planVariantDefinition, type ApartmentPlanVariant } from './plan-variant-definitions';
+import { bundangEntrySlidingPartitionProps, ENTRY_PARTITION_ID } from './bundang-entry-partition';
 
 type UnitTypeId = '51A' | '55A' | '55B' | '59A';
 type Point = [number, number];
@@ -159,6 +160,9 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
   'entry-pantry-system-shelf': Object.freeze({
     description: 'L자 라운드 선반과 얇은 지지대로 구성된 개방형 시스템 선반입니다.',
     previewUrl: 'assets/options/previews/entry-pantry-system-shelf-v5.webp',
+  }),
+  'entry-sliding-partition-door': Object.freeze({
+    previewUrl: 'assets/options/previews/entry-sliding-partition-door-v2.webp',
   }),
   [OPEN_PREMIUM_SHOE_CABINET_OPTION_ID]: Object.freeze({
     label: '오픈형 프리미엄 신발장',
@@ -1357,17 +1361,7 @@ export function bundang55BEntryOptionProps(
   if (hasBundangMinusOptionPackage(selected)) return [];
   const result: ApartmentInteriorProp[] = [];
   const common = { fixedOptionLayout: true, collisionMode: 'solid', collisionDefault: 'solid', measurementObstacle: true };
-  if (selected.has('entry-sliding-partition-door')) {
-    // Pantry's east face is X6.99, the return's exposed end is X8.10.
-    // Each finished jamb has exactly 10 mm clearance; rail stays on the corridor.
-    result.push({ ...common, id: 'inspection-55B-entry-sliding-partition-door', assetId: 'entry-sliding-partition-door',
-      roomZoneId: 'entry', positionMeters: [7.545, 3.64], dimensionsMeters: [1.09 / .975, .14, 2.2], yawDeg: 0,
-      materialVariantId: 'new-apartment-warm-white-glass', sourceOptionId: 'entry-sliding-partition-door',
-      anchorId: 'entryPartition', installationRole: 'entry-partition', displayState: 'half-open', openRatio: .5,
-      trackSide: 'corridor', wallClearanceMeters: .01, trackOffsetMeters: .18,
-      sourceOpeningLengthMeters: 1.17, usableOpeningLengthMeters: 1.11, adjacentWallThicknessMeters: .20,
-      panelParkingSide: 'start' });
-  }
+  result.push(...bundangEntrySlidingPartitionProps(geometry, '55B', selected, planVariant));
   if (selected.has(OPEN_PREMIUM_SHOE_CABINET_OPTION_ID)) {
     const cabinet: ApartmentInteriorProp = { ...common, id: 'inspection-55B-premium-shoe-cabinet',
       assetId: 'entry-shoe-cabinet-tall', roomZoneId: 'entry', positionMeters: [8.315, 2.685],
@@ -1394,6 +1388,8 @@ export function refineBundangOptionProps(
   const layout = BUNDANG_OPTION_LAYOUTS[unitType];
   if (!layout) return baseProps;
   const selected = new Set(selectedIds);
+  const entryDoorProps = geometry.bundangGeometryRevision === BUNDANG_55B_GEOMETRY_REVISION
+    ? [] : bundangEntrySlidingPartitionProps(geometry, unitType, selected, planVariant);
   const suppressMinusOptionPackage = hasBundangMinusOptionPackage(selected);
   const legacyIslandBase = baseProps.find(isLegacyIslandBaseProp);
   const airPlannerRoomUnits = selected.has(AIR_PLANNER_OPTION_ID)
@@ -1401,6 +1397,7 @@ export function refineBundangOptionProps(
     : [];
   const props = baseProps
     .filter((prop) => !isLegacyEntryLivingOptionProp(prop)
+      && !((entryDoorProps.length || suppressMinusOptionPackage) && prop.assetId === ENTRY_PARTITION_ID)
       && !(geometry.bundangGeometryRevision === BUNDANG_55B_GEOMETRY_REVISION
         && ['entryPartition', 'options.entryShoeCabinet', 'options.entryPantrySystemShelf'].includes(String(prop.anchorId || '')))
       && !isLegacyPrecisionStorageProp(prop)
@@ -1417,6 +1414,7 @@ export function refineBundangOptionProps(
     .map(alignIntegratedBidetToDefaultFacing)
     .map((prop) => alignOpenPremiumShoeCabinetToEntry(prop, unitType, planVariant));
   props.push(...bundang55BEntryOptionProps(geometry, selected, planVariant));
+  props.push(...entryDoorProps);
   props.push(...bundangDesignWallProps(geometry, unitType, selected));
   if (selected.has(ALL_DOORS_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, true));
   else if (selected.has(BEDROOM_ONE_DOOR_OPTION_ID)) props.push(...infinityDoorProps(geometry, layout, false));

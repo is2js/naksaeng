@@ -74,7 +74,7 @@ describe('entry pantry open-end cabinet', () => {
         plans += 1;
       }
     }
-    expect(plans).toBe(8);
+    expect(plans).toBe(12); // 55A·55B·59A each expose A–D; 51A has no pantry option.
   });
 
   it('uses a compact local preview rendered from the corrected recipe', async () => {

@@ -198,7 +198,7 @@ function isFormTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('input, textarea, select, button, a[href], summary, [role="button"], [contenteditable]:not([contenteditable="false"])'));
 }
 
-const LASER_UI_SELECTOR = '.touch-controls,.touch-ghost-actions,.stage-tip,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.laser-reference-notice,.hotbar-tooltip,[role="tooltip"],.plan-experience-notice';
+const LASER_UI_SELECTOR = '.touch-controls,.touch-ghost-actions,.stage-tip,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.laser-reference-notice,.hotbar-tooltip,[role="tooltip"],.plan-experience-notice';
 
 function mapLabelShort(map: StaticMapEntry): string {
   return map.unitType || map.label.match(/\d+[A-Z]?/i)?.[0] || map.label;
@@ -714,6 +714,7 @@ export class ShowcaseApp {
                 <small>manifest와 chunk를 조합하고 있습니다</small>
               </div>
 
+              <div id="mobile-stage-options" class="mobile-stage-options" aria-label="선택 옵션: 탭하여 놀이터에서 보기" hidden></div>
               <div class="stage-bottom-left">
                 <div class="stage-tip" aria-label="인게임 단축키">
                   <span class="touch-tip"><b>조이스틱 이동 · 한 손가락 스크롤 · 두 손가락 지도 이동 · ＋/− 확대 · 실측</b></span>
@@ -1274,7 +1275,7 @@ export class ShowcaseApp {
         this.moveInspectionLaserGesture(event);
         return;
       }
-      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions')) return;
+      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       this.cursorScreenPoint = this.screenPoint(event.clientX, event.clientY);
       if (event.pointerType === 'touch') {
@@ -1292,7 +1293,7 @@ export class ShowcaseApp {
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       // HUD/팔레트 조작은 맵 선택 해제나 패닝보다 먼저 종료한다. 특히 좌하단
       // 옵션 chip을 pointerdown에서 다시 그리면 뒤따르는 click 자체가 사라진다.
-      if (target?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return;
+      if (target?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return;
       if (target?.closest('.istarpark-laser-toggle,.istarpark-laser-hud')) return;
       if (event.pointerType === 'touch' && !this.inspectionLaser.active && !this.interiorGhostProp) {
         this.mapPanStartX = event.clientX;
@@ -1318,7 +1319,7 @@ export class ShowcaseApp {
       if (point) this.activateSkill('common-teleport', point);
     }, { signal });
     stage.addEventListener('pointermove', (event) => {
-      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions')) return;
+      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       if (!this.inspectionLaser.active) this.handleInteriorPointerMove(event);
     }, { signal });
@@ -1563,23 +1564,29 @@ export class ShowcaseApp {
     const summary = this.get<HTMLElement>('.stage-bottom-left');
     const helpHost = this.get<HTMLElement>('#mobile-stage-help');
     const calculatorHost = this.get<HTMLElement>('#mobile-palette-calculator');
+    const mobileOptions = this.get<HTMLElement>('#mobile-stage-options');
+    const chips = this.get<HTMLElement>('#stage-option-chips');
     const calculatorButton = this.get<HTMLButtonElement>('#open-sale-calculator');
     const help = summary.querySelector<HTMLElement>('.stage-tip')!;
     const quote = summary.querySelector<HTMLElement>('.stage-option-quote')!;
     const quoteFooter = quote.querySelector<HTMLElement>('.stage-option-footer')!;
+    const quoteContent = quote.querySelector<HTMLElement>('.stage-option-content')!;
     const sync = (): void => {
       this.mobileLayout = media.matches;
       this.touchPad?.reset();
       helpHost.hidden = !this.mobileLayout;
       calculatorHost.hidden = !this.mobileLayout;
       quote.hidden = this.mobileLayout;
+      mobileOptions.hidden = !this.mobileLayout || this.selectedOptionIds.length === 0;
       if (this.mobileLayout) {
         helpHost.append(help);
+        mobileOptions.append(chips);
         // Move the existing button, preserving its single listener, enabled
         // state and modal contract. The desktop quote stays out of mobile UI.
         calculatorHost.append(calculatorButton);
       } else {
         summary.prepend(help);
+        quoteContent.prepend(chips);
         quoteFooter.append(calculatorButton);
       }
       if (this.mobileLayout && !this.cameraTrackingPaused && this.canTouchMove()) this.centerMobileActor();
@@ -2480,7 +2487,7 @@ export class ShowcaseApp {
 
   private scenePropAt(event: MouseEvent | PointerEvent): ApartmentInteriorProp | undefined {
     if (!this.threeRenderer || this.renderer !== this.threeRenderer) return undefined;
-    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return undefined;
+    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return undefined;
     const canvas = this.get<HTMLCanvasElement>('#three-world-canvas');
     const bounds = canvas.getBoundingClientRect();
     const propId = this.threeRenderer.pickEditorProp(event.clientX - bounds.left, event.clientY - bounds.top);
@@ -2575,7 +2582,7 @@ export class ShowcaseApp {
 
   private handleInteriorPointerDown(event: PointerEvent): boolean {
     if (!this.capabilities.canEditFurniture) return false;
-    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return false;
+    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return false;
     const apartment = this.activeApartment();
     if (!apartment) return false;
     const point = this.stageLocalPoint(event);
@@ -3561,6 +3568,7 @@ export class ShowcaseApp {
       ? selectedOptions.map((option) => `<span>${escapeHtml(option.label)}${isBundangMinusOption(option) ? ' · 감액 별도' : ''}</span>`).join('')
       : '<span>기본 마감</span>';
     this.get<HTMLElement>('#stage-option-count').textContent = `${selectedOptions.length}개`;
+    this.get<HTMLElement>('#mobile-stage-options').hidden = !this.mobileLayout || selectedOptions.length === 0;
     const stageOptionClear = this.get<HTMLButtonElement>('#stage-option-clear');
     stageOptionClear.hidden = selectedOptions.length === 0;
     stageOptionClear.disabled = this.readOnlyShare;

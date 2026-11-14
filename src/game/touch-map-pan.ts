@@ -11,7 +11,7 @@ export class TouchMapPan {
     signal: AbortSignal,
   ) {
     const allowed = (touch: Touch): boolean => touch.target instanceof Element
-      && !touch.target.closest('.touch-controls,.touch-ghost-actions,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.stage-tip');
+      && !touch.target.closest('.touch-controls,.touch-ghost-actions,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.stage-tip');
     const center = (touches: TouchList): { x: number; y: number } | null => {
       if (touches.length !== 2 || ![...touches].every(allowed)) return null;
       return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };

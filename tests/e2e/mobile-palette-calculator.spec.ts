@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 모달로 진입한다', async ({ page, context }) => {
-  test.setTimeout(90_000);
+test.use({ hasTouch: true });
+
+test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 합계 아래에만 남는다', async ({ page, context }) => {
+  test.setTimeout(process.env.CI ? 300_000 : 180_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
@@ -17,7 +19,12 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await page.goto('./?map=bundang-first-village-55a-prototype&variant=A');
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
   const button = page.locator('#open-sale-calculator');
+  const mobileOptions = page.locator('#mobile-stage-options');
+  const chips = page.locator('#stage-option-chips');
+  await chips.evaluate(element => { (element as HTMLElement).dataset.identityToken = 'same-chips'; });
   await expect(page.locator('.stage-option-quote')).toBeHidden();
+  await expect(mobileOptions).toBeHidden();
+  expect((await page.locator('#game-stage').boundingBox())!.height).toBeGreaterThanOrEqual(600);
   await expect(page.locator('#mobile-palette-calculator #open-sale-calculator')).toHaveCount(1);
   await expect(button).toBeEnabled(); // Basic finish still supports calculating.
   expect((await page.locator('#option-list').boundingBox())!.height).toBeGreaterThanOrEqual(350);
@@ -27,6 +34,33 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await page.locator('input[data-option-id="wide-plank-floor-finish"]').check({ force: true });
   await expect(page.locator('#option-selected-count')).toHaveText('1개');
   await expect(page.locator('#option-total')).toContainText('1,820,000');
+  await page.locator('[data-option-category="전체"]').click();
+  await page.locator('input[data-option-id="entry-pantry-system-shelf"]').check({ force: true });
+  await expect(mobileOptions).toBeVisible();
+  await expect(page.locator('#mobile-stage-options #stage-option-chips')).toHaveAttribute('data-identity-token', 'same-chips');
+  await expect(mobileOptions.locator('.stage-option-chip')).toHaveCount(2);
+  expect(await mobileOptions.innerText()).not.toMatch(/원|감액|×/);
+  await expect(mobileOptions.locator('em').first()).toBeHidden();
+  await expect(mobileOptions.locator('.stage-option-remove').first()).toBeHidden();
+  expect(await mobileOptions.locator('.stage-option-chip').nth(1).evaluate(element => getComputedStyle(element, '::before').content)).toContain('+');
+  const pantry = mobileOptions.locator('button[data-stage-option-select="entry-pantry-system-shelf"]');
+  await pantry.tap();
+  await expect(mobileOptions.locator('.stage-option-chip[data-stage-option-select="entry-pantry-system-shelf"]')).toHaveClass(/is-world-selected/);
+  await expect(page.locator('[data-option-card-id="entry-pantry-system-shelf"]')).toHaveClass(/is-world-linked/);
+  await expect(page.locator('#three-world-canvas')).toHaveAttribute('data-selected-editor-mask', 'rpg-gold');
+  const label = (await page.locator('#furniture-selection-toolbar').boundingBox())!;
+  const mapBounds = (await page.locator('#game-stage').boundingBox())!;
+  expect(label.x).toBeGreaterThanOrEqual(mapBounds.x);
+  expect(label.x + label.width).toBeLessThanOrEqual(mapBounds.x + mapBounds.width);
+  expect((await mobileOptions.boundingBox())!.y + (await mobileOptions.boundingBox())!.height)
+    .toBeLessThan((await page.locator('.touch-move-pad').boundingBox())!.y);
+  await page.locator('#touch-laser-toggle').tap();
+  await page.locator('#inspection-laser-point-mode').tap();
+  await pantry.tap();
+  await expect(page.locator('#inspection-laser-phase')).toHaveText('시작점');
+  await expect(page.locator('#three-world-canvas')).not.toHaveAttribute('data-inspection-laser-start-point', /.+/);
+  await page.locator('#touch-laser-toggle').tap();
+  await page.locator('#game-stage').screenshot({ path: 'test-results/mobile-option-names.png' });
   await page.locator('.option-panel').scrollIntoViewIfNeeded();
   const price = (await page.locator('.option-summary .quote-row').boundingBox())!;
   const cta = (await button.boundingBox())!;
@@ -44,12 +78,17 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: false });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('.stage-option-quote')).toBeVisible();
+  await expect(mobileOptions).toBeHidden();
+  await expect(page.locator('.stage-option-content #stage-option-chips')).toHaveAttribute('data-identity-token', 'same-chips');
+  await expect(chips.locator('em').first()).toBeVisible();
   await expect(page.locator('.stage-option-footer #open-sale-calculator')).toHaveAttribute('data-identity-token', 'same-cta');
   await expect(page.locator('#mobile-palette-calculator')).toBeHidden();
   await expect(page.locator('.option-storage-description')).toBeVisible();
   await expect(page.locator('.option-design-reference')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.stage-option-quote')).toBeHidden();
+  await expect(mobileOptions).toBeVisible();
+  await expect(page.locator('#mobile-stage-options #stage-option-chips')).toHaveAttribute('data-identity-token', 'same-chips');
   await expect(page.locator('#mobile-palette-calculator #open-sale-calculator')).toHaveAttribute('data-identity-token', 'same-cta');
   await expect(button).toHaveCount(1);
   await button.click();
@@ -59,7 +98,7 @@ test('모바일 계산기는 팔레트 고정 합계 아래에만 있고 기존 
   await page.locator('#sale-calculator-dialog button[value="confirm"]').click();
   await expect(page).toHaveURL(/\/calculator\/$/);
   const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('bunfirvil:sale-calculator:v1') || '{}'));
-  expect(saved.optionIds).toEqual(['wide-plank-floor-finish']);
+  expect(saved.optionIds.sort()).toEqual(['wide-plank-floor-finish', 'entry-pantry-system-shelf'].sort());
   expect(saved.applicantRoute).toBe('pre-subscription');
   expect(errors).toEqual([]);
 });

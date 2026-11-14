@@ -420,6 +420,69 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
     }
   });
 
+  it('전체 12개 평면에서 냉장고 맞은편 공용면을 연속 마감하되 다용도실 개구부와 냉장고·상판면은 유지한다', async () => {
+    const apartments = await apartmentsByUnit();
+    const expectedFaces: Record<string, { segment: string; center: [number, number]; normals: number[][] }> = {
+      '51A': { segment: 'bathroom-1-west', center: [6.438, 3.5], normals: [[0, -1], [0, -1], [-1, 0], [1, 0]] },
+      '55A': { segment: 'bathroom-1-east', center: [3.712, 3.5], normals: [[1, 0], [0, 1], [0, -1], [-1, 0]] },
+      '55B': { segment: 'bathroom-1-south', center: [4.825, 4.212], normals: [[1, 0], [0, 1]] },
+      '59A': { segment: 'bathroom-1-east', center: [3.712, 3.7], normals: [[1, 0], [-1, 0]] },
+    };
+    let checked = 0;
+    for (const [unitType, source] of apartments) {
+      const expected = expectedFaces[unitType];
+      if (!expected || !source.geometry) continue;
+      const geometry = structuredClone(source.geometry);
+      const original = structuredClone(geometry);
+      for (const [index, variant] of availablePlanVariants(unitType).entries()) {
+        const selected = optionProps(geometry, unitType, ['living-design-wall-panel'], [], variant);
+        const skins = selected.filter(prop => prop.sourceOptionId === 'living-design-wall-panel');
+        const matches = skins.filter(prop => prop.anchorWallSegmentId === expected.segment);
+        expect(matches, `${unitType}-${variant}:living-facing skin`).toHaveLength(1);
+        const skin = matches[0];
+        expect(skin.positionMeters?.[0]).toBeCloseTo(expected.center[0]);
+        expect(skin.positionMeters?.[1]).toBeCloseTo(expected.center[1]);
+        expect(skin.fixedOptionLayout).toBe(true);
+        expect(skin.measurementObstacle).toBe(false);
+        expect(skin.collisionMode).toBe('visual-only');
+        expect(skin.occlusionGroupId).toBe(`wall:${expected.segment}`);
+        const object = { ...source, transform: planVariantDefinition(unitType, variant).transform };
+        const wall = geometry.wallSegments!.find(value => (value as Record<string, unknown>).id === expected.segment) as Record<string, unknown>;
+        const a = wall.a as [number, number], b = wall.b as [number, number];
+        const middle = apartmentUnitWorldPoint(object, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+        const placed = apartmentPropPlacement(object, skin);
+        const dx = placed.center.x - middle.x, dy = placed.center.y - middle.y;
+        const distance = Math.hypot(dx, dy);
+        expect(dx / distance).toBeCloseTo(expected.normals[index][0]);
+        expect(dy / distance).toBeCloseTo(expected.normals[index][1]);
+        const utilitySide = unitType === '51A' ? 'west' : 'east';
+        const utility = skins.filter(prop => String(prop.anchorWallSegmentId).startsWith('utility-kitchen-'));
+        expect(utility.map(prop => prop.anchorWallSegmentId).sort()).toEqual(unitType === '55B' ? ['utility-kitchen-east-lintel']
+          : ['before', 'lintel', 'after'].map(part => `utility-kitchen-${utilitySide}-${part}`).sort());
+        for (const finish of utility) {
+          const segment = geometry.wallSegments!.find(value => (value as Record<string, unknown>).id === finish.anchorWallSegmentId) as Record<string, unknown>;
+          const start = segment.a as number[], end = segment.b as number[];
+          const sign = unitType === '51A' ? -1 : 1;
+          expect(finish.positionMeters?.[0]).toBeCloseTo((start[0] + end[0]) / 2 + sign * .112);
+          expect(finish.positionMeters?.[1]).toBeCloseTo((start[1] + end[1]) / 2);
+          expect(finish.mountHeightMeters).toBe(segment.baseMeters);
+          expect(Array.isArray(finish.dimensionsMeters) ? finish.dimensionsMeters[2] : undefined).toBe(segment.heightMeters);
+          if (String(finish.anchorWallSegmentId).endsWith('lintel')) {
+            expect(Number(finish.mountHeightMeters)).toBeGreaterThanOrEqual(2.1);
+          }
+        }
+        expect(skins.some(prop => /^pantry-west$|^kitchen-(?:north|east|west)/.test(String(prop.anchorWallSegmentId)))).toBe(false);
+        for (const ids of [[], [BUNDANG_MINUS_OPTION_PACKAGE_ID], [BUNDANG_MINUS_OPTION_PACKAGE_ID, 'living-design-wall-panel']]) {
+          const cleared = optionProps(geometry, unitType, ids, [], variant);
+          expect(cleared.some(prop => prop.anchorWallSegmentId === expected.segment || String(prop.anchorWallSegmentId).startsWith('utility-kitchen-'))).toBe(false);
+        }
+        checked++;
+      }
+      expect(geometry).toEqual(original);
+    }
+    expect(checked).toBe(12);
+  });
+
   it('전체 12개 평면의 TV벽은 기본 제공이며 마옵에서만 빠지고 유상면과 중복되지 않는다', async () => {
     const apartments = await apartmentsByUnit();
     let checked = 0;

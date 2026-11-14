@@ -2253,9 +2253,15 @@ export class ThreeWorldRenderer {
               : role === 'air-duct-rim'
                 ? this.material('#fafcf9', { roughness: .44, metalness: .04 })
           : role === 'cooktop-glass'
-            ? this.material('#192227', { roughness: .32, metalness: .06 })
+            ? new THREE.MeshPhysicalMaterial({
+                color: '#07090b', roughness: .23, metalness: .03,
+                // The fixed isometric view faces the sun's reflection lobe.
+                // Standard dielectric F0 made this black plate look grey;
+                // soften only its specular response, never the room lighting.
+                specularIntensity: .08, side: THREE.DoubleSide,
+              })
             : role === 'cooktop-zone-ring' || role === 'cooktop-control-line' || role === 'cooktop-control-mark'
-              ? this.material('#aebbbd', { roughness: .42, metalness: .18 })
+              ? this.material('#727f82', { roughness: .52, metalness: .10 })
               : role === 'cooktop-radiant-ring' || role === 'cooktop-control-led' || role === 'hood-display-led'
                 ? this.material('#d34a31', { roughness: .24, metalness: .06 })
                 : role === 'gas-cooktop-body' || role === 'gas-burner-rim' || role === 'gas-control-knob'

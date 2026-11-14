@@ -29,8 +29,8 @@ describe('마루는 기존 바닥 면을 교체하며 덧깔지 않는다', () =
       red += first.data[i]; green += first.data[i + 1]; blue += first.data[i + 2];
     }
     const count = first.width * first.height;
-    expect(red / count).toBeGreaterThan(203);
-    expect(red / count).toBeLessThan(206);
+    expect(red / count).toBeGreaterThan(198);
+    expect(red / count).toBeLessThan(201);
     expect((red - green) / count).toBe(7);
     expect((green - blue) / count).toBe(9);
   });

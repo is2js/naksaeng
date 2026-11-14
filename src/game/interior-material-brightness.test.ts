@@ -53,6 +53,31 @@ describe('밝은 실내 가구·가전 재질', () => {
     }
   });
 
+  it('유상 전기쿡탑3종은 불투명 near-black 유리판이며 기본가스는 은색판을 유지한다', () => {
+    const renderer = factory();
+    for (const id of ['electric-cooktop-erh-3903', 'induction-cooktop-bei3asb4bi', 'induction-cooktop-nz63b5056ak']) {
+      const asset = STRUCTURAL_PROP_ASSETS.find(asset => asset.assetId === id)!;
+      const source = JSON.stringify(asset);
+      const group = renderer.proceduralProp({ assetId: id, dimensionsMeters: asset.defaultDimensionsMeters }, asset) as THREE.Group;
+      const glass = materials(group, 'cooktop-glass');
+      expect(glass).toHaveLength(1);
+      expect(glass[0].color.getHexString()).toBe('07090b');
+      expect(glass[0]).toBeInstanceOf(THREE.MeshPhysicalMaterial);
+      expect((glass[0] as THREE.MeshPhysicalMaterial).specularIntensity).toBe(.08);
+      expect(glass[0].transparent).toBe(false);
+      expect(glass[0].opacity).toBe(1);
+      expect(glass[0].roughness).toBeGreaterThanOrEqual(.2);
+      expect(glass[0].roughness).toBeLessThanOrEqual(.25);
+      expect(glass[0].metalness).toBeLessThan(.1);
+      expect(materials(group, 'cooktop-zone-ring').every(material => material.color.getHexString() === '727f82')).toBe(true);
+      expect(JSON.stringify(asset)).toBe(source);
+    }
+    const gas = STRUCTURAL_PROP_ASSETS.find(asset => asset.assetId === 'bunfirvil-default-navien-magic-gas-cooktop-3')!;
+    const group = renderer.proceduralProp({ assetId: gas.assetId, dimensionsMeters: gas.defaultDimensionsMeters }, gas) as THREE.Group;
+    expect(materials(group, 'gas-cooktop-body')[0].color.getHexString()).toBe('d9e1df');
+    expect(materials(group, 'cooktop-glass')).toHaveLength(0);
+  });
+
   it('sRGB albedo 중복 tint를 없애고 전역 exposure는 승인값 그대로 유지한다', () => {
     const renderer = factory();
     const texture = new THREE.DataTexture(new Uint8Array([200, 200, 200, 255]), 1, 1);

@@ -127,7 +127,7 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
     const door = createBundangWallpaperMaterial(maps, 'common');
     const designMaps = createBundangDesignWallTextures();
     const design = createBundangDesignWallMaterial(designMaps);
-    expect(wall.color.getHexString()).toBe('7d8288');
+    expect(wall.color.getHexString()).toBe('84898e');
     expect(wall.userData.wallDisplayStyle).toBe(BUNDANG_STRUCTURE_WALL_STYLE.id);
     expect(wall.map).toBe(door.map);
     expect(wall.bumpMap).toBe(door.bumpMap);
@@ -139,7 +139,7 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
     expect(design.map).toBe(designMaps.albedo);
     const tint = new THREE.Color(BUNDANG_STRUCTURE_WALL_STYLE.tint);
     expect(tint.r).toBeLessThan(tint.b); // No brown cast.
-    expect(BUNDANG_STRUCTURE_WALL_STYLE.cap).toBe('#626a70');
+    expect(BUNDANG_STRUCTURE_WALL_STYLE.cap).toBe('#697177');
     expect(Buffer.compare(original, Buffer.from(maps.albedo.image.data as Uint8Array))).toBe(0);
     [wall, door, design].forEach(material => material.dispose());
     [maps, designMaps].forEach(set => Object.values(set).forEach(texture => texture.dispose()));

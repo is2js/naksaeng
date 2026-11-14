@@ -43,8 +43,8 @@ export const BUNDANG_WALLPAPER_PROFILES = Object.freeze({
 /** Playground readability, not a claim about the supplied wallpaper's colour. */
 export const BUNDANG_STRUCTURE_WALL_STYLE = Object.freeze({
   id: 'neutral-gray-structure-v1',
-  tint: '#7d8288',
-  cap: '#626a70',
+  tint: '#84898e',
+  cap: '#697177',
 });
 
 export function bundangWallpaperKindAt(geometry: ApartmentGeometry, position: NumericPoint): BundangWallpaperKind {

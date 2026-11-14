@@ -493,7 +493,11 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
       const geometry = structuredClone(source.geometry!);
       const original = structuredClone(geometry);
       const layout = BUNDANG_OPTION_LAYOUTS[unitType as keyof typeof BUNDANG_OPTION_LAYOUTS];
-      const expected = layout.designWallRuns.filter(run => run.baseProvided).flatMap(run => run.segmentIds).sort();
+      // The local 55B v2 header is absent from the immutable source fixture.
+      // Only faces owned by this geometry can receive a finish.
+      const wallIdsInGeometry = new Set(geometry.wallSegments!.map(wall => wall.id));
+      const expected = layout.designWallRuns.filter(run => run.baseProvided).flatMap(run => run.segmentIds)
+        .filter(id => wallIdsInGeometry.has(id)).sort();
       const defaults = optionProps(geometry, unitType, [], [], variant);
       const base = defaults.filter(prop => prop.baseProvided === true);
       expect(base.map(prop => prop.anchorWallSegmentId).sort(), `${unitType}-${variant}`).toEqual(expected);

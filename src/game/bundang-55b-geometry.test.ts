@@ -5,7 +5,7 @@ import { apartmentUnitWorldPoint } from './apartment-transform';
 import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
 import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
 import { bundangMeasuredDimensions, resolveBundangMeasuredDimension } from './bundang-measured-dimensions';
-import { bundang55BEntryOptionProps } from './bundang-option-layout';
+import { bundang55BEntryOptionProps, bundangDesignWallProps, BUNDANG_DESIGN_WALL_MATERIAL_ID } from './bundang-option-layout';
 import { applyPlanVariant } from './plan-variants';
 import { readBundangPrototypeApartments } from './test-support/bundang-prototypes';
 import { STRUCTURAL_PROP_ASSETS } from './three-world';
@@ -66,6 +66,9 @@ describe('55B v2 canonical reconstruction', () => {
     expect(entry[2] - entry[0]).toBeCloseTo(1.50, 8);
     expect(pantry[2] - pantry[0]).toBeCloseTo(1.00, 8);
     expect((apartment.geometry!.geometryProvenance as Row).inferredEntryToleranceMeters).toBe(.05);
+    const finish = bundangDesignWallProps(apartment.geometry!, '55B', []);
+    expect(finish.find(prop => prop.anchorWallSegmentId === 'bedroom-1-south-lintel'))
+      .toMatchObject({ materialVariantId: BUNDANG_DESIGN_WALL_MATERIAL_ID, baseProvided: true, mountHeightMeters: 2.1 });
   });
 
   it('has a single shared wet-wall owner with positive, orthogonal source geometry', () => {

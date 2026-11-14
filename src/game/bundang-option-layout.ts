@@ -358,7 +358,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
     },
     designWallRuns: [
       { id: 'living-west', roomZoneId: 'living', segmentIds: ['outer-west-living-before', 'outer-west-living-sill', 'outer-west-living-lintel', 'outer-west-living-after'], interiorNormal: [1, 0] },
-      { id: 'living-north', roomZoneId: 'living', segmentIds: ['bedroom-1-south'], interiorNormal: [0, 1], baseProvided: true },
+      { id: 'living-north', roomZoneId: 'living', segmentIds: ['bedroom-1-south', 'bedroom-1-south-lintel'], interiorNormal: [0, 1], baseProvided: true },
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outdoor-unit-north', 'utility-north'], interiorNormal: [0, -1] },
       { id: 'living-kitchen-return', roomZoneId: 'living', segmentIds: ['utility-kitchen-east-lintel'], interiorNormal: [1, 0] },
       { id: 'corridor-north', roomZoneId: 'entry', segmentIds: ['bathroom-1-south', 'pantry-south', 'bathroom-2-entry-return'], interiorNormal: [0, 1] },

@@ -2576,7 +2576,7 @@ export class ShowcaseApp {
 
   private clearSceneSelection(): void {
     this.pendingSceneSelection = null;
-    cancelAnimationFrame(this.optionFocusFrame);
+    if (this.optionFocusFrame) cancelAnimationFrame(this.optionFocusFrame);
     this.optionFocusFrame = 0;
     const hadSelection = Boolean(this.selectedLocalPropId || this.selectedStageOptionId
       || this.selectedScenePropSnapshot || this.furnitureContextMenuOpen

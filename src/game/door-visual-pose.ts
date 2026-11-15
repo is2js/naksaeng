@@ -30,6 +30,29 @@ export function bundangServiceDoorInwardNormalWorld(
   return length > 1e-7 ? [dx / length, dy / length] : null;
 }
 
+/** The service leaf is hung on the living-room-side jamb. Choose in canonical
+ * metres, not screen space, so A–D mirrors preserve the physical wall side.
+ * Opening metadata remains source evidence; only the displayed leaf changes. */
+export function doorVisualHingeEndpoint(
+  object: WorldObject, opening: Record<string, unknown>,
+): 'a' | 'b' {
+  const authored = opening.hingeEndpoint === 'a' ? 'a' : 'b';
+  if (!bundangServiceDoorInwardNormalWorld(object, opening)) return authored;
+  const room = object.geometry?.roomZones?.find(room => room.id === 'living');
+  const bounds = room?.boundsMeters, a = opening.a, b = opening.b;
+  if (!Array.isArray(bounds) || bounds.length !== 4 || !bounds.every(Number.isFinite)
+    || bounds[2] <= bounds[0] || bounds[3] <= bounds[1]
+    || !Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2
+    || ![...a.slice(0, 2), ...b.slice(0, 2)].every(Number.isFinite)) return authored;
+  const dx = Number(b[0]) - Number(a[0]), dy = Number(b[1]) - Number(a[1]);
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-7) return authored;
+  const towardLiving = (((bounds[0] + bounds[2]) - (Number(a[0]) + Number(b[0]))) * dx
+    + ((bounds[1] + bounds[3]) - (Number(a[1]) + Number(b[1]))) * dy) / (2 * length);
+  if (Math.abs(towardLiving) <= 1e-7) return authored;
+  return towardLiving > 0 ? 'b' : 'a';
+}
+
 /** The signed angle is world-space; a mirror changes handedness. Untargeted
  * doors retain their accepted index-based pose, including double pantry leaves. */
 export function doorVisualSwingAngleDeg(

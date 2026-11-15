@@ -5,7 +5,7 @@ import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
 import { createEntrySlidingPanel, createEntrySlidingRail } from './entry-partition-model';
-import { bundangServiceDoorInwardNormalWorld, doorVisualSwingAngleDeg } from './door-visual-pose';
+import { bundangServiceDoorInwardNormalWorld, doorVisualHingeEndpoint, doorVisualSwingAngleDeg } from './door-visual-pose';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -1973,9 +1973,11 @@ export class ThreeWorldRenderer {
     const thickness = Math.max(0.04, finite(opening.leafThicknessMeters, 0.045) / cellSize);
     const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
     const inwardNormal = bundangServiceDoorInwardNormalWorld(object, opening);
+    const hingeEndpoint = doorVisualHingeEndpoint(object, opening);
     for (let index = 0; index < leafCount; index += 1) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, height, thickness), this.material('#b8afa3', { roughness: 0.68 }));
-      const hinge = leafCount > 1 ? (index === 0 ? start : end) : String(opening.hingeEndpoint || 'b') === 'a' ? start : end;
+      const hingeAtStart = leafCount > 1 ? index === 0 : hingeEndpoint === 'a';
+      const hinge = hingeAtStart ? start : end;
       const handle = leafCount > 1 ? center : hinge === start ? end : start;
       const closed = new THREE.Vector2((handle.x - hinge.x) * widthScale, (handle.z - hinge.z) * widthScale);
       let opened = closed.clone();
@@ -1989,6 +1991,7 @@ export class ThreeWorldRenderer {
       panel.castShadow = false;
       panel.receiveShadow = false;
       panel.userData.doorOpeningId = String(opening.id || '');
+      panel.userData.doorHingeEndpoint = hingeAtStart ? 'a' : 'b';
       if (inwardNormal) panel.userData.doorSwingDirection = 'inward';
       this.structureRoot.add(panel);
     }

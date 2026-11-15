@@ -17,9 +17,9 @@ export interface FinishThemeControlsOptions {
 }
 
 const MATERIALS = [
-  { key: 'wall', label: '벽', icon: '<rect x="3" y="3" width="12" height="12" rx="1"/><path d="M7 3v12M11 3v12"/>' },
-  { key: 'cap', label: '벽 단면', icon: '<path d="M2 5h14v4H2zM4 9v5h10V9"/>' },
-  { key: 'floor', label: '마루', icon: '<path d="m2 11 7-6 7 6-7 4zM6 8l7 5M10 6l-7 7"/>' },
+  { key: 'wall', label: '벽' },
+  { key: 'cap', label: '벽 단면' },
+  { key: 'floor', label: '마루' },
 ] as const;
 
 interface BackdropTap {
@@ -56,7 +56,6 @@ export class FinishThemeControls {
     this.root.innerHTML = `<div class="finish-theme-legend">
       <p class="finish-theme-legend-heading"><span>화면 색감</span><b></b></p>
       <ul class="finish-theme-materials" aria-label="마감 색상 범례">${MATERIALS.map(material => `<li>
-        <svg class="finish-theme-material-icon" viewBox="0 0 18 18" aria-hidden="true" focusable="false">${material.icon}</svg>
         <i class="finish-theme-material-swatch finish-theme-swatch" data-finish-material="${material.key}" aria-hidden="true"></i>
         <span>${material.label}</span>
       </li>`).join('')}</ul>

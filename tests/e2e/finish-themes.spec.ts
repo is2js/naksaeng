@@ -53,7 +53,15 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await expect(stage).toHaveAttribute('data-access-role', 'public');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'stone-greige');
   await expect(legend.locator('.finish-theme-swatch')).toHaveCount(3);
-  for (const swatch of await legend.locator('.finish-theme-swatch').all()) await expect(swatch).toBeVisible();
+  await expect(legend.locator('svg')).toHaveCount(0);
+  for (const swatch of await legend.locator('.finish-theme-swatch').all()) {
+    await expect(swatch).toBeVisible();
+    await expect(swatch).toHaveCSS('width', '13px');
+    await expect(swatch).toHaveCSS('height', '13px');
+  }
+  await expect(legend.locator('[data-finish-material="wall"]')).not.toHaveCSS('background-image', 'none');
+  await expect(legend.locator('[data-finish-material="cap"]')).toHaveCSS('background-image', 'none');
+  await expect(legend.locator('[data-finish-material="floor"]')).not.toHaveCSS('background-image', 'none');
   await expect(picker).toHaveCount(0);
   await expect(dialog).toHaveCount(0);
 
@@ -80,7 +88,13 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(legend).toBeVisible();
-  for (const swatch of await legend.locator('.finish-theme-swatch').all()) await expect(swatch).toBeHidden();
+  await expect(legend.locator('svg')).toHaveCount(0);
+  for (const swatch of await legend.locator('.finish-theme-swatch').all()) {
+    await expect(swatch).toBeVisible();
+    await expect(swatch).toHaveCSS('width', '10px');
+    await expect(swatch).toHaveCSS('height', '10px');
+    await expect(swatch).toHaveCSS('filter', 'grayscale(1)');
+  }
   expect(await legend.innerText()).not.toMatch(/#[0-9a-f]{6}|rgb\s*\(/i);
   const stageBox = (await stage.boundingBox())!;
   const controlsBox = (await controls.boundingBox())!;

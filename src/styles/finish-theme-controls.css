@@ -34,8 +34,18 @@
 .finish-theme-legend-heading > b { overflow: hidden; color: #e0eee9; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .finish-theme-materials { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .finish-theme-materials > li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; }
-.finish-theme-material-swatch { width: 13px; height: 13px; flex: 0 0 13px; box-sizing: border-box; border: 1px solid rgb(255 255 255 / .35); border-radius: 3px; }
-.finish-theme-material-icon { display: none; width: 14px; height: 14px; flex: 0 0 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.finish-theme-material-swatch { display: inline-block; width: 13px; height: 13px; flex: 0 0 13px; box-sizing: border-box; border: 1px solid rgb(255 255 255 / .35); border-radius: 2px; }
+/* Small material samples, not pictograms: wallpaper weave, smooth cut face,
+   and fine wood grain. These cues do not change any scene material. */
+.finish-theme-material-swatch[data-finish-material="wall"] {
+  background-image: repeating-linear-gradient(0deg, rgb(255 255 255 / .13) 0 .5px, transparent .5px 2px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / .08) 0 .5px, transparent .5px 2px);
+}
+.finish-theme-material-swatch[data-finish-material="floor"] {
+  background-image: repeating-linear-gradient(92deg, rgb(255 255 255 / .15) 0 .5px, transparent .5px 2px,
+    rgb(0 0 0 / .1) 2px 2.5px, transparent 2.5px 4px),
+    linear-gradient(0deg, transparent 45%, rgb(0 0 0 / .16) 46% 49%, transparent 50%);
+}
 .finish-theme-picker, .finish-theme-close {
   box-sizing: border-box;
   display: inline-flex;
@@ -126,10 +136,10 @@
     font-size: 10px;
   }
   .game-stage[data-istarpark-laser-active="true"] .finish-theme-controls { --finish-controls-top: 128px; }
-  .finish-theme-legend-heading, .finish-theme-material-swatch { display: none; }
+  .finish-theme-legend-heading { display: none; }
+  .finish-theme-material-swatch { width: 10px; height: 10px; flex-basis: 10px; filter: grayscale(1); }
   .finish-theme-materials { flex-wrap: wrap; justify-content: space-between; gap: 4px 7px; }
   .finish-theme-materials > li { gap: 3px; }
-  .finish-theme-material-icon { display: block; width: 12px; height: 12px; flex-basis: 12px; }
   .finish-theme-picker { width: 100%; min-height: 44px; padding: 5px 8px; border-color: rgb(199 213 208 / .3); background: rgb(221 232 226 / .07); color: #dce5e1; font-size: 11px; }
   .finish-theme-picker:hover { border-color: #b9ccc3; background: rgb(221 232 226 / .12); color: #fff; }
   .finish-theme-dialog { padding: 10px; }

@@ -15,7 +15,10 @@ async function expectNameOnActor(actor: Locator, nickname: string): Promise<void
 }
 
 test('authenticated nickname remains literal across appearances, transformation, and reload', async ({ page, context }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(process.env.CI ? 180_000 : 120_000);
+  // Software WebGL can block DOM evaluation beyond Playwright's default 5s.
+  // Keep exact coordinate equality; only bound CI's observation wait to 30s.
+  const positionWait = { timeout: process.env.CI ? 30_000 : 5_000 };
   // HTML-looking text exercises display escaping without executing script.
   const nickname = '이웃<b>님</b>';
   await context.addInitScript((name) => {
@@ -43,7 +46,7 @@ test('authenticated nickname remains literal across appearances, transformation,
   const startPosition = await man.evaluate(element => [element.dataset.worldX, element.dataset.worldY]);
   await genderToggle.click();
   await expect(woman).toBeVisible();
-  await expect.poll(() => woman.evaluate(element => [element.dataset.worldX, element.dataset.worldY])).toEqual(startPosition);
+  await expect.poll(() => woman.evaluate(element => [element.dataset.worldX, element.dataset.worldY]), positionWait).toEqual(startPosition);
   await page.mouse.move(1, 1);
   await expectNameOnActor(woman, nickname);
   await expect(woman.locator('.actor-name b')).toHaveCount(0);
@@ -56,7 +59,7 @@ test('authenticated nickname remains literal across appearances, transformation,
   const returnPosition = await woman.evaluate(element => [element.dataset.worldX, element.dataset.worldY]);
   await genderToggle.click();
   await expect(man).toBeVisible();
-  await expect.poll(() => man.evaluate(element => [element.dataset.worldX, element.dataset.worldY])).toEqual(returnPosition);
+  await expect.poll(() => man.evaluate(element => [element.dataset.worldX, element.dataset.worldY]), positionWait).toEqual(returnPosition);
   await page.mouse.move(1, 1);
   await expectNameOnActor(man, nickname);
 

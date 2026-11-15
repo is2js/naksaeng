@@ -27,6 +27,7 @@ import {
   synchronizeBundangMinusOptionGeometryState,
 } from './bundang-option-layout';
 import { associateOptionSources } from './option-prop-selection';
+import { BUNDANG_DEFAULT_FINISH_THEME_ID, resolveBundangFinishTheme, type BundangFinishThemeId } from './bundang-finish-theme';
 import { bundangKitchenWallFinishSurfaces, isBundangKitchenStonePart, isBundangKitchenWallFinishSelectionProxy } from './bundang-kitchen-finish';
 import {
   applyBundangKitchenStoneMetricUVs,
@@ -41,6 +42,7 @@ import {
   bundangFloorFinish,
   createBundangFloorSelectionSurface,
   createBundangWoodFloorTexture,
+  retintBundangWoodFloorTexture,
   WIDE_PLANK_FLOOR_OPTION_ID,
 } from './bundang-floor-finish';
 import {
@@ -64,6 +66,7 @@ import {
   createBundangDesignWallTextures,
   createBundangWallpaperMaterial,
   createBundangStructuralWallMaterial,
+  createBundangStructuralCapMaterial,
   BUNDANG_STRUCTURE_WALL_STYLE,
   createBundangWallpaperTextures,
   createBundangWallFinishSelectionSurface,
@@ -770,6 +773,7 @@ export class ThreeWorldRenderer {
   private readonly renderedProps = new Map<string, ApartmentInteriorProp>();
   private readonly textureCache = new Map<string, THREE.Texture>();
   private readonly woodFloorTexture = createBundangWoodFloorTexture();
+  private finishThemeId: BundangFinishThemeId = BUNDANG_DEFAULT_FINISH_THEME_ID;
   private readonly designWallTextures = createBundangDesignWallTextures();
   private readonly kitchenStoneTextures = createBundangKitchenStoneTextures();
   private readonly serviceFloorTextures = { entry: createBundangServiceFloorTextures('entry'), utility: createBundangServiceFloorTextures('utility') };
@@ -808,6 +812,7 @@ export class ThreeWorldRenderer {
     private readonly renderAssets?: ShowcaseRenderAssets,
     private readonly onAssetLoaded: () => void = () => undefined,
   ) {
+    this.canvas.dataset.finishTheme = this.finishThemeId;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -855,6 +860,26 @@ export class ThreeWorldRenderer {
     });
     this.resize();
     this.updateCamera();
+  }
+
+  /** Display colours only: preserve all meshes, props, UVs and fade materials. */
+  setFinishTheme(id: string): void {
+    const theme = resolveBundangFinishTheme(id);
+    this.finishThemeId = theme.id;
+    this.canvas.dataset.finishTheme = theme.id;
+    const visited = new Set<THREE.Material>();
+    this.structureRoot.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        if (visited.has(material)) continue;
+        visited.add(material);
+        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        if (material.userData.wallDisplayStyle === BUNDANG_STRUCTURE_WALL_STYLE.id) material.color.set(theme.wall);
+        else if (material.userData.wallCapDisplayStyle === BUNDANG_STRUCTURE_WALL_STYLE.id) material.color.set(theme.cap);
+      }
+    });
+    retintBundangWoodFloorTexture(this.woodFloorTexture, theme.floorBase);
   }
 
   setSelectedOptions(optionIds: string[]): void {
@@ -1608,6 +1633,8 @@ export class ThreeWorldRenderer {
 
   private buildApartment(object: WorldObject): void {
     const geometry = object.geometry as ApartmentGeometry;
+    const finishTheme = resolveBundangFinishTheme(this.finishThemeId);
+    this.canvas.dataset.finishTheme = finishTheme.id;
     // Keep the transient option-derived geometry view in sync for the editor
     // placement and laser modules. The source geometry and saved local layout
     // remain unchanged, so deselection restores all base elements.
@@ -1741,8 +1768,8 @@ export class ThreeWorldRenderer {
       blockGeometry.rotateX(Math.PI / 2);
       blockGeometry.translate(0, height, 0);
       const mesh = new THREE.Mesh(blockGeometry, [
-        this.material(BUNDANG_STRUCTURE_WALL_STYLE.cap, { roughness: .96, metalness: 0 }),
-        createBundangStructuralWallMaterial(this.wallpaperTextures.common, 'common', 1, cellSize),
+        createBundangStructuralCapMaterial(1, finishTheme),
+        createBundangStructuralWallMaterial(this.wallpaperTextures.common, 'common', 1, cellSize, finishTheme),
       ]);
       applyBundangSurfaceMetricUVs(blockGeometry, mesh.matrix, object, this.world || { width: 64, height: 64 },
         BUNDANG_WALLPAPER_PROFILES.common.textureRepeatMeters);
@@ -1802,10 +1829,10 @@ export class ThreeWorldRenderer {
       const kindAtSide = (sign: number) => bundangWallpaperKindAt(geometry,
         [midpointLocal.x + normal[0] * probeOffset * sign, midpointLocal.y + normal[1] * probeOffset * sign]);
       const positiveKind = kindAtSide(1), negativeKind = kindAtSide(-1);
-      const cap = this.material(BUNDANG_STRUCTURE_WALL_STYLE.cap, { roughness: .96, metalness: 0, opacity });
-      const positiveMaterial = createBundangStructuralWallMaterial(this.wallpaperTextures[positiveKind], positiveKind, opacity, cellSize);
+      const cap = createBundangStructuralCapMaterial(opacity, finishTheme);
+      const positiveMaterial = createBundangStructuralWallMaterial(this.wallpaperTextures[positiveKind], positiveKind, opacity, cellSize, finishTheme);
       const negativeMaterial = positiveKind === negativeKind ? positiveMaterial
-        : createBundangStructuralWallMaterial(this.wallpaperTextures[negativeKind], negativeKind, opacity, cellSize);
+        : createBundangStructuralWallMaterial(this.wallpaperTextures[negativeKind], negativeKind, opacity, cellSize, finishTheme);
       const materials = Array<THREE.Material>(6).fill(cap);
       const positiveFace = bundangWallFaceMaterialIndex(object, ends[0], ends[1], normal);
       materials[positiveFace] = positiveMaterial;

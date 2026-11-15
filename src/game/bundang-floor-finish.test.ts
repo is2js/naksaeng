@@ -4,7 +4,9 @@ import { apartmentUnitWorldPoint } from './apartment-transform';
 import {
   applyBundangFloorUVs, BUNDANG_FLOOR_PROFILES, BUNDANG_FLOOR_SURFACE_Y,
   bundangFloorFinish, bundangWoodFloorPixels, createBundangFloorSelectionSurface,
+  createBundangWoodFloorTexture, retintBundangWoodFloorTexture,
 } from './bundang-floor-finish';
+import { BUNDANG_FINISH_THEMES, resolveBundangFinishTheme } from './bundang-finish-theme';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
 import type { WorldObject } from './types';
 
@@ -32,7 +34,32 @@ describe('마루는 기존 바닥 면을 교체하며 덧깔지 않는다', () =
     expect(red / count).toBeGreaterThan(198);
     expect(red / count).toBeLessThan(201);
     expect((red - green) / count).toBe(7);
-    expect((green - blue) / count).toBe(9);
+    expect((green - blue) / count).toBe(10);
+  });
+
+  it('기본 1순위는 원래 마루에 RGB [1,1,0]만 더하고 모든 테마는 같은 결·이음매·알파를 유지한다', () => {
+    const original = bundangWoodFloorPixels([200, 193, 184]);
+    const texture = createBundangWoodFloorTexture();
+    const image = texture.image, data = texture.image.data as Uint8Array;
+    const initial = data.slice();
+    const sampler = { colorSpace: texture.colorSpace, wrapS: texture.wrapS, wrapT: texture.wrapT,
+      magFilter: texture.magFilter, minFilter: texture.minFilter, anisotropy: texture.anisotropy,
+      generateMipmaps: texture.generateMipmaps, repeat: texture.repeat.toArray(), offset: texture.offset.toArray() };
+    for (let i = 0; i < original.data.length; i += 4) { original.data[i]++; original.data[i + 1]++; }
+    expect(Buffer.compare(data, original.data)).toBe(0);
+    // Multiple cycles and a return to default must be byte-exact, with no drift.
+    for (const theme of [...BUNDANG_FINISH_THEMES, ...[...BUNDANG_FINISH_THEMES].reverse(), resolveBundangFinishTheme(undefined)]) {
+      const expected = bundangWoodFloorPixels(theme.floorBase);
+      retintBundangWoodFloorTexture(texture, theme.floorBase);
+      expect(texture.image).toBe(image);
+      expect(texture.image.data).toBe(data);
+      expect(Buffer.compare(data, expected.data)).toBe(0);
+      expect({ colorSpace: texture.colorSpace, wrapS: texture.wrapS, wrapT: texture.wrapT,
+        magFilter: texture.magFilter, minFilter: texture.minFilter, anisotropy: texture.anisotropy,
+        generateMipmaps: texture.generateMipmaps, repeat: texture.repeat.toArray(), offset: texture.offset.toArray() }).toEqual(sampler);
+    }
+    expect(Buffer.compare(data, initial)).toBe(0);
+    texture.dispose();
   });
 
   it('선택 프록시는 옆면·두께 없는 평면이며 보이는 두 번째 바닥을 그리지 않는다', () => {

@@ -26,6 +26,7 @@ import { interpolateCellTravel, MovementInputIntent, screenDirection, screenVect
 import { FrameMetrics } from './metrics';
 import { FloorPlanMinimap } from './floorplan-minimap';
 import { FloorplanReferenceDialog } from './floorplan-reference-dialog';
+import { FinishThemeControls } from './finish-theme-controls';
 import { highlightedMessageParts } from './highlighted-message';
 import { interiorSelectionName } from './interior-selection-name';
 import { optionPropsForSelection, optionSourceIdForProp } from './option-prop-selection';
@@ -198,7 +199,7 @@ function isFormTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('input, textarea, select, button, a[href], summary, [role="button"], [contenteditable]:not([contenteditable="false"])'));
 }
 
-const LASER_UI_SELECTOR = '.touch-controls,.touch-ghost-actions,.stage-tip,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.laser-reference-notice,.hotbar-tooltip,[role="tooltip"],.plan-experience-notice';
+const LASER_UI_SELECTOR = '.touch-controls,.touch-ghost-actions,.stage-tip,.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.istarpark-laser-toggle,.istarpark-laser-hud,.laser-reference-notice,.hotbar-tooltip,[role="tooltip"],.plan-experience-notice,.finish-theme-controls';
 
 function mapLabelShort(map: StaticMapEntry): string {
   return map.unitType || map.label.match(/\d+[A-Z]?/i)?.[0] || map.label;
@@ -305,6 +306,7 @@ export class ShowcaseApp {
   private shareToken = '';
   private sharedState: BundangReadOnlyShareV1 | null = null;
   private authenticatedNickname = '';
+  private finishThemeControls: FinishThemeControls | null = null;
   private readonly laserReferenceNotice = new LaserReferenceNotice(
     () => this.mount.querySelector<HTMLElement>('#game-stage'), () => this.mobileLayout,
   );
@@ -460,6 +462,28 @@ export class ShowcaseApp {
       console.warn('[bunfirvil] WebGL unavailable; Canvas2D renderer stays active.', error);
       this.threeRenderer = null;
     }
+    this.finishThemeControls = new FinishThemeControls({
+      stage: this.get<HTMLElement>('#game-stage'),
+      dialogHost: this.mount,
+      canChoose: this.capabilities.canChooseFinishTheme && Boolean(this.threeRenderer),
+      beforeOpen: () => {
+        this.releaseGuideMovement();
+        this.touchMapPan?.reset();
+        this.cancelInspectionLaserGesture();
+        this.clearInspectionLaserPointer();
+        this.pendingSceneSelection = null;
+        const stage = this.get<HTMLElement>('#game-stage');
+        if (this.mapPanPointer >= 0 && stage.hasPointerCapture(this.mapPanPointer)) stage.releasePointerCapture(this.mapPanPointer);
+        this.mapPanPointer = -1;
+        this.mapPanMoved = false;
+        stage.classList.remove('is-panning');
+      },
+      afterClose: () => {
+        if (this.destroyed) return;
+        this.releaseGuideMovement();
+      },
+      onChange: id => this.threeRenderer?.setFinishTheme(id),
+    });
     if (!this.readOnlyShare) await this.loadInteriorAssets();
     this.renderFurniturePalette();
     this.createActors();
@@ -488,6 +512,7 @@ export class ShowcaseApp {
     this.stopInspectionLaser('destroy');
     this.laserReferenceNotice.destroy();
     this.floorplanReferenceDialog?.destroy();
+    this.finishThemeControls?.destroy();
     this.cancelInteriorGhost('', false);
     this.abortController.abort();
     cancelAnimationFrame(this.animationFrame);
@@ -1275,7 +1300,7 @@ export class ShowcaseApp {
         this.moveInspectionLaserGesture(event);
         return;
       }
-      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options')) return;
+      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options,.finish-theme-controls')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       this.cursorScreenPoint = this.screenPoint(event.clientX, event.clientY);
       if (event.pointerType === 'touch') {
@@ -1293,7 +1318,7 @@ export class ShowcaseApp {
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       // HUD/팔레트 조작은 맵 선택 해제나 패닝보다 먼저 종료한다. 특히 좌하단
       // 옵션 chip을 pointerdown에서 다시 그리면 뒤따르는 click 자체가 사라진다.
-      if (target?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return;
+      if (target?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.finish-theme-controls')) return;
       if (target?.closest('.istarpark-laser-toggle,.istarpark-laser-hud')) return;
       if (event.pointerType === 'touch' && !this.inspectionLaser.active && !this.interiorGhostProp) {
         this.mapPanStartX = event.clientX;
@@ -1319,7 +1344,7 @@ export class ShowcaseApp {
       if (point) this.activateSkill('common-teleport', point);
     }, { signal });
     stage.addEventListener('pointermove', (event) => {
-      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options')) return;
+      if ((event.target as Element)?.closest('.touch-controls,.touch-ghost-actions,.mobile-stage-options,.finish-theme-controls')) return;
       if (event.pointerType === 'touch' && !event.isPrimary) return;
       if (!this.inspectionLaser.active) this.handleInteriorPointerMove(event);
     }, { signal });
@@ -1353,6 +1378,7 @@ export class ShowcaseApp {
       this.finishMapPan(event, true);
     }, { signal });
     stage.addEventListener('wheel', (event) => {
+      if ((event.target as Element)?.closest('.finish-theme-controls')) return;
       if (this.inspectionLaser.active && event.shiftKey) {
         event.preventDefault();
         this.handleInspectionLaserWheel(event);
@@ -1382,7 +1408,7 @@ export class ShowcaseApp {
     window.addEventListener('contextmenu', (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.closest('#game-stage')) return;
-      if (target.closest('.laser-reference-notice')) return;
+      if (target.closest('.laser-reference-notice,.finish-theme-controls')) return;
       // 캡처 단계에서 차단해 자식 UI가 이벤트를 가로채도 Chrome 기본 메뉴가 열리지 않는다.
       event.preventDefault();
       if (this.inspectionLaser.active) return;
@@ -2487,7 +2513,7 @@ export class ShowcaseApp {
 
   private scenePropAt(event: MouseEvent | PointerEvent): ApartmentInteriorProp | undefined {
     if (!this.threeRenderer || this.renderer !== this.threeRenderer) return undefined;
-    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return undefined;
+    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.finish-theme-controls')) return undefined;
     const canvas = this.get<HTMLCanvasElement>('#three-world-canvas');
     const bounds = canvas.getBoundingClientRect();
     const propId = this.threeRenderer.pickEditorProp(event.clientX - bounds.left, event.clientY - bounds.top);
@@ -2582,7 +2608,7 @@ export class ShowcaseApp {
 
   private handleInteriorPointerDown(event: PointerEvent): boolean {
     if (!this.capabilities.canEditFurniture) return false;
-    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar')) return false;
+    if ((event.target as HTMLElement | null)?.closest('.combat-dock,.map-identity,.floorplan-minimap,.stage-option-quote,.mobile-stage-options,.game-toast,.stage-zoom,.furniture-selection-toolbar,.finish-theme-controls')) return false;
     const apartment = this.activeApartment();
     if (!apartment) return false;
     const point = this.stageLocalPoint(event);

@@ -4,6 +4,7 @@ export interface PlaygroundCapabilities {
   canEditFurniture: boolean;
   canSwitchPlan: boolean;
   canTransform: boolean;
+  canChooseFinishTheme: boolean;
   isOperator: boolean;
 }
 
@@ -17,6 +18,7 @@ export function playgroundCapabilities(
     canEditFurniture: memberTools,
     canSwitchPlan: memberTools,
     canTransform: memberTools,
+    canChooseFinishTheme: memberTools,
     isOperator: role === 'operator',
   };
 }

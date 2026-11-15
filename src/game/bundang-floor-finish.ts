@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { apartmentWorldPointToLocalMeters } from './apartment-transform';
+import { resolveBundangFinishTheme, type BundangFloorColor } from './bundang-finish-theme';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
 import type { WorldObject } from './types';
 
@@ -24,12 +25,11 @@ export function bundangFloorFinish(selectedIds: Iterable<string>): BundangFloorF
   return ids.has(WIDE_PLANK_FLOOR_OPTION_ID) && !ids.has(BUNDANG_MINUS_OPTION_ID) ? 'wide' : 'standard';
 }
 
-/** A shared restrained greige palette, with staggered joints and fine oak grain. */
-export function bundangWoodFloorPixels(): { data: Uint8Array; width: number; height: number } {
+/** A shared wood grain/joint pattern; only its display colour is selectable. */
+export function bundangWoodFloorPixels(base: BundangFloorColor = resolveBundangFinishTheme(undefined).floorBase): { data: Uint8Array; width: number; height: number } {
   const width = 256, height = 1024, data = new Uint8Array(width * height * 4);
   const plankWidth = width / 4, plankLength = height / 2;
   const stagger = [0, .5, .25, .75];
-  const base = [200, 193, 184];
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const column = Math.floor(x / plankWidth), u = x % plankWidth;
     const v = (y + stagger[column] * plankLength) % plankLength;
@@ -49,9 +49,14 @@ export function bundangWoodFloorPixels(): { data: Uint8Array; width: number; hei
   return { data, width, height };
 }
 
-export function createBundangWoodFloorTexture(): THREE.DataTexture {
-  const { data, width, height } = bundangWoodFloorPixels();
+// Every update starts from this private, immutable-by-ownership source, never
+// from an already tinted image. Texture/image/data identities and UVs survive.
+const woodFloorSources = new WeakMap<THREE.DataTexture, { data: Uint8Array; base: BundangFloorColor }>();
+
+export function createBundangWoodFloorTexture(base: BundangFloorColor = resolveBundangFinishTheme(undefined).floorBase): THREE.DataTexture {
+  const { data, width, height } = bundangWoodFloorPixels(base);
   const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  woodFloorSources.set(texture, { data: data.slice(), base: [...base] as [number, number, number] });
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.magFilter = THREE.LinearFilter;
@@ -60,6 +65,17 @@ export function createBundangWoodFloorTexture(): THREE.DataTexture {
   texture.anisotropy = 4;
   texture.needsUpdate = true;
   return texture;
+}
+
+/** Re-tint only RGB bytes of an existing wood map, keeping grain and alpha. */
+export function retintBundangWoodFloorTexture(texture: THREE.DataTexture, base: BundangFloorColor): void {
+  const source = woodFloorSources.get(texture);
+  if (!source) return;
+  const data = texture.image.data as Uint8Array;
+  for (let i = 0; i < data.length; i += 4) for (let channel = 0; channel < 3; channel++) {
+    data[i + channel] = Math.max(0, Math.min(255, source.data[i + channel] + base[channel] - source.base[channel]));
+  }
+  texture.needsUpdate = true;
 }
 
 /** UVs follow authored metric coordinates once, including mirrored/rotated plans. */

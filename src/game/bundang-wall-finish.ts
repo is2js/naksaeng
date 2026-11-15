@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters, type NumericPoint } from './apartment-transform';
 import { BUNDANG_DESIGN_WALL_MATERIAL_ID, bundangDesignWallProps } from './bundang-option-layout';
+import { resolveBundangFinishTheme, type BundangFinishTheme } from './bundang-finish-theme';
 import type { ApartmentGeometry, ApartmentInteriorProp, WorldObject } from './types';
 
 export interface BundangWallFaceFinishV1 {
@@ -43,8 +44,8 @@ export const BUNDANG_WALLPAPER_PROFILES = Object.freeze({
 /** Playground readability, not a claim about the supplied wallpaper's colour. */
 export const BUNDANG_STRUCTURE_WALL_STYLE = Object.freeze({
   id: 'neutral-gray-structure-v1',
-  tint: '#84898e',
-  cap: '#697177',
+  tint: resolveBundangFinishTheme(undefined).wall,
+  cap: resolveBundangFinishTheme(undefined).cap,
 });
 
 export function bundangWallpaperKindAt(geometry: ApartmentGeometry, position: NumericPoint): BundangWallpaperKind {
@@ -202,10 +203,21 @@ export function createBundangWallpaperMaterial(textures: BundangSurfaceTextures,
 
 /** Only physical walls/structural blocks get the subdued display tint. */
 export function createBundangStructuralWallMaterial(textures: BundangSurfaceTextures, kind: BundangWallpaperKind,
-  opacity = 1, cellSize = .5): THREE.MeshStandardMaterial {
+  opacity = 1, cellSize = .5, theme: BundangFinishTheme = resolveBundangFinishTheme(undefined)): THREE.MeshStandardMaterial {
   const material = createBundangWallpaperMaterial(textures, kind, opacity, cellSize);
-  material.color.set(BUNDANG_STRUCTURE_WALL_STYLE.tint);
+  material.color.set(theme.wall);
   material.userData.wallDisplayStyle = BUNDANG_STRUCTURE_WALL_STYLE.id;
+  return material;
+}
+
+/** Explicit role metadata: caps are never rediscovered by their current RGB. */
+export function createBundangStructuralCapMaterial(opacity = 1,
+  theme: BundangFinishTheme = resolveBundangFinishTheme(undefined)): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({
+    color: theme.cap, roughness: .96, metalness: 0,
+    transparent: opacity < 1, opacity, depthWrite: opacity >= .7, side: THREE.DoubleSide,
+  });
+  material.userData.wallCapDisplayStyle = BUNDANG_STRUCTURE_WALL_STYLE.id;
   return material;
 }
 

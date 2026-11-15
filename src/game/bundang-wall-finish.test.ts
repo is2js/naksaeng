@@ -8,7 +8,9 @@ import {
   createBundangDesignWallTextures, createBundangWallFinishSelectionSurface,
   createBundangWallpaperTextures, createBundangWallpaperMaterial, bundangWallpaperKindAt,
   createBundangStructuralWallMaterial, BUNDANG_STRUCTURE_WALL_STYLE,
+  createBundangStructuralCapMaterial,
 } from './bundang-wall-finish';
+import { resolveBundangFinishTheme } from './bundang-finish-theme';
 import { ThreeWorldRenderer, STRUCTURAL_PROP_ASSETS } from './three-world';
 import { BUNDANG_MINUS_OPTION_ID } from './minus-option';
 import { istarparkLaserObstacles } from './istarpark-laser-measurement';
@@ -120,14 +122,14 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
     }
   });
 
-  it('구조 전용 회색은 벽·설비벽에만 적용하고 기본 문짝·디자인월의 밝기를 바꾸지 않는다', () => {
+  it('기본 스톤 그레이지는 벽·설비벽에만 적용하고 기본 문짝·디자인월의 밝기를 바꾸지 않는다', () => {
     const maps = createBundangWallpaperTextures('common');
     const original = Buffer.from(maps.albedo.image.data as Uint8Array);
     const wall = createBundangStructuralWallMaterial(maps, 'common');
     const door = createBundangWallpaperMaterial(maps, 'common');
     const designMaps = createBundangDesignWallTextures();
     const design = createBundangDesignWallMaterial(designMaps);
-    expect(wall.color.getHexString()).toBe('84898e');
+    expect(wall.color.getHexString()).toBe('a5a49e');
     expect(wall.userData.wallDisplayStyle).toBe(BUNDANG_STRUCTURE_WALL_STYLE.id);
     expect(wall.map).toBe(door.map);
     expect(wall.bumpMap).toBe(door.bumpMap);
@@ -138,11 +140,30 @@ describe('디자인월은 구조벽의 공용면 재질만 교체한다', () => 
     expect(design.color.getHexString()).toBe('ffffff');
     expect(design.map).toBe(designMaps.albedo);
     const tint = new THREE.Color(BUNDANG_STRUCTURE_WALL_STYLE.tint);
-    expect(tint.r).toBeLessThan(tint.b); // No brown cast.
-    expect(BUNDANG_STRUCTURE_WALL_STYLE.cap).toBe('#697177');
+    expect(tint.r).toBeGreaterThan(tint.b); // The approved warm-neutral display tint.
+    expect(BUNDANG_STRUCTURE_WALL_STYLE.cap).toBe('#7F8079');
     expect(Buffer.compare(original, Buffer.from(maps.albedo.image.data as Uint8Array))).toBe(0);
     [wall, door, design].forEach(material => material.dispose());
     [maps, designMaps].forEach(set => Object.values(set).forEach(texture => texture.dispose()));
+  });
+
+  it('구조벽과 상단은 명시한 테마로 생성하고 상단의 역할은 RGB가 아닌 metadata로 구분한다', () => {
+    const maps = createBundangWallpaperTextures('common');
+    const theme = resolveBundangFinishTheme('deep-greige');
+    const wall = createBundangStructuralWallMaterial(maps, 'common', .28, .5, theme);
+    const cap = createBundangStructuralCapMaterial(.28, theme);
+    expect(wall.color.getHexString()).toBe('85857f');
+    expect(cap.color.getHexString()).toBe('676a63');
+    expect(wall.userData.wallDisplayStyle).toBe(BUNDANG_STRUCTURE_WALL_STYLE.id);
+    expect(cap.userData.wallCapDisplayStyle).toBe(BUNDANG_STRUCTURE_WALL_STYLE.id);
+    expect(cap.userData.wallDisplayStyle).toBeUndefined();
+    for (const material of [wall, cap]) {
+      expect(material.opacity).toBe(.28);
+      expect(material.transparent).toBe(true);
+      expect(material.depthWrite).toBe(false);
+      expect(material.metalness).toBe(0);
+    }
+    wall.dispose(); cap.dispose(); Object.values(maps).forEach(texture => texture.dispose());
   });
 
   it('인피니티 도어 복도면은 모든 회전·반전에서 벽과 동일 A042 maps/미터UV를 쓴다', () => {

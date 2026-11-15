@@ -6,24 +6,24 @@ describe('playground capabilities', () => {
   it('does not grant member tools to public or missing sessions', () => {
     for (const role of ['public', null, undefined] as const) {
       expect(playgroundCapabilities(role)).toEqual({
-        canEditFurniture: false, canSwitchPlan: false, canTransform: false, isOperator: false,
+        canEditFurniture: false, canSwitchPlan: false, canTransform: false, canChooseFinishTheme: false, isOperator: false,
       });
     }
   });
 
   it('grants member tools to verified users without operator access', () => {
     expect(playgroundCapabilities('verified')).toEqual({
-      canEditFurniture: true, canSwitchPlan: true, canTransform: true, isOperator: false,
+      canEditFurniture: true, canSwitchPlan: true, canTransform: true, canChooseFinishTheme: true, isOperator: false,
     });
     expect(playgroundCapabilities('operator')).toEqual({
-      canEditFurniture: true, canSwitchPlan: true, canTransform: true, isOperator: true,
+      canEditFurniture: true, canSwitchPlan: true, canTransform: true, canChooseFinishTheme: true, isOperator: true,
     });
   });
 
   it('keeps every share viewer read-only while retaining the exact operator role', () => {
     for (const role of ['public', 'verified', 'operator'] as HouseholdVerificationRole[]) {
       expect(playgroundCapabilities(role, true)).toEqual({
-        canEditFurniture: false, canSwitchPlan: false, canTransform: false, isOperator: role === 'operator',
+        canEditFurniture: false, canSwitchPlan: false, canTransform: false, canChooseFinishTheme: false, isOperator: role === 'operator',
       });
     }
   });

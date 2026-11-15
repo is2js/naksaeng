@@ -5,7 +5,7 @@ import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
 import { createEntrySlidingPanel, createEntrySlidingRail } from './entry-partition-model';
-import { doorVisualOpenAngleDeg } from './door-visual-pose';
+import { bundangServiceDoorInwardNormalWorld, doorVisualSwingAngleDeg } from './door-visual-pose';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -1972,6 +1972,7 @@ export class ThreeWorldRenderer {
     const height = Math.max(0.2, finite(opening.leafHeightMeters, finite(opening.heightMeters, 2.1) * 0.92) / cellSize);
     const thickness = Math.max(0.04, finite(opening.leafThicknessMeters, 0.045) / cellSize);
     const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+    const inwardNormal = bundangServiceDoorInwardNormalWorld(object, opening);
     for (let index = 0; index < leafCount; index += 1) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, height, thickness), this.material('#b8afa3', { roughness: 0.68 }));
       const hinge = leafCount > 1 ? (index === 0 ? start : end) : String(opening.hingeEndpoint || 'b') === 'a' ? start : end;
@@ -1979,17 +1980,18 @@ export class ThreeWorldRenderer {
       const closed = new THREE.Vector2((handle.x - hinge.x) * widthScale, (handle.z - hinge.z) * widthScale);
       let opened = closed.clone();
       if (!['closed', 'closed-passable'].includes(String(opening.leafState || 'open'))) {
-        const angle = doorVisualOpenAngleDeg(opening) * Math.PI / 180;
-        opened.rotateAround(new THREE.Vector2(0, 0), index === 0 ? angle : -angle);
+        const angle = doorVisualSwingAngleDeg(opening, [closed.x, closed.y], inwardNormal, index) * Math.PI / 180;
+        opened.rotateAround(new THREE.Vector2(0, 0), angle);
       }
       panel.position.set(hinge.x + opened.x / 2, height / 2, hinge.z + opened.y / 2);
       panel.rotation.y = -Math.atan2(opened.y, opened.x);
       // 문짝과 실내 가벽은 외부 지면용 shadow map에 포함하지 않는다.
       panel.castShadow = false;
       panel.receiveShadow = false;
+      panel.userData.doorOpeningId = String(opening.id || '');
+      if (inwardNormal) panel.userData.doorSwingDirection = 'inward';
       this.structureRoot.add(panel);
     }
-    void object;
   }
 
   private rebuildProps(): void {

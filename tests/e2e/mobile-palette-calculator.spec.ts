@@ -1,6 +1,56 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test.use({ hasTouch: true });
+
+async function mobileControlLayout(page: Page) {
+  return page.evaluate(() => {
+    const box = (element: Element) => {
+      const { left, top, right, bottom, width, height } = element.getBoundingClientRect();
+      return { left, top, right, bottom, width, height };
+    };
+    const stage = document.querySelector('#game-stage')!;
+    const options = document.querySelector('#mobile-stage-options')!;
+    const chips = options.querySelector<HTMLElement>('#stage-option-chips')!;
+    return {
+      stage: box(stage), options: box(options), pad: box(document.querySelector('.touch-move-pad')!),
+      laser: box(document.querySelector('#touch-laser-toggle')!),
+      direction: getComputedStyle(chips).flexDirection, wrap: getComputedStyle(chips).flexWrap,
+      scrollHeight: chips.scrollHeight, clientHeight: chips.clientHeight, scrollTop: chips.scrollTop,
+      rows: Array.from(chips.querySelectorAll('.stage-option-chip')).map(chip => ({
+        ...box(chip), buttonHeight: chip.querySelector('button')!.getBoundingClientRect().height,
+        fontSize: parseFloat(getComputedStyle(chip.querySelector('b')!).fontSize),
+      })),
+    };
+  });
+}
+
+function expectMobileControlPlacement(layout: Awaited<ReturnType<typeof mobileControlLayout>>) {
+  // Reserve one narrow right-hand rail for the joystick and the laser below
+  // it. Options stay beside it, never above/between the actual touch targets.
+  expect(layout.options.right + 8).toBeLessThanOrEqual(layout.pad.left);
+  expect(layout.pad.bottom + 6).toBeLessThanOrEqual(layout.laser.top);
+  expect(Math.abs((layout.pad.left + layout.pad.right - layout.laser.left - layout.laser.right) / 2)).toBeLessThanOrEqual(1);
+  expect(Math.abs(layout.options.bottom - layout.laser.bottom)).toBeLessThanOrEqual(2);
+  expect(layout.options.left - layout.stage.left).toBeGreaterThanOrEqual(7);
+  expect(layout.options.left - layout.stage.left).toBeLessThanOrEqual(10);
+  expect(layout.stage.bottom - layout.options.bottom).toBeGreaterThanOrEqual(80);
+  expect(layout.stage.bottom - layout.options.bottom).toBeLessThanOrEqual(85);
+  expect(layout.options.width).toBeLessThanOrEqual(261);
+  expect(layout.options.left).toBeGreaterThanOrEqual(layout.stage.left);
+  expect(layout.pad.right).toBeLessThanOrEqual(layout.stage.right);
+  expect(layout.laser.height).toBeGreaterThanOrEqual(40);
+  expect(layout.direction).toBe('column');
+  expect(layout.wrap).toBe('nowrap');
+  for (const row of layout.rows) {
+    expect(row.buttonHeight).toBeGreaterThanOrEqual(32);
+    expect(row.fontSize).toBeGreaterThanOrEqual(9);
+    expect(row.fontSize).toBeLessThanOrEqual(10);
+    expect(row.width).toBeLessThanOrEqual(layout.options.width);
+  }
+  for (let index = 1; index < layout.rows.length; index++) {
+    expect(layout.rows[index].top).toBeGreaterThanOrEqual(layout.rows[index - 1].bottom + 2);
+  }
+}
 
 test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 합계 아래에만 남는다', async ({ page, context }) => {
   test.setTimeout(process.env.CI ? 300_000 : 180_000);
@@ -52,8 +102,59 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   const mapBounds = (await page.locator('#game-stage').boundingBox())!;
   expect(label.x).toBeGreaterThanOrEqual(mapBounds.x);
   expect(label.x + label.width).toBeLessThanOrEqual(mapBounds.x + mapBounds.width);
-  expect((await mobileOptions.boundingBox())!.y + (await mobileOptions.boundingBox())!.height)
-    .toBeLessThan((await page.locator('.touch-move-pad').boundingBox())!.y);
+  for (const viewport of [
+    { width: 320, height: 740 }, { width: 390, height: 844 },
+    { width: 430, height: 932 }, { width: 768, height: 1024 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(mobileOptions).toBeVisible();
+    await expect(page.locator('.stage-option-quote')).toBeHidden();
+    await expect.poll(async () => (await mobileControlLayout(page)).direction).toBe('column');
+    expectMobileControlPlacement(await mobileControlLayout(page));
+    const overflow = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
+      elements: [...document.querySelectorAll('body *')].flatMap(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.right > innerWidth + 1 && getComputedStyle(element).visibility !== 'hidden'
+          ? [{ tag: element.tagName, id: element.id, className: element.className?.toString(), right: rect.right, width: rect.width }] : [];
+      }).slice(0, 16) }));
+    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.width);
+    await page.locator('#game-stage').screenshot({ path: `test-results/mobile-controls-${viewport.width}.png` });
+    if (viewport.width === 768) expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+  }
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect(pantry).toBeVisible();
+  await expect(mobileOptions.locator('.stage-option-chip[data-stage-option-select="entry-pantry-system-shelf"]')).toHaveClass(/is-world-selected/);
+  await expect(page.locator('#three-world-canvas')).toHaveAttribute('data-selected-editor-mask', 'rpg-gold');
+
+  // Stress the narrowest viewport using only existing chip DOM: no option, price, saved data
+  // or GPU model is selected. Remove the temporary rows before interaction.
+  await chips.evaluate(element => {
+    const original = element.querySelector('.stage-option-chip')!;
+    for (let index = 0; index < 12; index++) {
+      const clone = original.cloneNode(true) as HTMLElement;
+      clone.dataset.layoutStress = 'true';
+      clone.setAttribute('aria-hidden', 'true');
+      clone.querySelectorAll('button').forEach(button => { button.tabIndex = -1; });
+      clone.querySelector('b')!.textContent = `작은 화면 선택 옵션 세로 스크롤 확인 ${index + 1}`;
+      element.append(clone);
+    }
+  });
+  try {
+    const stress = await mobileControlLayout(page);
+    expectMobileControlPlacement(stress);
+    expect(stress.scrollHeight).toBeGreaterThan(stress.clientHeight);
+    expect(stress.clientHeight).toBeLessThanOrEqual(168);
+    await chips.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    expect((await mobileControlLayout(page)).scrollTop).toBeGreaterThan(0);
+  } finally {
+    await chips.evaluate(element => {
+      element.querySelectorAll('[data-layout-stress]').forEach(clone => clone.remove());
+      element.scrollTop = 0;
+    });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(mobileOptions.locator('.stage-option-chip')).toHaveCount(2);
+  await expect(page.locator('#mobile-palette-calculator #open-sale-calculator')).toHaveCount(1);
   await page.locator('#touch-laser-toggle').tap();
   await page.locator('#inspection-laser-point-mode').tap();
   await pantry.tap();
@@ -85,6 +186,7 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   await expect(page.locator('#mobile-palette-calculator')).toBeHidden();
   await expect(page.locator('.option-storage-description')).toBeVisible();
   await expect(page.locator('.option-design-reference')).toBeVisible();
+  await page.locator('#game-stage').screenshot({ path: 'test-results/mobile-controls-desktop.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.stage-option-quote')).toBeHidden();
   await expect(mobileOptions).toBeVisible();

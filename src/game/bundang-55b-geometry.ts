@@ -225,10 +225,11 @@ function buildGeometry(source: ApartmentGeometry): ApartmentGeometry {
   full('outdoor-unit-north', p(-.55, 7.26), p(1.0, 7.26), 'service', .20);
   full('utility-north', p(1.0, 7.26), p(3.45, 7.26), 'service', .20);
   door('outdoor-unit-east', p(1.0, 7.26), p(1.0, 9.20), .12, 1.02, [-1, 0], 'service', .20, 'interior-door', false, 30);
-  // The user identified a short fixed return before the service column. Its
-  // unlabelled 190 mm length is a photo-based inference, not a measured plan
-  // dimension. Preserve the 800 mm doorway instead of filling its whole span.
-  walls.push({ ...wall('utility-kitchen-east-after', p(3.45, 8.06), p(3.45, 8.25), 'service', .20), strictDoorJamb: true });
+  // One continuous kitchen-facing wall owns the full strip beside the column,
+  // from the door jamb to the exterior junction. A short 190 mm return formerly
+  // made the block-contact clip remove this whole face below the jamb. Keep
+  // the actual 800 mm aperture; the column owns only the core west of this wall.
+  walls.push({ ...wall('utility-kitchen-east-after', p(3.45, 8.06), p(3.45, 9.20), 'service', .20), strictDoorJamb: true });
   walls.push(wall('utility-kitchen-east-lintel', p(3.45, 7.26), p(3.45, 8.06), 'service', .20, 2.1, .2));
   openings.push({ id: 'utility-kitchen-east-opening', type: 'interior-door', a: [3.45, 7.26], b: [3.45, 8.06],
     baseMeters: 0, heightMeters: 2.1, wallThicknessMeters: .20, interiorNormal: [-1, 0],
@@ -323,7 +324,8 @@ function buildGeometry(source: ApartmentGeometry): ApartmentGeometry {
     ...clone(source), unit: 'meter', cellSizeMeters: .5, clearHeightMeters: 2.3,
     floorPolygon: floor, wallSegments: walls, openings, roomZones: rooms, kitchenFixtures,
     solidBlocks: [
-      { id: 'utility-solid-column', label: '다용도실 막힌 사각 구조', boundsMeters: [2.80, 8.25, 3.55, 9.10], heightMeters: 2.3, material: 'plaster', structuralRole: 'service-wall' },
+      { id: 'utility-solid-column', label: '다용도실 막힌 사각 구조', boundsMeters: [2.80, 8.25, 3.35, 9.10],
+        wallContactClearanceMeters: 0, heightMeters: 2.3, material: 'plaster', structuralRole: 'service-wall' },
       { id: 'bathroom-1-service-l', label: '욕실1 일체형 ㄴ자 설비벽', boundsMeters: [4.86, 1.92, 5.67, 3.36],
         footprintPolygonMeters: [[5.54, 1.92], [5.67, 1.92], [5.67, 3.36], [4.86, 3.36], [4.86, 2.65], [5.54, 2.65]],
         structuralGroupId: 'bathroom-1-service-l', structuralRole: 'service-wall', material: 'plaster', heightMeters: 2.3 },
@@ -337,7 +339,9 @@ function buildGeometry(source: ApartmentGeometry): ApartmentGeometry {
       labelledDimensionToleranceMeters: .020, inferredEntryWidthMeters: 1.50, inferredEntryToleranceMeters: .05,
       inferredPantryWidthMeters: 1.00,
       utilityDoorReturn: { source: 'user-annotated-runtime-image', confidence: 'inferred', clearOpeningMeters: .80, returnLengthMeters: .19,
-        notice: '사용자가 표시한 다용도실 문·설비벽 사이 짧은 고정벽을 반영한 사진 기반 추론값이며 공식 도면 실측치가 아닙니다.' },
+        revision: 'continuous-utility-east-wall-v2', continuousWallEndMeters: [3.45, 9.20], afterWallLengthMeters: 1.14,
+        columnJointPolicy: 'single-owner-flush-contact',
+        notice: '문과 설비벽 사이 190mm 구간을 포함해 외벽 접점까지 하나의 연속 벽으로 구성합니다. 800mm 문 폭은 유지하며 사진 기반 가상 배치이지 공식 시공 치수가 아닙니다.' },
       notice: '도면 치수와 이미지 비례를 바탕으로 한 가상 평면이며 실제 CAD·시공 치수가 아닙니다.' },
     floorAnnotationMode: 'explicit-wall-span-dimensions-v3',
   };

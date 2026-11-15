@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { applyBundangMeasuredGeometry, bundangGeometryCalibration, BUNDANG_GEOMETRY_ADJUSTMENT_LIMIT_METERS } from './bundang-measured-geometry';
+import { applyBundangBoundedMeasuredGeometry as applyBundangMeasuredGeometry, bundangGeometryCalibration, BUNDANG_GEOMETRY_ADJUSTMENT_LIMIT_METERS } from './bundang-measured-geometry';
 import { bundangMeasuredDimensions, resolveBundangMeasuredDimension } from './bundang-measured-dimensions';
 import { applyPlanVariantInteriorOverrides } from './plan-variants';
 import { readBundangPrototypeApartments } from './test-support/bundang-prototypes';
@@ -151,8 +151,8 @@ describe('bounded source-only Bundang geometry calibration', () => {
     try {
       const world = await loadWorld(entry);
       const apartment = world.objects.find(object => object.type === 'enterable-apartment-unit-v1')!;
-      expect(apartment.geometry!.bundangMeasuredGeometryRevision).toBe('bundang-measured-geometry-v1');
-      expect(apartment.geometry!.floorPolygon).toEqual(prototypes.get('55A')!.geometry!.floorPolygon);
+      expect(apartment.geometry!.bundangMeasuredGeometryRevision).toBe('bundang-measured-geometry-v2-exact');
+      expect(apartment.geometry!.floorPolygon).not.toEqual(prototypes.get('55A')!.geometry!.floorPolygon);
       expect(applyBundangMeasuredGeometry(apartment)).toBe(false);
     } finally {
       vi.unstubAllGlobals();

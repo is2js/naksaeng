@@ -53,7 +53,13 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     const nickname = page.locator('#household-nickname');
     const verify = page.locator('#household-verify-nickname');
     const enter = page.locator('#household-enter');
+    await nickname.fill('가');
+    await expect(enter).toBeDisabled();
+    await expect(verify).toBeDisabled();
     await nickname.fill('공개 검수');
+    await expect(verify).toHaveText('인증');
+    await expect(page.locator('.household-nickname-selection')).toContainText('105동 1903호 선택됨');
+    await expect(page.locator('.household-nickname-controls #household-verify-nickname')).toHaveCount(0);
     await expect(enter).toBeEnabled();
     await verify.click();
     await expect(page.locator('#household-nickname-status')).toContainText('등록된 회원 정보를 확인할 수 없습니다');
@@ -89,6 +95,8 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await guide.getByRole('button', { name: '가이드 닫기' }).click();
     const slots = page.locator('#hotbar [data-slot]');
     const furnitureTab = page.locator('[data-palette-tab="furniture"]');
+    await expect(page.locator('.palette-tabs')).toBeHidden();
+    await expect(page.locator('#option-palette-body')).toBeVisible();
     await expect(furnitureTab).toBeHidden();
     expect(await slots.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-slot')))).toEqual(['0', '1', '2']);
     const children = page.locator('#hotbar [data-slot="2"][data-hotbar-action="showcase-children"]');

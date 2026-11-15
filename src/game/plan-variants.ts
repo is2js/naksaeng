@@ -5,7 +5,7 @@ import {
 } from './apartment-transform';
 import type { WorldData, WorldObject } from './types';
 import { pointTouchesBundangTraversalOpening } from './world';
-import { isBundang55BGeometryV2, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
+import { hasBundangRebuiltGeometry, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
 
 import {
   planVariantDefinition,
@@ -206,7 +206,13 @@ export function applyPlanVariant(world: WorldData, variant: ApartmentPlanVariant
   const sourceTransform = { ...SOURCE_TRANSFORM };
   const sourceBlockedCells = apartment.blockedCells?.map((cell) => ({ ...cell })) || [];
   const sourceBlockedKeys = new Set(sourceBlockedCells.map((cell) => cellKey(cell.x, cell.y)));
-  const preservedBlockedKeys = [...world.blocked].filter((key) => !sourceBlockedKeys.has(key));
+  // A source apartment raster and another object can own the same cell. Do
+  // not erase that object's blocker while replacing/transforming our mask.
+  const otherBlockedKeys = new Set(world.objects.filter(object => object !== apartment)
+    .flatMap(object => (object.blockedCells || []).map(cell => cellKey(cell.x, cell.y))));
+  const preservedBlockedKeys = [...new Set([
+    ...[...world.blocked].filter(key => !sourceBlockedKeys.has(key)), ...otherBlockedKeys,
+  ])];
 
   apartment.transform = { ...definition.transform };
   apartment.planVariant = definition.variant;
@@ -216,7 +222,7 @@ export function applyPlanVariant(world: WorldData, variant: ApartmentPlanVariant
     operations: [...definition.operations],
   };
   applyPlanVariantInteriorOverrides(apartment, definition.variant);
-  if (isBundang55BGeometryV2(apartment)) {
+  if (hasBundangRebuiltGeometry(apartment)) {
     const metadata = apartment as unknown as Record<string, unknown>;
     for (const field of ['floorCells', 'footprintCells', 'interiorCells', 'collisionCells', 'structuralBlockedCells',
       'interiorPropBlockedCells', 'inspectionWallCells', 'occlusionCells', 'transparencyCells', 'vegetationExclusionCells', 'entranceCells']) {

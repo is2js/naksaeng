@@ -2,7 +2,7 @@ import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
 import { isBundangMinusOption } from './minus-option';
 import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
-import { isBundang55BGeometryV2, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
+import { hasBundangRebuiltGeometry, normalizeBundang55BWorldMask } from './bundang-55b-geometry';
 import type {
   ActorState,
   ProjectedPoint,
@@ -605,12 +605,12 @@ export function isWalkable(world: WorldData | null, x: number, y: number): boole
   if (!world) return false;
   const roundedX = Math.round(x);
   const roundedY = Math.round(y);
-  const rebuilt55B = world.objects.find(isBundang55BGeometryV2);
-  if (rebuilt55B) {
-    const local = apartmentWorldPointToLocalMeters(rebuilt55B, { x: roundedX, y: roundedY });
-    const floor = rebuilt55B.geometry!.floorPolygon as [number, number][];
+  const rebuiltApartment = world.objects.find(hasBundangRebuiltGeometry);
+  if (rebuiltApartment) {
+    const local = apartmentWorldPointToLocalMeters(rebuiltApartment, { x: roundedX, y: roundedY });
+    const floor = rebuiltApartment.geometry!.floorPolygon as [number, number][];
     if (!pointInsidePolygon(local, floor)
-      || movementPointBlocked(rebuilt55B, { x: roundedX, y: roundedY }, minusOptionCollisionWorlds.has(world))) return false;
+      || movementPointBlocked(rebuiltApartment, { x: roundedX, y: roundedY }, minusOptionCollisionWorlds.has(world))) return false;
   }
   const insideWorld = roundedX >= 0 && roundedY >= 0 && roundedX < world.width && roundedY < world.height;
   const insideApartmentPlan = !insideWorld && world.objects.some((object) => {
@@ -738,7 +738,9 @@ function wallAllowsTraversalPoint(
     (candidate.x - wallStart.x) * dy - (candidate.y - wallStart.y) * dx,
   ) / length;
   return traversalOpenings(object).some(({ start, end }) =>
-    lineDistance(start) <= 0.08 && lineDistance(end) <= 0.08
+    // Forty-millimetre shared-wall face steps must behave identically under
+    // rotation/reflection; .08 cells is otherwise a floating-point boundary.
+    lineDistance(start) <= 0.08 + 1e-7 && lineDistance(end) <= 0.08 + 1e-7
       && collisionDistance(point, start, end) <= BUNDANG_TRAVERSAL_OPENINGS.jambToleranceCells,
   );
 }
@@ -782,7 +784,7 @@ function movementPointBlocked(object: WorldObject, point: CollisionPoint, minusA
     const end = worldCollisionPoint(object, wall.b);
     const cellSize = Math.max(0.01, finite(geometry?.cellSizeMeters, 0.5));
     if (start && end && collisionDistance(point, start, end) <= (Math.max(0.04, finite(wall.thicknessMeters, 0.12)) / 2 + passageSkinMeters) / cellSize
-      && !wallAllowsTraversalPoint(object, point, start, end)) return true;
+      && (wall.strictDoorJamb === true || !wallAllowsTraversalPoint(object, point, start, end))) return true;
   }
   if ((geometry?.solidBlocks || []).some((value) => solidContainsPoint(value as Record<string, unknown>, local, structuralSkinMeters))) return true;
   if (minusActive) return false;
@@ -797,6 +799,8 @@ function hasBundangRasterClearance(world: WorldData, point: CollisionPoint): boo
   return world.objects.some((object) => {
     if (object.type !== 'enterable-apartment-unit-v1'
       || !object.blockedCells?.some((cell) => cell.x === point.x && cell.y === point.y)) return false;
+    if (world.objects.some(other => other !== object
+      && other.blockedCells?.some(cell => cell.x === point.x && cell.y === point.y))) return false;
     const local = apartmentWorldPointToLocalMeters(object, point);
     const polygon = (object.geometry?.floorPolygon || []).flatMap((value) => { const p = finitePoint(value); return p ? [p] : []; });
     return pointInsidePolygon(local, polygon) && !movementPointBlocked(object, point, minusOptionCollisionWorlds.has(world));
@@ -821,7 +825,7 @@ export function crossesApartmentWall(
       const wallEnd = worldCollisionPoint(object, segment.b);
       const intersection = wallStart && wallEnd ? movementWallIntersection(from, to, wallStart, wallEnd) : null;
       if (wallStart && wallEnd && intersection) {
-        if (wallAllowsTraversalPoint(object, intersection, wallStart, wallEnd)) continue;
+        if (segment.strictDoorJamb !== true && wallAllowsTraversalPoint(object, intersection, wallStart, wallEnd)) continue;
         return true;
       }
     }

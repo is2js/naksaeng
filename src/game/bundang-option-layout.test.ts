@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { apartmentPropPlacement, apartmentUnitWorldPoint } from './apartment-transform';
+import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
 import {
   BUNDANG_OPTION_LAYOUTS,
   BUNDANG_DESIGN_WALL_MATERIAL_ID,
@@ -399,8 +400,10 @@ describe('Bunfirvil 디자인 월·인피니티 도어 배치', () => {
       const apartment = apartments.get(unitType);
       expect(apartment?.geometry, `${unitType} geometry`).toBeTruthy();
       if (!apartment?.geometry) continue;
+      const runtimeApartment = structuredClone(apartment);
+      expect(applyBundangMeasuredGeometry(runtimeApartment), `${unitType}:runtime geometry contract`).toBe(true);
       const unrelated = { id: `${unitType}-sofa`, assetId: 'sofa' };
-      const props = optionProps(apartment.geometry, unitType, ['living-design-wall-panel'], [
+      const props = optionProps(runtimeApartment.geometry!, unitType, ['living-design-wall-panel'], [
         unrelated,
         { id: `inspection-${unitType}-living-design-wall`, assetId: 'living-art-wall-greige-stone', anchorId: 'options.livingDesignWall' },
       ]);

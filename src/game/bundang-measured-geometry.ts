@@ -1,6 +1,7 @@
 import calibration from './bundang-measured-geometry.v1.json';
 import type { ApartmentGeometry, WorldObject } from './types';
-import { applyBundang55BGeometry } from './bundang-55b-geometry';
+import { applyBundang55BGeometry, rebuildBundangMeasuredCells } from './bundang-55b-geometry';
+import { applyBundangExactGeometry } from './bundang-exact-geometry';
 
 type Point = [number, number];
 type Row = Record<string, unknown>;
@@ -79,10 +80,19 @@ function onPerpendicularExterior(
 /**
  * Applies a reviewed, offline-generated deformation only to source-owned geometry.
  * No optimization, measurement cap, saved furniture migration or snapshot edit
- * takes place in the browser. The three bounded types retain their exact exterior;
- * the separately approved 55B v2 rebuild has its own source guard and revision.
+ * takes place in the browser. The approved exact table minimally adjusts source
+ * landmarks/exterior while preserving wall thickness. The 55B v2 rebuild has
+ * its own source guard and revision; neither path reapplies the old 50mm table.
  */
 export function applyBundangMeasuredGeometry(apartment: WorldObject): boolean {
+  if (String(apartment.unitTypeId || '').toUpperCase() === '55B') return applyBundang55BGeometry(apartment);
+  const applied = applyBundangExactGeometry(apartment);
+  if (applied) rebuildBundangMeasuredCells(apartment);
+  return applied;
+}
+
+/** Historical 50mm policy retained for the before/after audit, not live maps. */
+export function applyBundangBoundedMeasuredGeometry(apartment: WorldObject): boolean {
   if (String(apartment.unitTypeId || '').toUpperCase() === '55B') return applyBundang55BGeometry(apartment);
   const source = apartment.geometry;
   if (!source || apartment.type !== 'enterable-apartment-unit-v1') return false;

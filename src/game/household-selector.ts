@@ -24,6 +24,11 @@ import '../styles/household-input.css';
 
 export const HOUSEHOLD_FLOORS = Array.from({ length: 25 }, (_, index) => 25 - index);
 
+/** Entry UI policy only; the existing verification service normalization stays unchanged. */
+export function householdEntryNicknameIsValid(value: unknown): boolean {
+  return householdNicknameIsValid(value) && Array.from(normalizeHouseholdNickname(value)).length >= 2;
+}
+
 function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
@@ -197,13 +202,15 @@ export function waitForHouseholdSelection(
         <section id="household-nickname-stage" class="household-nickname-stage" hidden>
           <header class="household-nickname-stage-head">
             <button type="button" id="household-unit-back" class="household-building-back">← ${shareAuthentication ? '동 다시 선택' : '세대 다시 선택'}</button>
-            <span id="household-nickname-building" class="household-selected-building"></span>
+            <div class="household-nickname-selection">
+              <span id="household-nickname-building" class="household-selected-building"></span>
+              <button type="button" id="household-verify-nickname" class="household-verification-button" disabled>인증</button>
+            </div>
           </header>
           <div class="household-nickname-card">
             <h2>닉네임 입력</h2>
             <div class="household-nickname-controls">
-              <label><span>닉네임</span><input id="household-nickname" type="text" maxlength="20" autocomplete="off" placeholder="닉네임 입력" /></label>
-              <button type="button" id="household-verify-nickname" disabled>인증 확인</button>
+              <label><span>닉네임</span><input id="household-nickname" type="text" minlength="2" maxlength="20" autocomplete="off" placeholder="닉네임 입력" aria-describedby="household-nickname-status" /></label>
             </div>
             <div id="household-operator-code-group" class="household-operator-code" hidden>
               <label for="household-operator-code">운영자 인증코드</label>
@@ -315,7 +322,7 @@ export function waitForHouseholdSelection(
     const publicEntryHint = '공개 권한으로 입장할 수 있습니다. 회원 기능은 인증 후 사용할 수 있습니다.';
 
     const updateSelectionSummary = (): void => {
-      entryReady = householdNicknameIsValid(nickname) && Boolean(chosenBuildingId)
+      entryReady = householdEntryNicknameIsValid(nickname) && Boolean(chosenBuildingId)
         && (shareAuthentication || Boolean(selected));
       enter.disabled = !entryReady;
       dock.dataset.entryRole = entryRole;
@@ -348,16 +355,16 @@ export function waitForHouseholdSelection(
         nickname = '';
         nicknameInput.value = '';
       }
-      verifyNickname.textContent = '인증 확인';
+      verifyNickname.textContent = '인증';
       requestVerification.textContent = '해당 닉네임으로 등록 요청';
       nicknameInput.disabled = false;
-      verifyNickname.disabled = !householdNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
+      verifyNickname.disabled = !householdEntryNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
       requestVerification.disabled = shareAuthentication || verifyNickname.disabled;
       verifyNickname.removeAttribute('aria-busy');
       requestVerification.removeAttribute('aria-busy');
       dock.classList.remove('is-authenticated');
-      nicknameStatus.textContent = !nickname.trim() ? '' : !householdNicknameIsValid(nickname)
-        ? '닉네임은 제어문자 없이 1~20자로 입력해 주세요.'
+      nicknameStatus.textContent = !nickname.trim() ? '' : !householdEntryNicknameIsValid(nickname)
+        ? '닉네임은 제어문자 없이 2~20자로 입력해 주세요.'
         : householdVerificationConfigured(verificationConfig)
           ? publicEntryHint
           : `회원 인증 서비스를 사용할 수 없습니다. ${publicEntryHint}`;
@@ -522,7 +529,7 @@ export function waitForHouseholdSelection(
       const candidate = normalizeHouseholdNickname(nickname);
       const buildingId = selected?.buildingId || chosenBuildingId || '';
       const unitType = selected?.unitType || '';
-      if (!householdNicknameIsValid(candidate) || !buildingId || (!shareAuthentication && !unitType) || !householdVerificationConfigured(verificationConfig)) return;
+      if (!householdEntryNicknameIsValid(candidate) || !buildingId || (!shareAuthentication && !unitType) || !householdVerificationConfigured(verificationConfig)) return;
       const attempt = ++verificationAttempt;
       const controller = new AbortController();
       verificationController = controller;
@@ -541,7 +548,7 @@ export function waitForHouseholdSelection(
         if (attempt !== verificationAttempt || normalizeHouseholdNickname(nickname) !== candidate) return;
         nicknameVerified = response.verified;
         entryRole = response.operator ? 'operator' : response.verified ? 'verified' : 'public';
-        verifyNickname.textContent = response.verified ? '인증 완료' : '다시 확인';
+        verifyNickname.textContent = response.verified ? '인증 완료' : '인증';
         if (response.code === 'operator_code_required') {
           operatorGroup.hidden = false;
           nicknameStatus.textContent = `운영자 인증코드를 입력해 주세요. 반복 실패 시 10분 후 다시 시도하세요. ${publicEntryHint}`;
@@ -561,7 +568,7 @@ export function waitForHouseholdSelection(
         if (attempt !== verificationAttempt) return;
         nicknameVerified = false;
         entryRole = 'public';
-        verifyNickname.textContent = '다시 확인';
+        verifyNickname.textContent = '인증';
         const code = error instanceof HouseholdVerificationError ? error.code : '';
         const message = code === 'backend-update-required' ? '회원 인증 서비스 업데이트가 필요합니다. 운영자가 새 Code.gs를 배포한 뒤 다시 시도해 주세요.'
           : code === 'rate_limited' ? '등록 요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.'
@@ -573,7 +580,7 @@ export function waitForHouseholdSelection(
         if (attempt === verificationAttempt) {
           button.removeAttribute('aria-busy');
           operatorInput.disabled = nicknameVerified;
-          verifyNickname.disabled = nicknameVerified || !householdNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
+          verifyNickname.disabled = nicknameVerified || !householdEntryNicknameIsValid(nickname) || !householdVerificationConfigured(verificationConfig);
           requestVerification.disabled = shareAuthentication || verifyNickname.disabled;
           updateSelectionSummary();
           if (!operatorGroup.hidden && !nicknameVerified) operatorInput.focus();
@@ -614,7 +621,7 @@ export function waitForHouseholdSelection(
     });
 
     enter.addEventListener('click', () => {
-      if ((!selected && !shareAuthentication) || !entryReady || !householdNicknameIsValid(nickname)) return;
+      if ((!selected && !shareAuthentication) || !entryReady || !householdEntryNicknameIsValid(nickname)) return;
       invalidateVerification();
       operatorInput.value = '';
       window.removeEventListener('popstate', onPopState);

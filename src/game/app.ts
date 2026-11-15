@@ -592,7 +592,7 @@ export class ShowcaseApp {
           <i></i>
           <span>데이터는 이 브라우저에만 저장됩니다.</span>
         </div>
-        ${this.readOnlyShare ? `<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.${planVariantDefinition(this.currentMap.unitType, this.planVariant).experienceOnly ? ' 체험용 평면으로 실제 세대 배치와 다를 수 있습니다.' : ''}</span><span id="share-geometry-notice" hidden>55B 구조가 도면 기준으로 업데이트되었습니다. 이전 공유의 가구 위치는 유지되어 벽과 겹치거나 바닥 밖에 있을 수 있습니다.</span></div>` : ''}
+        ${this.readOnlyShare ? `<div class="share-readonly-banner" role="status"><b>공유 열람 모드</b><span>이동과 실측은 가능하지만 옵션·가구·평면은 변경하거나 저장할 수 없습니다.${planVariantDefinition(this.currentMap.unitType, this.planVariant).experienceOnly ? ' 체험용 평면으로 실제 세대 배치와 다를 수 있습니다.' : ''}</span><span id="share-geometry-notice" hidden>평면 구조가 도면 치수 기준으로 업데이트되었습니다. 이전 공유의 가구 위치는 유지되어 벽과 겹치거나 바닥 밖에 있을 수 있습니다.</span></div>` : ''}
 
         <main class="showcase-layout">
           <section class="play-column" aria-label="RPG 렌더링 쇼케이스">
@@ -765,9 +765,9 @@ export class ShowcaseApp {
                 <span class="option-count" id="option-count">0</span>
               </div>
             </header>
-            <div class="palette-tabs" role="tablist" aria-label="인테리어 도구">
+            <div class="palette-tabs" role="tablist" aria-label="인테리어 도구" ${this.capabilities.canEditFurniture ? '' : 'hidden'}>
               <button type="button" class="is-active" data-palette-tab="options">옵션</button>
-              <button type="button" data-palette-tab="furniture" ${this.hasMemberAccess ? '' : 'hidden disabled'}>가구 배치</button>
+              <button type="button" data-palette-tab="furniture" ${this.capabilities.canEditFurniture ? '' : 'hidden disabled'}>가구 배치</button>
             </div>
             <p class="option-storage-note">${this.readOnlyShare ? '' : '<span class="option-storage-description">옵션·가구는 이 브라우저의 같은 평형에서 공유되며 다른 기기에는 자동 저장되지 않습니다.</span> '}<span id="option-design-disclaimer" class="option-design-disclaimer" role="note">가상 공간의 옵션 디자인·색상·배치는 실제 시공과 다를 수 있습니다.<span class="option-design-reference"> 계약 전 공고문과 전시관을 확인해 주세요.</span></span></p>
             <div class="palette-viewbar">
@@ -2191,7 +2191,7 @@ export class ShowcaseApp {
   }
 
   private setPaletteTab(tab: 'options' | 'furniture'): void {
-    if (tab === 'furniture' && !this.hasMemberAccess) return;
+    if (tab === 'furniture' && !this.capabilities.canEditFurniture) return;
     const wasFurniture = this.paletteTab === 'furniture';
     this.paletteTab = tab;
     this.furnitureContextMenuOpen = false;
@@ -2948,7 +2948,7 @@ export class ShowcaseApp {
     const shareGeometryNotice = this.mount.querySelector<HTMLElement>('#share-geometry-notice');
     if (shareGeometryNotice) {
       const revision = this.activeApartment()?.geometry?.bundangGeometryRevision;
-      shareGeometryNotice.hidden = map.unitType !== '55B' || !revision || this.sharedState?.geometryRevision === revision;
+      shareGeometryNotice.hidden = !revision || this.sharedState?.geometryRevision === revision;
     }
   }
 

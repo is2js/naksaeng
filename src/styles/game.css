@@ -1768,7 +1768,7 @@ input:focus-visible {
   text-align: center;
   pointer-events: none;
 }
-.plan-experience-notice[hidden], .palette-tabs button[hidden], .stage-tip > span[hidden] { display: none; }
+.plan-experience-notice[hidden], .palette-tabs[hidden], .palette-tabs button[hidden], .stage-tip > span[hidden] { display: none; }
 
 .laser-reference-notice {
   position: absolute;

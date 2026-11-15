@@ -7,7 +7,8 @@ import {
   bundangMeasuredDimensions,
   resolveBundangMeasuredDimension,
 } from './bundang-measured-dimensions';
-import { applyBundangMeasuredGeometry, BUNDANG_GEOMETRY_ADJUSTMENT_LIMIT_METERS } from './bundang-measured-geometry';
+import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
+import { BUNDANG_EXACT_GEOMETRY_REVISION } from './bundang-exact-source';
 import { measureIstarparkLaserGap } from './istarpark-laser-measurement';
 import { applyPlanVariant } from './plan-variants';
 import { readBundangPrototypeApartments } from './test-support/bundang-prototypes';
@@ -48,7 +49,7 @@ describe('46 physical/reference dimension contracts', () => {
       .map(reference => `${reference.unitType}:${reference.id}`)).toEqual(['55B:alpha-room-width']);
   });
 
-  it.each(cases)('$name preserves endpoint physics, millimetres and non-worsening error after A-D transformation', ({ reference, variant }) => {
+  it.each(cases)('$name matches the drawing at physical endpoints and preserves millimetres after A-D transformation', ({ reference, variant }) => {
     const source = sourceApartments.get(reference.unitType)!;
     const apartment = structuredClone(calibrated.get(reference.unitType)!);
     const before = resolveBundangMeasuredDimension(source.geometry!, reference);
@@ -58,6 +59,7 @@ describe('46 physical/reference dimension contracts', () => {
     const targetMeters = reference.targetMm / 1000;
     expect(Math.abs(after.distanceMeters! - targetMeters))
       .toBeLessThanOrEqual(Math.abs(before.distanceMeters! - targetMeters) + 1e-6);
+    expect(Math.abs(after.distanceMeters! - targetMeters)).toBeLessThan(1e-6);
 
     const world = {
       entry: { unitType: reference.unitType } as StaticMapEntry,
@@ -107,12 +109,15 @@ describe('46 physical/reference dimension contracts', () => {
       expect(JSON.stringify(apartment)).toBe(once);
       return;
     }
-    expect(after.floorPolygon).toEqual(before.floorPolygon);
-    expect(after.wallSegments!.filter(wall => wall.kind === 'exterior')).toEqual(before.wallSegments!.filter(wall => wall.kind === 'exterior'));
-    expect(after.openings!.filter(opening => String(opening.id).startsWith('outer-'))).toEqual(before.openings!.filter(opening => String(opening.id).startsWith('outer-')));
+    expect(after.bundangGeometryRevision).toBe(BUNDANG_EXACT_GEOMETRY_REVISION);
+    expect(after.floorPolygon).not.toEqual(before.floorPolygon);
+    expect(after.floorPolygon).toHaveLength(before.floorPolygon!.length);
     expect(after.wallSegments!.map(wall => wall.id)).toEqual(before.wallSegments!.map(wall => wall.id));
     expect(after.openings!.map(opening => opening.id)).toEqual(before.openings!.map(opening => opening.id));
-    const limit = BUNDANG_GEOMETRY_ADJUSTMENT_LIMIT_METERS + 1e-7;
+    // Exact dimensions were explicitly approved over the former 50mm/fixed-
+    // exterior policy. Keep contour topology and authored normal thickness;
+    // the offline table minimizes movement instead of hiding numeric errors.
+    const limit = .4;
     for (const oldWall of before.wallSegments!) {
       const wall = after.wallSegments!.find(candidate => candidate.id === oldWall.id)!;
       const oldA = oldWall.a as number[], oldB = oldWall.b as number[];
@@ -120,12 +125,14 @@ describe('46 physical/reference dimension contracts', () => {
       expect(Math.hypot(a[0] - oldA[0], a[1] - oldA[1]), String(wall.id)).toBeLessThanOrEqual(limit);
       expect(Math.hypot(b[0] - oldB[0], b[1] - oldB[1]), String(wall.id)).toBeLessThanOrEqual(limit);
       expect(Math.hypot((a[0] + b[0] - oldA[0] - oldB[0]) / 2, (a[1] + b[1] - oldA[1] - oldB[1]) / 2), String(wall.id)).toBeLessThanOrEqual(limit);
-      expect(Math.abs(Number(wall.thicknessMeters) - Number(oldWall.thicknessMeters)), String(wall.id)).toBeLessThanOrEqual(limit);
+      expect(wall.thicknessMeters, String(wall.id)).toBe(oldWall.thicknessMeters);
       const oldLength = Math.hypot(oldB[0] - oldA[0], oldB[1] - oldA[1]);
       if (oldLength < 1e-8) continue;
       const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
       const oldNormal = [-(oldB[1] - oldA[1]) / oldLength, (oldB[0] - oldA[0]) / oldLength];
       const normal = [-(b[1] - a[1]) / length, (b[0] - a[0]) / length];
+      expect(normal[0]).toBeCloseTo(oldNormal[0], 8);
+      expect(normal[1]).toBeCloseTo(oldNormal[1], 8);
       for (const sign of [-1, 1]) for (const [oldEnd, end] of [[oldA, a], [oldB, b]]) {
         const dx = end[0] + sign * normal[0] * Number(wall.thicknessMeters) / 2 - oldEnd[0] - sign * oldNormal[0] * Number(oldWall.thicknessMeters) / 2;
         const dy = end[1] + sign * normal[1] * Number(wall.thicknessMeters) / 2 - oldEnd[1] - sign * oldNormal[1] * Number(oldWall.thicknessMeters) / 2;
@@ -153,7 +160,7 @@ describe('46 physical/reference dimension contracts', () => {
     }
   });
 
-  it('keeps the 46-row audit and public guide synchronized with actual geometry calculations', async () => {
+  it('keeps the 46-row audit and operator guide synchronized with actual geometry calculations', async () => {
     const files = ['docs/bundang-measured-dimensions-2026-11-14.md', 'src/guides/content/laser-dimensions.md'];
     const documents = await Promise.all(files.map(file => readFile(path.join(process.cwd(), file), 'utf8')));
     const tables = documents.map(document => document.split('\n')

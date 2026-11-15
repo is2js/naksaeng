@@ -1,5 +1,6 @@
 import type { ApartmentGeometry, ApartmentInteriorProp, ApartmentPointObject, WorldData, WorldObject } from './types';
 import { apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
+import { BUNDANG_EXACT_GEOMETRY_REVISION } from './bundang-exact-source';
 
 type Point = [number, number];
 type Row = Record<string, unknown>;
@@ -8,6 +9,12 @@ const replacedBlockedCells = new WeakMap<WorldObject, Array<{ x: number; y: numb
 
 export function isBundang55BGeometryV2(apartment: WorldObject): boolean {
   return apartment.geometry?.bundangGeometryRevision === BUNDANG_55B_GEOMETRY_REVISION;
+}
+
+/** Both reviewed reconstruction paths own a fresh physical floor/collision mask. */
+export function hasBundangRebuiltGeometry(apartment: WorldObject): boolean {
+  return isBundang55BGeometryV2(apartment)
+    || apartment.geometry?.bundangGeometryRevision === BUNDANG_EXACT_GEOMETRY_REVISION;
 }
 
 /** Replace only this apartment's old mask, preserving unrelated world blockers. */
@@ -98,7 +105,8 @@ function rebuildCanonicalCells(apartment: WorldObject): void {
         ? inside(local, solid.footprintPolygonMeters as number[][]) : containsBounds(local, solid.boundsMeters));
       if (wallBlocked || solidBlocked) structural.push(cell);
       else if (geometry.kitchenFixtures!.some(fixture => containsBounds(local, fixture.boundsMeters))
-        || geometry.interiorProps!.some(fixture => fixtureContains(local, fixture))) fixtures.push(cell);
+        || geometry.interiorProps!.some(fixture => fixture.installationRole === 'bathroom-base-fixture'
+          && fixture.collisionMode !== 'visual-only' && fixtureContains(local, fixture))) fixtures.push(cell);
       if (containsBounds(local, geometry.roomZones!.find(room => room.id === 'entry')?.boundsMeters)) entry.push(cell);
     }
   }
@@ -110,11 +118,18 @@ function rebuildCanonicalCells(apartment: WorldObject): void {
     collisionCells: blocked, structuralBlockedCells: structural, interiorPropBlockedCells: fixtures,
     inspectionWallCells: structural, occlusionCells: structural, transparencyCells: structural,
     vegetationExclusionCells: floor, entranceCells: entry, doors: clone(geometry.openings!.filter(opening => opening.type !== 'window')),
-    planRevision: BUNDANG_55B_GEOMETRY_REVISION,
-    width: Math.ceil((10.38 + .55) / .5), depth: Math.ceil(9.2 / .5),
+    planRevision: String(geometry.bundangMeasuredGeometryRevision || BUNDANG_55B_GEOMETRY_REVISION),
+    width: Math.ceil((Math.max(...geometry.floorPolygon!.map(p => p[0])) - Math.min(...geometry.floorPolygon!.map(p => p[0]))) / Number(geometry.cellSizeMeters || .5)),
+    depth: Math.ceil((Math.max(...geometry.floorPolygon!.map(p => p[1])) - Math.min(...geometry.floorPolygon!.map(p => p[1]))) / Number(geometry.cellSizeMeters || .5)),
     bounds: { x1: Math.floor(Math.min(...worldFloor.map(point => point.x))), y1: Math.floor(Math.min(...worldFloor.map(point => point.y))),
       x2: Math.ceil(Math.max(...worldFloor.map(point => point.x))), y2: Math.ceil(Math.max(...worldFloor.map(point => point.y))) },
   });
+}
+
+/** Share the source-only mask replacement with the other reviewed exact plans. */
+export function rebuildBundangMeasuredCells(apartment: WorldObject): void {
+  replacedBlockedCells.set(apartment, clone(apartment.blockedCells || []));
+  rebuildCanonicalCells(apartment);
 }
 
 function wall(id: string, a: Point, b: Point, kind = 'interior', thickness = .12, base = 0, height = 2.3): ApartmentPointObject {
@@ -210,8 +225,12 @@ function buildGeometry(source: ApartmentGeometry): ApartmentGeometry {
   full('outdoor-unit-north', p(-.55, 7.26), p(1.0, 7.26), 'service', .20);
   full('utility-north', p(1.0, 7.26), p(3.45, 7.26), 'service', .20);
   door('outdoor-unit-east', p(1.0, 7.26), p(1.0, 9.20), .12, 1.02, [-1, 0], 'service', .20, 'interior-door', false, 30);
-  walls.push(wall('utility-kitchen-east-lintel', p(3.45, 7.26), p(3.45, 8.25), 'service', .20, 2.1, .2));
-  openings.push({ id: 'utility-kitchen-east-opening', type: 'interior-door', a: [3.45, 7.26], b: [3.45, 8.25],
+  // The user identified a short fixed return before the service column. Its
+  // unlabelled 190 mm length is a photo-based inference, not a measured plan
+  // dimension. Preserve the 800 mm doorway instead of filling its whole span.
+  walls.push({ ...wall('utility-kitchen-east-after', p(3.45, 8.06), p(3.45, 8.25), 'service', .20), strictDoorJamb: true });
+  walls.push(wall('utility-kitchen-east-lintel', p(3.45, 7.26), p(3.45, 8.06), 'service', .20, 2.1, .2));
+  openings.push({ id: 'utility-kitchen-east-opening', type: 'interior-door', a: [3.45, 7.26], b: [3.45, 8.06],
     baseMeters: 0, heightMeters: 2.1, wallThicknessMeters: .20, interiorNormal: [-1, 0],
     leafHeightMeters: 1.92, leafWidthScale: .90, leafThicknessMeters: .045, leafOpenAngleDeg: 82,
     leafState: 'open', hingeEndpoint: 'b', passableWhenClosed: false });
@@ -316,7 +335,10 @@ function buildGeometry(source: ApartmentGeometry): ApartmentGeometry {
     bundangMeasuredGeometryRevision: BUNDANG_55B_GEOMETRY_REVISION,
     geometryProvenance: { source: 'user-provided-55b-dimensioned-image', policy: 'blue-dimensions-and-traced-adjacency',
       labelledDimensionToleranceMeters: .020, inferredEntryWidthMeters: 1.50, inferredEntryToleranceMeters: .05,
-      inferredPantryWidthMeters: 1.00, notice: '도면 치수와 이미지 비례를 바탕으로 한 가상 평면이며 실제 CAD·시공 치수가 아닙니다.' },
+      inferredPantryWidthMeters: 1.00,
+      utilityDoorReturn: { source: 'user-annotated-runtime-image', confidence: 'inferred', clearOpeningMeters: .80, returnLengthMeters: .19,
+        notice: '사용자가 표시한 다용도실 문·설비벽 사이 짧은 고정벽을 반영한 사진 기반 추론값이며 공식 도면 실측치가 아닙니다.' },
+      notice: '도면 치수와 이미지 비례를 바탕으로 한 가상 평면이며 실제 CAD·시공 치수가 아닙니다.' },
     floorAnnotationMode: 'explicit-wall-span-dimensions-v3',
   };
   // Keep the provided numbers as provenance, but place labels at the real new

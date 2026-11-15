@@ -6,6 +6,7 @@ try {
   const { readBundangPrototypeApartments } = await server.ssrLoadModule('/src/game/test-support/bundang-prototypes.ts');
   const { BUNDANG_MEASURED_DIMENSIONS, resolveBundangMeasuredDimension } = await server.ssrLoadModule('/src/game/bundang-measured-dimensions.ts');
   const { applyBundangMeasuredGeometry } = await server.ssrLoadModule('/src/game/bundang-measured-geometry.ts');
+  const { BUNDANG_EXACT_GEOMETRY_REVISION } = await server.ssrLoadModule('/src/game/bundang-exact-source.ts');
   const apartments = await readBundangPrototypeApartments();
   const afterApartments = new Map([...apartments].map(([unit, source]) => {
     const calibrated = structuredClone(source);
@@ -19,11 +20,12 @@ try {
     const beforeError = before.distanceMeters * 1000 - reference.targetMm;
     const afterError = after.distanceMeters * 1000 - reference.targetMm;
     if (Math.abs(afterError) > Math.abs(beforeError) + .001) throw new Error(`Error worsened: ${reference.unitType}:${reference.id}`);
+    const exact = afterApartments.get(reference.unitType).geometry.bundangExactGeometryRevision === BUNDANG_EXACT_GEOMETRY_REVISION;
+    if (exact && Math.abs(afterError) > .001) throw new Error(`Exact geometry mismatch: ${reference.unitType}:${reference.id}`);
     let reason = Math.abs(afterError) < .00001
-      ? Math.abs(beforeError) < .00001 ? '기존 일치 유지' : '목표 일치'
+      ? Math.abs(beforeError) < .00001 ? '기존 일치 유지' : exact ? '도면 우선 정본·목표 일치' : '목표 일치'
       : Math.abs(afterError) < .5 ? '1mm 표시 기준 일치'
-        : Math.abs(afterError) < Math.abs(beforeError) - .001 ? '50mm 제한 보정·잔여 차이'
-          : '외곽·공유벽·50mm 제한으로 유지';
+        : '정본 불일치·검토 필요';
     if (reference.unitType === '55B') reason = '55B v2 도면 비례 정본·목표 일치';
     if (reference.kind === 'reference-span') reason = `열린/부분 기준선; ${reason}`;
     if (reference.provenance.targetConfidence === 'inferred-decimal') reason = `1.8m 잠정; ${reason}`;

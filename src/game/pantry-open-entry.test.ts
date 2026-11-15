@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { BUNDANG_OPTION_DISPLAY_OVERRIDES, refineBundangOptionProps } from './bundang-option-layout';
 import { associateOptionSources } from './option-prop-selection';
 import { applyPlanVariantInteriorOverrides, availablePlanVariants, planVariantDefinition } from './plan-variants';
-import { apartmentPropPlacement, apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
+import { apartmentPropPlacement, apartmentSolidBlockVisualFootprint, apartmentUnitWorldPoint, apartmentWorldPointToLocalMeters } from './apartment-transform';
 import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
+import { measureIstarparkLaserGap } from './istarpark-laser-measurement';
 import { readBundangPrototypeApartments } from './test-support/bundang-prototypes';
 import { mergeEditorPropsWithBase, mergeRuntimeAssetCatalogs, STRUCTURAL_PROP_ASSETS } from './three-world';
 import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog } from './types';
@@ -49,10 +50,10 @@ describe('entry pantry open-end cabinet', () => {
     const option = catalog.bOptions.find(option => option.id === OPTION)!;
     expect(option.compatibleUnitTypes).not.toContain('51A');
     const sources = await readBundangPrototypeApartments();
-    const expected: Record<string, { x: number; y: number; width: number; surface: string }> = {
-      '55A': { x: 7.95, y: 3.43749995, width: 1.7549999, surface: 'entry-pantry-west-service-block' },
-      '55B': { x: 6.12, y: 2.635, width: 1.41, surface: 'pantry-west' },
-      '59A': { x: 8.25, y: 3.68749995, width: 1.4549999, surface: 'entry-pantry-west-service-block' },
+    const expectedSurfaceIds: Record<string, string> = {
+      '55A': 'entry-pantry-west-service-block',
+      '55B': 'pantry-west',
+      '59A': 'entry-pantry-west-service-block',
     };
     let plans = 0;
     for (const map of catalog.maps.filter(map => option.compatibleUnitTypes.includes(map.unitType))) {
@@ -69,7 +70,25 @@ describe('entry pantry open-end cabinet', () => {
         const props = associateOptionSources(refineBundangOptionProps(geometry, map.unitType, [OPTION], originals, variant), [OPTION]);
         const corrected = props.find(prop => prop.assetId === ASSET)!;
         const size = corrected.dimensionsMeters as number[];
-        const target = expected[map.unitType];
+        // Derive from the CURRENT physical faces, not historical v1 world
+        // coordinates or the very placement metadata this test is checking.
+        const west = geometry.wallSegments!.find(row => row.id === 'pantry-west')!;
+        const westA = west.a as [number, number], westB = west.b as [number, number];
+        const surfaceId = expectedSurfaceIds[map.unitType];
+        const block = geometry.solidBlocks?.find(row => row.id === surfaceId);
+        if (surfaceId !== 'pantry-west') expect(block, `${map.unitType}:backing block`).toBeDefined();
+        const footprint = block ? apartmentSolidBlockVisualFootprint(apartment, block) : [];
+        const backX = Math.max(westA[0] + Number(west.thicknessMeters) / 2,
+          ...footprint.map(p => p[0]));
+        const northSouthGap = measureIstarparkLaserGap({ apartment, geometry, props: [], axis: 'y',
+          anchorPlanPoint: [backX + .01, (westA[1] + westB[1]) / 2] });
+        expect(northSouthGap.valid, `${map.unitType}:physical shelf recess`).toBe(true);
+        const start = Math.max(northSouthGap.negativeHit!.point![1],
+          footprint.length ? Math.min(...footprint.map(p => p[1])) : -Infinity);
+        const end = Math.min(northSouthGap.positiveHit!.point![1],
+          footprint.length ? Math.max(...footprint.map(p => p[1])) : Infinity);
+        const target = { x: backX + .01 + .48 / 2, y: (start + end) / 2,
+          width: end - start - .04, surface: surfaceId };
         expect(corrected.positionMeters![0]).toBeCloseTo(target.x, 6);
         expect(corrected.positionMeters![1]).toBeCloseTo(target.y, 6);
         expect(size[0]).toBeCloseTo(target.width, 6);
@@ -89,6 +108,7 @@ describe('entry pantry open-end cabinet', () => {
         };
         const width = size[0], depth = size[1];
         const back = corrected.pantryBackFaceMeters as number[];
+        [backX, start, backX, end].forEach((value, index) => expect(back[index]).toBeCloseTo(value, 7));
         for (const x of [-width / 2, 0, width / 2]) {
           const actual = modelPoint(x, depth / 2);
           const reference = apartmentUnitWorldPoint(apartment, [back[0] + .01, target.y + x]);

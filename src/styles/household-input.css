@@ -1,6 +1,94 @@
+.household-nickname-stage .household-nickname-controls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.household-nickname-selection {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.household-nickname-selection .household-selected-building {
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  border-color: rgba(226, 137, 127, .32);
+  color: #efb7ae;
+  background: rgba(171, 72, 62, .1);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.household-verification-button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid rgba(226, 137, 127, .46);
+  border-radius: 6px;
+  color: #f3bdb3;
+  background: rgba(171, 72, 62, .2);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.household-verification-button:hover:not(:disabled),
+.household-verification-button:focus-visible {
+  border-color: #e4998b;
+  color: #ffe3dc;
+  background: rgba(171, 72, 62, .34);
+}
+
+.household-verification-button:focus-visible {
+  outline: 2px solid #e4998b;
+  outline-offset: 2px;
+}
+
+.household-verification-button:disabled {
+  border-color: rgba(175, 127, 119, .2);
+  color: #9f8c87;
+  background: rgba(104, 61, 54, .13);
+  cursor: default;
+}
+
+.household-nickname-card .household-registration-request {
+  margin-top: 16px;
+}
+
+.household-nickname-card .household-registration-request button {
+  color: #9aaea8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.household-nickname-card .household-registration-request button:hover:not(:disabled) {
+  color: #bde4d9;
+  text-decoration-thickness: 1px;
+}
+
+.household-nickname-card .household-registration-request button:disabled {
+  color: #748781;
+}
+
 /* Keep the real selection summary below the form while the mobile keyboard is
    in use. It returns to the existing raised/fixed dock after verification. */
 @media (pointer: coarse), (max-width: 760px) {
+  .household-nickname-stage-head {
+    flex-wrap: wrap;
+  }
+
+  .household-nickname-selection {
+    width: 100%;
+  }
+
+  .household-nickname-selection .household-selected-building,
+  .household-verification-button {
+    min-height: 44px;
+  }
+
   .household-selector-shell.is-nickname-editing {
     padding-bottom: 24px;
   }

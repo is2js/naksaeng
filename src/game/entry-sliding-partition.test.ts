@@ -18,10 +18,14 @@ import { mergeEditorPropsWithBase } from './three-world';
 import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog, WorldObject } from './types';
 
 type Bounds = [number, number, number, number];
-const PARKING: Record<string, [number, number]> = {
-  '51A': [2.92, 4], '55A': [7.71, 8.64], '55B': [5.82, 6.97], '59A': [7.89, 9.04],
+const UNITS = ['51A', '55A', '55B', '59A'];
+const ENTRY_JAMB_WALLS: Record<string, [string, string]> = {
+  '51A': ['bathroom-2-east-before', 'kitchen-living-short-return'],
+  '55A': ['pantry-east-after', 'bathroom-2-entry-return'],
+  '55B': ['pantry-east-after', 'bathroom-2-entry-return'],
+  '59A': ['pantry-east-after', 'bathroom-2-entry-short-return'],
 };
-const cases = Object.keys(PARKING).flatMap(unit => availablePlanVariants(unit).map(variant => ({ unit, variant })));
+const cases = UNITS.flatMap(unit => availablePlanVariants(unit).map(variant => ({ unit, variant })));
 let sources: Map<string, WorldObject>;
 let runtime: { bundangPrototypeOptionProps(geometry: ApartmentGeometry, unit: string, ids: string[]): ApartmentInteriorProp[] };
 
@@ -30,7 +34,7 @@ beforeAll(async () => {
   const root = path.join(process.cwd(), 'public');
   const catalog = JSON.parse(await readFile(path.join(root, 'generated/catalog.v1.json'), 'utf8')) as ShowcaseCatalog;
   runtime = await import(pathToFileURL(path.join(root, catalog.renderAssets!.optionModuleUrl)).href) as typeof runtime;
-  for (const unit of Object.keys(PARKING)) {
+  for (const unit of UNITS) {
     expect(catalog.bOptions.find(option => option.id === ENTRY_PARTITION_ID)?.compatibleUnitTypes).toContain(unit);
   }
 });
@@ -42,6 +46,16 @@ function bounds(points: NumericPoint[]): Bounds {
 
 function gap(a: Bounds, b: Bounds): number {
   return Math.hypot(Math.max(0, a[0] - b[2], b[0] - a[2]), Math.max(0, a[1] - b[3], b[1] - a[3]));
+}
+
+/** Use independent physical jamb owners, not parking metadata or old coordinates. */
+function physicalOpening(geometry: ApartmentGeometry, unit: string): [number, number] {
+  const [leftId, rightId] = ENTRY_JAMB_WALLS[unit];
+  const left = geometry.wallSegments!.find(wall => wall.id === leftId)!;
+  const right = geometry.wallSegments!.find(wall => wall.id === rightId)!;
+  const leftFace = (left.a as NumericPoint)[0] + Number(left.thicknessMeters) / 2;
+  const rightCap = Math.min((right.a as NumericPoint)[0], (right.b as NumericPoint)[0]);
+  return [leftFace, rightCap];
 }
 
 function fresh(unit: string, variant: 'A' | 'B' | 'C' | 'D'): WorldObject {
@@ -100,11 +114,17 @@ describe('벽 앞에 완전히 주차되는 고정 슬라이딩 중문', () => {
     actualSize.toArray().forEach((value, index) => expect(value).toBeCloseTo([size[0], size[2], size[1]][index], 6));
 
     const local = bounds(interiorPropCorners(leaf));
-    expect(local[0]).toBeCloseTo(PARKING[unit][0], 3);
-    expect(local[2]).toBeCloseTo(PARKING[unit][1], 3);
+    const [openingStart, openingEnd] = physicalOpening(geometry, unit);
+    const expectedWidth = unit === '59A' ? Math.min(openingEnd - openingStart + .04, 1.15)
+      : openingEnd - openingStart + .04;
+    const expectedParkStart = unit === '51A' ? openingEnd + .02 : openingStart - .02 - expectedWidth;
+    expect(local[0]).toBeCloseTo(expectedParkStart, 8);
+    expect(local[2]).toBeCloseTo(expectedParkStart + expectedWidth, 8);
     const parking = leaf.entryParkingBoundsMeters as number[];
     expect(local[1] - parking[1]).toBeCloseTo(.01, 8);
     const opening = leaf.entryOpeningBoundsMeters as number[];
+    expect(opening[0]).toBeCloseTo(openingStart, 8);
+    expect(opening[2]).toBeCloseTo(openingEnd, 8);
     expect(unit === '51A' ? local[0] - opening[2] : opening[0] - local[2]).toBeCloseTo(.02, 8);
     expect(leaf).toMatchObject({ panelParkingReference: 'entrance-jamb', entranceParkingGapMeters: .02 });
     expect(Number(leaf.slideTravelMeters)).toBeLessThanOrEqual(size[0] + .10);
@@ -158,20 +178,23 @@ describe('벽 앞에 완전히 주차되는 고정 슬라이딩 중문', () => {
     const leafBounds = bounds(interiorPropCorners(leaf));
     const size = leaf.dimensionsMeters as [number, number, number];
     expect(size[0]).toBeCloseTo((leaf55B.dimensionsMeters as number[])[0], 8);
-    expect(leaf.usableOpeningLengthMeters).toBeCloseTo(1.29, 6);
+    const [openingStart, openingEnd] = physicalOpening(geometry, '59A');
+    const clearOpening = openingEnd - openingStart;
+    expect(leaf.usableOpeningLengthMeters).toBeCloseTo(clearOpening, 6);
     expect(opening[0] - leafBounds[2]).toBeCloseTo(.02, 8);
     expect(leaf).toMatchObject({ productWidthLimitMeters: 1.15,
       productSizingProvenance: 'photo-scale-inferred-not-manufacturer-spec',
       panelParkingReference: 'entrance-jamb', closedCoverageComplete: false,
       closedCoverageMode: 'partial-inferred', closedOpeningCoverageMeters: 1.15 });
-    expect(leaf.closedUncoveredOpeningMeters).toBeCloseTo(.14, 6);
+    expect(leaf.closedUncoveredOpeningMeters).toBeCloseTo(clearOpening - size[0], 6);
     const closed = leaf.closedPositionMeters as number[];
     for (const rail of rails) {
       const railBounds = bounds(interiorPropCorners(rail));
       expect(railBounds[0]).toBeCloseTo(leafBounds[0], 8);
       expect(railBounds[2]).toBeCloseTo(closed[0] + size[0] / 2, 8);
-      expect((rail.dimensionsMeters as number[])[0]).toBeCloseTo(2.39, 6);
-      expect(railBounds[0]).toBeGreaterThan(7.8); // Never extend to the old 6.45 m kitchen corner.
+      expect((rail.dimensionsMeters as number[])[0]).toBeCloseTo(closed[0] + size[0] / 2 - leafBounds[0], 6);
+      // Remain tied to the real entrance jamb, never the old distant kitchen corner.
+      expect(railBounds[0]).toBeCloseTo(openingStart - .02 - size[0], 8);
     }
     const reflected = Boolean(apartment.transform?.mirrorX) !== Boolean(apartment.transform?.mirrorY);
     expect(leaf.yawDeg).toBe(reflected ? 180 : 0);

@@ -27,6 +27,14 @@ import {
   synchronizeBundangMinusOptionGeometryState,
 } from './bundang-option-layout';
 import { associateOptionSources } from './option-prop-selection';
+import { bundangKitchenWallFinishSurfaces, isBundangKitchenStonePart, isBundangKitchenWallFinishSelectionProxy } from './bundang-kitchen-finish';
+import {
+  applyBundangKitchenStoneMetricUVs,
+  applyBundangKitchenWallFaceFinish,
+  createBundangKitchenStoneMaterial,
+  createBundangKitchenStoneTextures,
+  createBundangKitchenWallSelectionProxy,
+} from './bundang-kitchen-finish-material';
 import {
   applyBundangFloorUVs,
   BUNDANG_FLOOR_SURFACE_Y,
@@ -689,7 +697,8 @@ export function mergeEditorPropsWithBase(
     if (!override) return [base];
     // Old editable-option saves must not put fixed pantry/entry joinery back
     // on its former wall or into the clear passage. Stored/user rows stay intact.
-    if (base.fixedOptionLayout === true && ['entry-pantry-system-shelf', 'entry-sliding-partition-door'].includes(String(base.sourceOptionId))) return [base];
+    if (isBundangKitchenWallFinishSelectionProxy(base)
+      || base.fixedOptionLayout === true && ['entry-pantry-system-shelf', 'entry-sliding-partition-door'].includes(String(base.sourceOptionId))) return [base];
     if (override.localDeleted === true) return [];
     const yawDeg = Number(override.yawDeg);
     return [{
@@ -725,6 +734,7 @@ export class ThreeWorldRenderer {
   private readonly textureCache = new Map<string, THREE.Texture>();
   private readonly woodFloorTexture = createBundangWoodFloorTexture();
   private readonly designWallTextures = createBundangDesignWallTextures();
+  private readonly kitchenStoneTextures = createBundangKitchenStoneTextures();
   private readonly wallpaperTextures = { common: createBundangWallpaperTextures('common'), bedroom: createBundangWallpaperTextures('bedroom') };
   private readonly assets = new Map<string, RuntimeAsset>();
   private readonly variants = new Map<string, Record<string, string>>(Object.entries(DEFAULT_VARIANTS));
@@ -1402,7 +1412,7 @@ export class ThreeWorldRenderer {
     this.textureCache.forEach((texture) => texture.dispose());
     this.textureCache.clear();
     this.woodFloorTexture.dispose();
-    for (const maps of [this.designWallTextures, ...Object.values(this.wallpaperTextures)]) {
+    for (const maps of [this.designWallTextures, this.kitchenStoneTextures, ...Object.values(this.wallpaperTextures)]) {
       maps.albedo.dispose(); maps.bump.dispose(); maps.roughness.dispose();
     }
     this.renderer.dispose();
@@ -1698,6 +1708,8 @@ export class ThreeWorldRenderer {
       object.unitTypeId || this.world?.entry.unitType || '',
       this.selectedOptionIds,
     );
+    const kitchenStoneFaces = bundangKitchenWallFinishSurfaces(geometry, this.selectedOptionIds);
+    let kitchenStoneFinishedWallCount = 0;
     for (const segmentValue of geometry.wallSegments || []) {
       const segment = segmentValue as Record<string, unknown>;
       const ends = points([segment.a, segment.b]);
@@ -1752,6 +1764,18 @@ export class ThreeWorldRenderer {
         mesh.userData.wallFinishFaceIndex = faceIndex;
         designWallFaceCount++;
       }
+      const kitchenSurfaces = kitchenStoneFaces.filter(row => row.wallSegmentId === String(segment.id || ''));
+      for (const faceIndex of [4, 5] as const) {
+        const surfaces = kitchenSurfaces.filter(row => bundangWallFaceMaterialIndex(object, ends[0], ends[1], row.normalMeters) === faceIndex);
+        if (!surfaces.length) continue;
+        const stone = createBundangKitchenStoneMaterial(this.kitchenStoneTextures, opacity, cellSize);
+        const materialIndex = materials.push(stone) - 1;
+        if (applyBundangKitchenWallFaceFinish(mesh.geometry, faceIndex, surfaces, materialIndex, cellSize)) {
+          mesh.userData.kitchenFinishProfile = 'golden-shore-engineered-stone';
+          mesh.userData.kitchenFinishRanges = surfaces.map(row => [row.startFraction, row.endFraction]);
+          kitchenStoneFinishedWallCount++;
+        } else { materials.pop(); stone.dispose(); }
+      }
       compactBundangMaterialGroups(mesh.geometry, materials);
       const castsShadow = castsExteriorStructureShadow(segment, frontCutaway);
       mesh.castShadow = castsShadow;
@@ -1777,6 +1801,8 @@ export class ThreeWorldRenderer {
     this.canvas.dataset.interiorShadowCasterCount = '0';
     this.canvas.dataset.designWallSurfaceMode = 'material-replacement';
     this.canvas.dataset.designWallFinishedFaceCount = String(designWallFaceCount);
+    this.canvas.dataset.kitchenStoneFinishedWallCount = String(kitchenStoneFinishedWallCount);
+    this.canvas.dataset.kitchenStoneSurfaceMode = 'existing-wall-face-material-replacement';
     this.canvas.dataset.wallpaperProfiles = 'seoul-silk-4092-2|seoul-silk-4252-5';
     this.canvas.dataset.wallFinishTextureMaps = 'shared-albedo-bump-roughness';
 
@@ -2036,6 +2062,14 @@ export class ThreeWorldRenderer {
     group.userData.ceilingActorOccluder = isCeilingActorOccluder(mountingKind, prop.installationRole);
     group.userData.ceilingAssetId = assetId;
     this.propRoot.add(group);
+    group.updateWorldMatrix(true, true);
+    group.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh && mesh.userData.kitchenStoneSurface === true) {
+        applyBundangKitchenStoneMetricUVs(mesh.geometry, mesh.matrixWorld, object,
+          this.world || { width: 64, height: 64 });
+      }
+    });
     if (group.userData.ceilingActorOccluder && isFadeableCeilingAppliance(assetId, String(prop.sourceOptionId || ''))) prepareCeilingFade(group);
     if (group.userData.ceilingActorOccluder) this.ceilingMaskRevision++;
     this.registerFinishOccluders(object, prop, group);
@@ -2073,7 +2107,7 @@ export class ThreeWorldRenderer {
   private registerFinishOccluders(object: WorldObject, prop: ApartmentInteriorProp, group: THREE.Group): void {
     // Material-replaced design walls already share the structural wall fade and
     // actor mask. Their invisible picking planes must never add a second mask.
-    if (isBundangWallFinishSelectionProxy(prop)) return;
+    if (isBundangWallFinishSelectionProxy(prop) || isBundangKitchenWallFinishSelectionProxy(prop)) return;
     const localSegments = Array.isArray(prop.occlusionSegmentsMeters) ? prop.occlusionSegmentsMeters : [];
     const segments = localSegments.flatMap((segment): Array<[NumericPoint, NumericPoint]> => {
       const start = points([segment?.[0]])[0];
@@ -2200,6 +2234,7 @@ export class ThreeWorldRenderer {
     const cellSize = Math.max(0.01, finite(this.apartment?.geometry?.cellSizeMeters, 0.5));
     if (prop.assetId === 'entry-sliding-partition-door') return createEntrySlidingPanel(prop, cellSize);
     if (prop.assetId === 'entry-sliding-partition-rail') return createEntrySlidingRail(prop, cellSize);
+    if (isBundangKitchenWallFinishSelectionProxy(prop) && this.apartment) return createBundangKitchenWallSelectionProxy(prop, this.apartment);
     if (isBundangWallFinishSelectionProxy(prop)) {
       group.add(createBundangWallFinishSelectionSurface(size[0] / cellSize, size[2] / cellSize));
       return group;
@@ -2241,7 +2276,10 @@ export class ThreeWorldRenderer {
       if (prop.mirrored) geometry.dispose();
       const role = String(part.materialRole || 'primary');
       const infinityBody = prop.assetId === 'interior-infinity-door-panel' && role === 'primary';
-      const material = infinityBody
+      const kitchenStone = isBundangKitchenStonePart(prop, role);
+      const material = kitchenStone
+        ? createBundangKitchenStoneMaterial(this.kitchenStoneTextures, 1, cellSize)
+        : infinityBody
         ? createBundangWallpaperMaterial(this.wallpaperTextures.bedroom, 'bedroom', 1, cellSize)
         : role === 'glass'
         ? this.material('#d9f0ef', { glass: true })
@@ -2325,6 +2363,7 @@ export class ThreeWorldRenderer {
       }
       const mesh = new THREE.Mesh(finalGeometry, material);
       mesh.userData.infinityDoorBody = infinityBody;
+      mesh.userData.kitchenStoneSurface = kitchenStone;
       mesh.userData.materialRole = role;
       mesh.position.set(
         size[0] * finite(part.offset?.[0]) * (prop.mirrored ? -1 : 1) / cellSize,

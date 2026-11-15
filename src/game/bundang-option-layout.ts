@@ -4,6 +4,7 @@ import { BUNDANG_55B_GEOMETRY_REVISION } from './bundang-55b-geometry';
 import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
 import { planVariantDefinition, type ApartmentPlanVariant } from './plan-variant-definitions';
 import { bundangEntrySlidingPartitionProps, ENTRY_PARTITION_ID } from './bundang-entry-partition';
+import { isBundangKitchenWallFinishSelectionProxy, refineBundangKitchenFinishProp } from './bundang-kitchen-finish';
 
 type UnitTypeId = '51A' | '55A' | '55B' | '59A';
 type Point = [number, number];
@@ -366,7 +367,7 @@ export const BUNDANG_OPTION_LAYOUTS: Readonly<Record<UnitTypeId, BundangOptionLa
       { id: 'living-west', roomZoneId: 'living', segmentIds: ['outer-west-living-before', 'outer-west-living-sill', 'outer-west-living-lintel', 'outer-west-living-after'], interiorNormal: [1, 0] },
       { id: 'living-north', roomZoneId: 'living', segmentIds: ['bedroom-1-south', 'bedroom-1-south-lintel'], interiorNormal: [0, 1], baseProvided: true },
       { id: 'living-south', roomZoneId: 'living', segmentIds: ['outdoor-unit-north', 'utility-north'], interiorNormal: [0, -1] },
-      { id: 'living-kitchen-return', roomZoneId: 'living', segmentIds: ['utility-kitchen-east-lintel'], interiorNormal: [1, 0] },
+      { id: 'living-kitchen-return', roomZoneId: 'living', segmentIds: ['utility-kitchen-east-lintel', 'utility-kitchen-east-after'], interiorNormal: [1, 0] },
       { id: 'corridor-north', roomZoneId: 'entry', segmentIds: ['bathroom-1-south', 'pantry-south', 'bathroom-2-entry-return'], interiorNormal: [0, 1] },
       { id: 'corridor-south', roomZoneId: 'entry', segmentIds: ['kitchen-alpha-north-return', 'alpha-north-door-before', 'alpha-north-door-lintel', 'alpha-north-door-after', 'alpha-north-after-door', 'bedroom-2-north-before', 'bedroom-2-north-lintel', 'bedroom-2-north-after'], interiorNormal: [0, -1] },
     ],
@@ -577,6 +578,10 @@ function openingEndpoints(geometry: ApartmentGeometry, anchor: InfinityDoorAncho
     const b = point(opening?.b);
     if (a && b) return [a, b];
   }
+  const exact = record(record(geometry.optionAnchors)?.bunfirvilExactDoorwayGaps);
+  const gap = record(exact?.[anchor.roomId]);
+  const a = point(gap?.a), b = point(gap?.b);
+  if (a && b) return [a, b];
   return anchor.gap || null;
 }
 
@@ -1409,6 +1414,7 @@ export function refineBundangOptionProps(
       && !isLegacyIslandBaseProp(prop))
     .map((prop) => refineRefrigeratorCabinetProp(geometry, selected, prop, planVariant))
     .filter((prop): prop is ApartmentInteriorProp => Boolean(prop))
+    .map(prop => refineBundangKitchenFinishProp(geometry, selected, prop))
     .map(refineWidePlankAndVentilatorProp)
     .map(prop => alignEntryPantryToBackWall(geometry, unitType, prop, planVariant))
     .map(alignIntegratedBidetToDefaultFacing)
@@ -1456,7 +1462,8 @@ export function replacedBundangOpeningIds(unitTypeId: string, selectedIds: Itera
 
 export function bundangPreciseEditorPickOnly(prop: ApartmentInteriorProp | undefined): boolean {
   return prop?.sourceOptionId === BUNDANG_DESIGN_WALL_OPTION_ID
-    || prop?.installationRole === 'wall-skin-finish';
+    || prop?.installationRole === 'wall-skin-finish'
+    || isBundangKitchenWallFinishSelectionProxy(prop);
 }
 
 export function bundangEditorSelectionPropIds(

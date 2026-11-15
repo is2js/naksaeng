@@ -19,7 +19,7 @@ import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog, WorldOb
 
 type Bounds = [number, number, number, number];
 const PARKING: Record<string, [number, number]> = {
-  '51A': [2.92, 4], '55A': [6.45, 7.38], '55B': [5.8, 6.95], '59A': [7.89, 9.04],
+  '51A': [2.92, 4], '55A': [7.71, 8.64], '55B': [5.82, 6.97], '59A': [7.89, 9.04],
 };
 const cases = Object.keys(PARKING).flatMap(unit => availablePlanVariants(unit).map(variant => ({ unit, variant })));
 let sources: Map<string, WorldObject>;
@@ -105,7 +105,16 @@ describe('벽 앞에 완전히 주차되는 고정 슬라이딩 중문', () => {
     const parking = leaf.entryParkingBoundsMeters as number[];
     expect(local[1] - parking[1]).toBeCloseTo(.01, 8);
     const opening = leaf.entryOpeningBoundsMeters as number[];
-    expect(unit === '51A' ? local[0] - opening[2] : opening[0] - local[2]).toBeGreaterThanOrEqual(.009);
+    expect(unit === '51A' ? local[0] - opening[2] : opening[0] - local[2]).toBeCloseTo(.02, 8);
+    expect(leaf).toMatchObject({ panelParkingReference: 'entrance-jamb', entranceParkingGapMeters: .02 });
+    expect(Number(leaf.slideTravelMeters)).toBeLessThanOrEqual(size[0] + .10);
+    const closed = leaf.closedPositionMeters as number[];
+    for (const rail of rails) {
+      const railBounds = bounds(interiorPropCorners(rail));
+      expect(railBounds[0]).toBeCloseTo(Math.min(local[0], closed[0] - size[0] / 2), 8);
+      expect(railBounds[2]).toBeCloseTo(Math.max(local[2], closed[0] + size[0] / 2), 8);
+      expect((rail.dimensionsMeters as number[])[0]).toBeLessThanOrEqual(size[0] * 2 + .10);
+    }
     const worldBounds = (points: NumericPoint[]): Bounds => bounds(points.map(point => {
       const p = apartmentUnitWorldPoint(apartment, point);
       return [p.x, p.y];

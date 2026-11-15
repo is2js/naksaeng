@@ -106,8 +106,8 @@ describe('55B v2 canonical reconstruction', () => {
     const width = (door.dimensionsMeters as number[])[0], center = door.positionMeters![0];
     expect(width).toBeCloseTo(1.15, 8);
     expect((door.dimensionsMeters as number[]).slice(1)).toEqual([.04, 2.2]);
-    expect(center - width / 2).toBeCloseTo(5.80, 8);
-    expect(center + width / 2).toBeCloseTo(6.95, 8);
+    expect(center - width / 2).toBeCloseTo(5.82, 8);
+    expect(center + width / 2).toBeCloseTo(6.97, 8);
     expect(6.99 - center - width / 2).toBeGreaterThan(.009);
     expect(door.positionMeters![1] - .04 / 2 - 3.56).toBeCloseTo(.01, 8);
     const shoe = props.find(prop => prop.assetId === 'entry-shoe-cabinet-tall')!;

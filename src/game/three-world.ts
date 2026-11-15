@@ -5,6 +5,7 @@ import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
 import { createEntrySlidingPanel, createEntrySlidingRail } from './entry-partition-model';
+import { doorVisualOpenAngleDeg } from './door-visual-pose';
 import {
   apartmentPropPlacement,
   apartmentSolidBlockVisualFootprint,
@@ -1884,7 +1885,7 @@ export class ThreeWorldRenderer {
       const closed = new THREE.Vector2((handle.x - hinge.x) * widthScale, (handle.z - hinge.z) * widthScale);
       let opened = closed.clone();
       if (!['closed', 'closed-passable'].includes(String(opening.leafState || 'open'))) {
-        const angle = Math.abs(finite(opening.leafOpenAngleDeg, 82)) * Math.PI / 180;
+        const angle = doorVisualOpenAngleDeg(opening) * Math.PI / 180;
         opened.rotateAround(new THREE.Vector2(0, 0), index === 0 ? angle : -angle);
       }
       panel.position.set(hinge.x + opened.x / 2, height / 2, hinge.z + opened.y / 2);

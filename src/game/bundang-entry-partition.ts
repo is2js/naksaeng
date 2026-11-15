@@ -55,22 +55,24 @@ export function bundangEntrySlidingPartitionProps(
     : unit === '55B' ? ['pantry-south'] : ['pantry-kitchen-short-return', 'pantry-south'];
   const backing = horizontal.filter(wall => parkIds.includes(wall.id));
   if (width <= .3 || !backing.length) return [];
-  const corner = unit === '51A' ? .05 : unit === '55B' ? .03 : .10;
   const parksRight = unit === '51A';
-  const parkStart = unit === '59A' ? start - .02 - width
-    : parksRight ? Math.max(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) - corner - width
-      : Math.min(...backing.flatMap(wall => [wall.a[0], wall.b[0]])) + corner;
+  // A wall slider parks immediately beside its own entrance. The previous
+  // kitchen-corner reference inserted an empty wall-length gap on 55A.
+  const parkStart = parksRight ? end + .02 : start - .02 - width;
   const parkEnd = parkStart + width;
   if (parksRight ? parkStart < end + .009 : parkEnd > start - .009) return [];
-  const faceY = Math.max(...backing.map(wall => Math.max(wall.a[1], wall.b[1]) + wall.half));
+  const supportWalls = backing.filter(wall => Math.max(wall.a[0], wall.b[0]) > parkStart
+    && Math.min(wall.a[0], wall.b[0]) < parkEnd);
+  if (!supportWalls.length) return [];
+  const faceY = Math.max(...supportWalls.map(wall => Math.max(wall.a[1], wall.b[1]) + wall.half));
   const depth = .04, height = Math.min(2.2, Number(geometry.clearHeightMeters || 2.3) - .08);
   const planeY = faceY + .01 + depth / 2;
   const variant = (['A', 'B', 'C', 'D'].includes(planVariant.toUpperCase()) ? planVariant.toUpperCase() : 'A') as ApartmentPlanVariant;
   const transform = planVariantDefinition(unit, variant).transform;
   const reflected = Boolean(transform.mirrorX) !== Boolean(transform.mirrorY);
   const closedCenter = (start + end) / 2;
-  const railStart = Math.min(parkStart, unit === '59A' ? closedCenter - width / 2 : start - .02);
-  const railEnd = Math.max(parkEnd, unit === '59A' ? closedCenter + width / 2 : end + .02);
+  const railStart = Math.min(parkStart, closedCenter - width / 2);
+  const railEnd = Math.max(parkEnd, closedCenter + width / 2);
   const inferredProductSizing = unit === '59A' ? {
     productWidthLimitMeters: productWidthLimit,
     productSizingProvenance: 'photo-scale-inferred-not-manufacturer-spec',
@@ -87,6 +89,7 @@ export function bundangEntrySlidingPartitionProps(
     usableOpeningLengthMeters: openingWidth, entryOpeningBoundsMeters: [start, y, end, y],
     entryParkingBoundsMeters: [parkStart, faceY, parkEnd, faceY], panelParkingSide: parksRight ? 'end' : 'start',
     displayState: 'open', openRatio: 1, trackSide: 'corridor', wallClearanceMeters: .01,
+    panelParkingReference: 'entrance-jamb', entranceParkingGapMeters: .02,
     ...inferredProductSizing,
   };
   return [{

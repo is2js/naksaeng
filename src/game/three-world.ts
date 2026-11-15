@@ -27,6 +27,7 @@ import {
   synchronizeBundangMinusOptionGeometryState,
 } from './bundang-option-layout';
 import { associateOptionSources } from './option-prop-selection';
+import { pickSceneSelectionRay } from './scene-selection-ray';
 import { BUNDANG_DEFAULT_FINISH_THEME_ID, resolveBundangFinishTheme, type BundangFinishThemeId } from './bundang-finish-theme';
 import { bundangKitchenWallFinishSurfaces, isBundangKitchenStonePart, isBundangKitchenWallFinishSelectionProxy } from './bundang-kitchen-finish';
 import {
@@ -1358,15 +1359,18 @@ export class ThreeWorldRenderer {
       new THREE.Vector2((screenX / this.cssWidth) * 2 - 1, 1 - (screenY / this.cssHeight) * 2),
       this.camera,
     );
-    for (const intersection of raycaster.intersectObjects(this.propRoot.children, true)) {
-      let object: THREE.Object3D | null = intersection.object;
-      while (object && object.parent !== this.propRoot) object = object.parent;
-      const id = String(object?.userData.editorPropId || '');
-      if (id && (!allowedIds || allowedIds.has(id))) return id;
-    }
+    this.propRoot.updateWorldMatrix(true, true);
+    this.structureRoot.updateWorldMatrix(true, true);
+    // A real wall/floor hit is background, not permission to pick a wardrobe
+    // behind it or a nearby projected box. Explicit chip selection is separate.
+    const directHit = pickSceneSelectionRay(raycaster, this.propRoot, this.structureRoot, allowedIds);
+    if (directHit !== null) return directHit;
     // 얇은 벽부착 가전이나 높은 가구의 실제 삼각형을 살짝 비껴 눌러도,
     // 화면에 투영된 모델 경계 안이면 가장 가까운 가구를 선택한다.
     const projected = this.propRoot.children.flatMap((object) => {
+      for (let current: THREE.Object3D | null = object; current; current = current.parent) {
+        if (!current.visible) return [];
+      }
       const id = String(object.userData.editorPropId || '');
       if (!id || (allowedIds && !allowedIds.has(id))) return [];
       // 디자인 월은 긴 투영 사각형 전체를 보조 히트박스로 쓰지 않고 실제 얇은 메시 교차만 허용한다.

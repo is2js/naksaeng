@@ -29,7 +29,7 @@ import { FloorplanReferenceDialog } from './floorplan-reference-dialog';
 import { FinishThemeControls } from './finish-theme-controls';
 import { highlightedMessageParts } from './highlighted-message';
 import { interiorSelectionName } from './interior-selection-name';
-import { optionPropsForSelection, optionSourceIdForProp } from './option-prop-selection';
+import { isSceneSelectionBackgroundProp, optionPropsForSelection, optionSourceIdForProp } from './option-prop-selection';
 import { systemAcModelConfigurations } from './system-ac-models';
 import { centeredScrollTop } from './palette-scroll';
 import { isMapPanDrag } from './pointer-gesture';
@@ -1009,6 +1009,7 @@ export class ShowcaseApp {
         return;
       }
       this.selectStageOptionInWorld(action.optionId);
+      if (event.detail > 0) this.get<HTMLElement>('#game-stage').focus({ preventScroll: true });
     }, { signal });
     this.get<HTMLButtonElement>('#stage-option-clear').addEventListener('click', () => {
       if (this.readOnlyShare) return;
@@ -1201,16 +1202,9 @@ export class ShowcaseApp {
           return;
         }
       }
-      if ((this.selectedLocalPropId || this.pendingInteriorAssetId) && key === 'escape') {
+      if ((this.selectedLocalPropId || this.selectedStageOptionId || this.pendingInteriorAssetId) && key === 'escape') {
         event.preventDefault();
-        this.pendingInteriorAssetId = '';
-        this.selectedLocalPropId = '';
-        this.selectedScenePropSnapshot = null;
-        this.furnitureContextMenuOpen = false;
-        this.get<HTMLElement>('#game-stage').classList.remove('is-relocating-furniture');
-        this.threeRenderer?.setEditorSelection('');
-        this.renderFurniturePalette();
-        this.updateFurnitureToolbar();
+        this.clearSceneSelection();
         return;
       }
       if (event.code === 'Space') {
@@ -1230,6 +1224,7 @@ export class ShowcaseApp {
       }
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         event.preventDefault();
+        if (!this.prepareActorNavigation()) return;
         this.pressedKeys.add(key);
       }
     }, { signal });
@@ -1272,7 +1267,7 @@ export class ShowcaseApp {
         this.renderer.panByScreenDelta(dx, dy);
       }, signal);
     this.touchPad = new TouchMovementPad(this.get<HTMLElement>('.touch-move-pad'), (x, y) => {
-      if ((x || y) && !this.canTouchMove()) return;
+      if ((x || y) && !this.prepareActorNavigation()) return;
       this.touchMovement = { x, y };
       if (x || y) {
         this.resumeCameraTracking();
@@ -1575,6 +1570,15 @@ export class ShowcaseApp {
   private canTouchMove(): boolean {
     return this.paletteTab !== 'furniture' && !this.interiorGhostProp
       && !this.inspectionLaser.active && !this.mount.querySelector('dialog[open]');
+  }
+
+  private prepareActorNavigation(): boolean {
+    // Navigation ends a completed selection, not a pending placement or a
+    // measurement/dialog interaction. Even a blocked step clears the highlight.
+    if (this.interiorGhostProp || this.inspectionLaser.active || this.mount.querySelector('dialog[open]')) return false;
+    this.clearSceneSelection();
+    if (this.paletteTab === 'furniture') this.setPaletteTab('options');
+    return true;
   }
 
   private centerMobileActor(): void {
@@ -2517,9 +2521,12 @@ export class ShowcaseApp {
     const canvas = this.get<HTMLCanvasElement>('#three-world-canvas');
     const bounds = canvas.getBoundingClientRect();
     const propId = this.threeRenderer.pickEditorProp(event.clientX - bounds.left, event.clientY - bounds.top);
-    return this.localInteriorProps.find((prop) => String(prop.id) === propId && prop.localDeleted !== true)
+    const prop = this.localInteriorProps.find((prop) => String(prop.id) === propId && prop.localDeleted !== true)
       || this.threeRenderer.getRenderedProp(propId)
       || undefined;
+    // Floor/wall finishes remain selectable through their explicit option chip,
+    // but tapping the actual surface is a background click, not a new selection.
+    return isSceneSelectionBackgroundProp(prop) ? undefined : prop;
   }
 
   private selectSceneProp(prop: ApartmentInteriorProp, openMenu: boolean, message: string): void {
@@ -2564,14 +2571,38 @@ export class ShowcaseApp {
       this.selectSceneProp(pending.prop, pending.openMenu, pending.message);
       return;
     }
+    this.clearSceneSelection();
+  }
+
+  private clearSceneSelection(): void {
+    this.pendingSceneSelection = null;
+    cancelAnimationFrame(this.optionFocusFrame);
+    this.optionFocusFrame = 0;
+    const hadSelection = Boolean(this.selectedLocalPropId || this.selectedStageOptionId
+      || this.selectedScenePropSnapshot || this.furnitureContextMenuOpen
+      || this.pendingInteriorAssetId || this.interiorGhostProp || this.interiorDragPointer >= 0);
+    if (!hadSelection) return;
+    // Explicit skill/background actions may abandon an uncommitted ghost, but
+    // never confirm it or write option/layout storage as part of deselection.
+    this.cancelInteriorGhost('', false);
+    const stage = this.get<HTMLElement>('#game-stage');
+    if (this.interiorDragPointer >= 0 && stage.hasPointerCapture(this.interiorDragPointer)) {
+      stage.releasePointerCapture(this.interiorDragPointer);
+    }
+    this.interiorDragPointer = -1;
+    this.interiorDragMoved = false;
+    this.pendingInteriorAssetId = '';
     this.selectedLocalPropId = '';
     this.selectedStageOptionId = '';
     this.selectedScenePropSnapshot = null;
     this.furnitureContextMenuOpen = false;
+    stage.classList.remove('is-relocating-furniture');
     this.threeRenderer?.setEditorSelection('');
     this.renderOptions();
     this.renderFurniturePalette();
     this.updateFurnitureToolbar();
+    const status = this.mount.querySelector<HTMLElement>('#furniture-status');
+    if (status) status.textContent = '선택 표시를 해제했습니다. 적용한 옵션과 가구는 유지됩니다.';
   }
 
   private handleFurnitureContextMenu(event: MouseEvent): boolean {
@@ -2627,6 +2658,10 @@ export class ShowcaseApp {
     const picked = this.localInteriorProps.find((prop) => String(prop.id) === pickedId && prop.localDeleted !== true)
       || this.threeRenderer?.getRenderedProp(pickedId)
       || undefined;
+    if (isSceneSelectionBackgroundProp(picked)) {
+      this.clearSceneSelection();
+      return true;
+    }
     if (picked) {
       const editable = this.isEditableFurnitureProp(picked);
       this.selectSceneProp(picked, editable, editable
@@ -2650,14 +2685,15 @@ export class ShowcaseApp {
       return true;
     }
     if (!point || !pointInside(point, apartmentFloor(apartment))) {
-      this.selectedLocalPropId = '';
-      this.selectedScenePropSnapshot = null;
-      this.threeRenderer?.setEditorSelection('');
-      this.updateFurnitureToolbar();
+      this.clearSceneSelection();
       this.get<HTMLElement>('#furniture-status').textContent = '가구를 직접 누르거나 세대 바닥 안쪽을 선택해 주세요.';
       return false;
     }
     const hit = this.hitLocalProp(point);
+    if (!hit) {
+      this.clearSceneSelection();
+      return false;
+    }
     this.selectedLocalPropId = String(hit?.id || '');
     this.selectedScenePropSnapshot = hit ? { ...hit, positionMeters: [...(hit.positionMeters || [])] } : null;
     this.threeRenderer?.setEditorSelection(this.selectedLocalPropId);
@@ -3248,6 +3284,7 @@ export class ShowcaseApp {
   }
 
   private activateHotbarAction(action: ShowcaseHotbarAction, target: { x: number; y: number } | null = null): void {
+    this.clearSceneSelection();
     if (action === 'common-teleport') {
       this.activateSkill('common-teleport', target);
       return;
@@ -3404,6 +3441,7 @@ export class ShowcaseApp {
   }
 
   private activateSkill(skillId: string, target: { x: number; y: number } | null = null): void {
+    this.clearSceneSelection();
     let teleportDestination: { x: number; y: number } | null = null;
     if (skillId === 'common-teleport') {
       if (!this.world) {
@@ -3656,7 +3694,9 @@ export class ShowcaseApp {
     const search = this.mount.querySelector<HTMLInputElement>('#furniture-search');
     if (search) search.value = '';
     this.setPaletteTab('furniture');
-    requestAnimationFrame(() => {
+    cancelAnimationFrame(this.optionFocusFrame);
+    this.optionFocusFrame = requestAnimationFrame(() => {
+      this.optionFocusFrame = 0;
       const list = this.get<HTMLElement>('#furniture-list');
       const card = [...list.querySelectorAll<HTMLElement>('[data-furniture-asset], [data-furniture-prop-id]')]
         .find((candidate) => this.readOnlyShare

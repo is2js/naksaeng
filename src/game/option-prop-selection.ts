@@ -1,4 +1,14 @@
 import type { ApartmentInteriorProp } from './types';
+import { WIDE_PLANK_FLOOR_OPTION_ID } from './bundang-floor-finish';
+import { isBundangKitchenWallFinishSelectionProxy } from './bundang-kitchen-finish';
+import { isBundangWallFinishSelectionProxy } from './bundang-wall-finish';
+
+/** World surface clicks clear focus; explicit option-chip selection still works. */
+export function isSceneSelectionBackgroundProp(prop: ApartmentInteriorProp | null | undefined): boolean {
+  return Boolean(prop && (prop.assetId === WIDE_PLANK_FLOOR_OPTION_ID
+    || isBundangWallFinishSelectionProxy(prop)
+    || isBundangKitchenWallFinishSelectionProxy(prop)));
+}
 
 const OPTION_PROP_HINTS: Readonly<Record<string, string[]>> = Object.freeze({
   'entry-open-premium-shoe-cabinet': ['premium-shoe-cabinet', 'entry-shoe-cabinet-tall'],

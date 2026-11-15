@@ -44,6 +44,8 @@ test('51A guide stays in the playground, separate guides return, and the entranc
 
   await page.locator('[data-open-guide]').click();
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-guide-audience', 'member');
+  await expect(dialog.locator('article')).toContainText('5 자녀 인형');
   const desktopBox = (await dialog.boundingBox())!;
   const desktopViewport = page.viewportSize()!;
   expect(Math.abs(desktopBox.x + desktopBox.width / 2 - desktopViewport.width / 2)).toBeLessThan(2);
@@ -70,6 +72,9 @@ test('51A guide stays in the playground, separate guides return, and the entranc
   ]);
   await expect(guide.locator('#guideTitle')).toBeVisible();
   expect(await guide.evaluate(() => sessionStorage.getItem('bunfirvil:household-verification:v1'))).toBeNull();
+  await expect(guide.locator('body')).toHaveAttribute('data-guide-audience', 'public');
+  await expect(guide.locator('#guideAccessNotice')).toContainText('공개모드 안내');
+  await expect(guide.locator('#markdownBody')).not.toContainText('가구 추가와 로컬 저장');
   await expect(guide.locator('#guideEditLink')).toBeHidden();
   // The return handler deliberately closes its own tab. Chromium can report
   // that closure before the click RPC completes; still require actual closure
@@ -158,6 +163,9 @@ test('the in-playground guide preserves a read-only share without exposing authe
   await page.getByRole('button', { name: '놀이터 조작법' }).click();
   const dialog = page.locator('#help-dialog');
   await expect(dialog.locator('article')).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-guide-audience', 'shared');
+  await expect(dialog.locator('article')).toContainText('읽기 전용');
+  await expect(dialog.locator('article')).not.toContainText('Space');
   const guideUrl = new URL((await dialog.locator('.playground-guide-tools a').getAttribute('href'))!);
   const returnUrl = new URLSearchParams(guideUrl.hash.slice(1)).get('playground')!;
   expect(new URL(returnUrl, page.url()).hash).toBe(`#share=v1.${token}`);

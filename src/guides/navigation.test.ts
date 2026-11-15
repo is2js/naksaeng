@@ -56,7 +56,7 @@ describe('playground guide navigation', () => {
     expect(app).toContain("await import('../guides/playground-panel')");
     expect(app).toContain("this.mount.querySelector('dialog[open]')");
     expect(app).toContain('this.releaseGuideMovement();');
-    expect(panel).toContain('!guide.operatorOnly || operator');
+    expect(panel).toContain('guideDocumentsForAccess(access)');
     expect(panel).toContain('aria-label="가이드 문서"');
     expect(panel).not.toMatch(/(?:sessionStorage|localStorage|clearHouseholdVerification|selectMap\()/);
     const html = readFileSync(resolve(process.cwd(), 'guides/index.html'), 'utf8');

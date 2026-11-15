@@ -27,6 +27,7 @@ body {
 }
 
 a { color: inherit; }
+.guide-hero > .guide-access-notice { margin-top: 12px; padding: 10px 12px; border-left: 2px solid var(--mint); color: var(--mint); background: rgba(112, 217, 195, .06); line-height: 1.6; }
 :focus-visible { outline: 2px solid rgba(112, 217, 195, .75); outline-offset: 3px; }
 
 .skip-link {

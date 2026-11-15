@@ -2373,6 +2373,7 @@ input:focus-visible {
 .playground-guide[open] { display: flex; flex-direction: column; overflow: hidden; }
 .playground-guide-header { position: relative; padding: 22px 60px 16px 22px; border-bottom: 1px solid var(--line); }
 .playground-guide-header h2 { margin: 0; }
+.playground-guide-access-note { margin: 0; padding: 12px 22px; color: var(--mint); background: rgba(112, 217, 195, .06); font-size: 13px; line-height: 1.6; }
 .playground-guide-tools { padding: 14px 22px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); font-size: 12px; }
 .playground-guide-tools label { display: flex; flex: 1; gap: 8px; align-items: center; color: var(--muted); }
 .playground-guide-tools select { min-width: 0; max-width: 100%; flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #102329; font: inherit; }

@@ -3148,7 +3148,7 @@ export class ShowcaseApp {
     try {
       const { renderPlaygroundGuide } = await import('../guides/playground-panel');
       if (!this.destroyed && dialog.open) {
-        renderPlaygroundGuide(dialog, readHouseholdVerificationSession()?.role === 'operator', this.playgroundReturnUrl(), id);
+        renderPlaygroundGuide(dialog, { role: this.accessRole, readOnlyShare: this.readOnlyShare }, this.playgroundReturnUrl(), id);
       }
     } catch {
       if (this.destroyed || !dialog.open) return;

@@ -1,17 +1,20 @@
 import './styles/guides.css';
 import './styles/guide-markdown.css';
 import { escapeHtml } from './game/base';
-import { guideDocuments } from './guides/catalog';
+import { guideDocumentsForAccess } from './guides/catalog';
 import { renderGuideMarkdown } from './guides/markdown';
-import { householdVerificationIsOperator } from './game/household-verification';
+import { readHouseholdVerificationSession } from './game/household-verification';
 import { guidePageUrl, guideReturnUrl } from './guides/navigation';
+import { guideAccessNotice, guideAudience, guideIsOperator } from './guides/audience';
 
-const operator = householdVerificationIsOperator();
-const guides = guideDocuments().filter((guide) => !guide.operatorOnly || operator);
+const returnUrl = guideReturnUrl(window.location.href, document.referrer);
+const access = { role: readHouseholdVerificationSession()?.role,
+  readOnlyShare: new URL(returnUrl, window.location.href).hash.startsWith('#share=v1.') };
+const operator = guideIsOperator(access);
+const guides = guideDocumentsForAccess(access);
 const query = new URLSearchParams(window.location.search);
 const requestedId = query.get('guide') || 'playground';
 const active = guides.find((guide) => guide.id === requestedId) || guides[0];
-const returnUrl = guideReturnUrl(window.location.href, document.referrer);
 const openedInNewTab = new URLSearchParams(window.location.hash.slice(1)).get('fromPlaygroundTab') === '1';
 
 document.querySelectorAll<HTMLAnchorElement>('[data-playground-return]').forEach((link) => {
@@ -40,6 +43,8 @@ try {
   if (!active) throw new Error('등록된 Markdown 가이드가 없습니다.');
   document.title = `${active.title} · bunfirvil`;
   document.body.dataset.guideId = active.id;
+  document.body.dataset.guideAudience = guideAudience(access);
+  get<HTMLElement>('#guideAccessNotice').textContent = guideAccessNotice(access);
   get<HTMLElement>('#guideCount').textContent = `${guides.length} DOCUMENT${guides.length === 1 ? '' : 'S'}`;
   get<HTMLElement>('#guideList').innerHTML = guides.map((guide) => `
     <a class="guide-item ${guide.id === active.id ? 'is-active' : ''}" href="${escapeHtml(guidePageUrl(guide.id, returnUrl, openedInNewTab))}" ${guide.id === active.id ? 'aria-current="page"' : ''}>
@@ -60,8 +65,8 @@ try {
       link.href = guidePageUrl(url.searchParams.get('guide')!, returnUrl, openedInNewTab);
     }
   });
-  get<HTMLElement>('#markdownSource').textContent = active.raw;
   if (operator) {
+    get<HTMLElement>('#markdownSource').textContent = active.raw;
     const fileName = active.sourcePath.split('/').pop() || `${active.id}.md`;
     get<HTMLAnchorElement>('#guideEditLink').href = `https://github.com/is2js/naksaeng/edit/main/src/guides/content/${encodeURIComponent(fileName)}`;
   }

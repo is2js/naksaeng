@@ -79,6 +79,14 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
 
   await test.step('공개 사용자는 연속된 1·2·3번 슬롯을 쓰며 회원 전용 평면·변신은 사용할 수 없다', async () => {
     const stage = page.locator('#game-stage');
+    await page.getByRole('button', { name: '놀이터 조작법' }).click();
+    const guide = page.locator('#help-dialog');
+    await expect(guide).toHaveAttribute('data-guide-audience', 'public');
+    await expect(guide.locator('article')).toContainText('3 자녀 인형');
+    await expect(guide.locator('article')).not.toContainText('회원 4번');
+    await guide.getByLabel('가이드 문서').selectOption('b-option');
+    await expect(guide.locator('article')).not.toContainText('가구 추가와 로컬 저장');
+    await guide.getByRole('button', { name: '가이드 닫기' }).click();
     const slots = page.locator('#hotbar [data-slot]');
     const furnitureTab = page.locator('[data-palette-tab="furniture"]');
     await expect(furnitureTab).toBeHidden();

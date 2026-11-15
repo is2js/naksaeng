@@ -1,12 +1,15 @@
 import '../styles/guide-markdown.css';
 import { escapeHtml } from '../game/base';
-import { guideDocuments } from './catalog';
+import { guideDocumentsForAccess } from './catalog';
+import { guideAccessNotice, guideAudience, type GuideAccess } from './audience';
 import { renderGuideMarkdown } from './markdown';
 import { guidePageUrl } from './navigation';
 
-export function renderPlaygroundGuide(dialog: HTMLDialogElement, operator: boolean, returnUrl: string, id = 'playground'): void {
-  const guides = guideDocuments().filter((guide) => !guide.operatorOnly || operator);
+export function renderPlaygroundGuide(dialog: HTMLDialogElement, access: GuideAccess, returnUrl: string, id = 'playground'): void {
+  const guides = guideDocumentsForAccess(access);
+  dialog.dataset.guideAudience = guideAudience(access);
   dialog.innerHTML = `<header class="playground-guide-header"><h2 id="playground-guide-title">놀이터 조작법</h2><button type="button" class="dialog-close" aria-label="가이드 닫기" autofocus>×</button></header>
+    <p class="playground-guide-access-note" role="note">${escapeHtml(guideAccessNotice(access))}</p>
     <div class="playground-guide-tools"><label>가이드 <select aria-label="가이드 문서">${guides.map((guide) => `<option value="${escapeHtml(guide.id)}">${escapeHtml(guide.shortTitle)}</option>`).join('')}</select></label><a target="_blank" rel="noopener noreferrer">새 탭에서 보기 ↗</a></div>
     <article class="markdown-body" tabindex="0" aria-label="가이드 본문"></article>`;
   const select = dialog.querySelector<HTMLSelectElement>('select')!;

@@ -1114,10 +1114,32 @@ function alignOpenPremiumShoeCabinetToEntry(
   const isPremiumShoeCabinet = prop.sourceOptionId === OPEN_PREMIUM_SHOE_CABINET_OPTION_ID
     || prop.anchorId === 'options.entryShoeCabinet'
     || (prop.assetId === 'entry-shoe-cabinet-tall' && /premium-shoe-cabinet/.test(String(prop.id || '')));
-  if (!isPremiumShoeCabinet || planVariantKey(planVariant) !== 'A' || !OPEN_PREMIUM_SHOE_CABINET_A_FACING_FIX.has(unitType)) return prop;
-  const yawDeg = Number(prop.yawDeg);
+  const userOwned = prop.localOverride === true || prop.localDeleted === true || prop.userPlaced === true
+    || Boolean(prop.sourcePropId) || String(prop.id || '').startsWith('local-');
+  if (!isPremiumShoeCabinet || prop.baseProvided === true || userOwned) return prop;
+  let cabinet = prop;
+  if (prop.assetId === 'entry-shoe-cabinet-tall' && prop.shoeCabinetFloatingRevision !== 'suspended-base-v1') {
+    const sourceSize = prop.renderDimensionsMeters || prop.dimensionsMeters;
+    const height = Number(Array.isArray(sourceSize) ? sourceSize[2] : sourceSize?.height);
+    if (Number.isFinite(height) && height > .5) {
+      const mount = Number.isFinite(Number(prop.mountHeightMeters)) ? Math.max(0, Number(prop.mountHeightMeters)) : .018;
+      const gap = .17; // Reference-photo inference, not a manufacturer/survey dimension.
+      cabinet = {
+        ...prop, fixedOptionLayout: true, sourceOptionId: OPEN_PREMIUM_SHOE_CABINET_OPTION_ID,
+        collisionMode: 'solid', collisionDefault: 'solid', measurementObstacle: true,
+        // Keep the authored full height/mount/XY footprint for placement. Only
+        // the visual recipe and physical laser-height interval have a bottom gap.
+        baseMeters: mount + gap, heightMeters: height - gap,
+        shoeCabinetFloatingRevision: 'suspended-base-v1', shoeCabinetFloatingGapMeters: gap,
+        shoeCabinetBodyBottomMeters: mount + gap, shoeCabinetBodyTopMeters: mount + height,
+        shoeCabinetFloatingProvenance: 'reference-photo-inferred',
+      };
+    }
+  }
+  if (planVariantKey(planVariant) !== 'A' || !OPEN_PREMIUM_SHOE_CABINET_A_FACING_FIX.has(unitType)) return cabinet;
+  const yawDeg = Number(cabinet.yawDeg);
   return {
-    ...prop,
+    ...cabinet,
     yawDeg: Number.isFinite(yawDeg) ? ((yawDeg + 180) % 360 + 360) % 360 : 180,
     sourceOptionId: OPEN_PREMIUM_SHOE_CABINET_OPTION_ID,
   };

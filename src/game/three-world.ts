@@ -44,6 +44,14 @@ import {
   WIDE_PLANK_FLOOR_OPTION_ID,
 } from './bundang-floor-finish';
 import {
+  applyBundangServiceFloorUVs,
+  BUNDANG_SERVICE_FLOOR_PROFILES,
+  bundangServiceFloorBridges,
+  bundangServiceFloorKind,
+  createBundangServiceFloorMaterial,
+  createBundangServiceFloorTextures,
+} from './bundang-service-floor-finish';
+import {
   applyBundangWallFinishUVs,
   applyBundangSurfaceMetricUVs,
   BUNDANG_WALLPAPER_PROFILES,
@@ -600,6 +608,34 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
   },
 ];
 
+/** Same catalog asset, but only the fixed paid option gets a suspended base. */
+function isFloatingPremiumShoeCabinet(prop: ApartmentInteriorProp): boolean {
+  return prop.assetId === 'entry-shoe-cabinet-tall'
+    && prop.sourceOptionId === 'entry-open-premium-shoe-cabinet'
+    && prop.fixedOptionLayout === true && prop.shoeCabinetFloatingRevision === 'suspended-base-v1'
+    && prop.localOverride !== true && prop.localDeleted !== true && prop.userPlaced !== true
+    && !prop.sourcePropId && !String(prop.id || '').startsWith('local-');
+}
+
+function floatingPremiumShoeCabinetParts(prop: ApartmentInteriorProp, parts: RuntimePart[]): RuntimePart[] {
+  if (!isFloatingPremiumShoeCabinet(prop)) return parts;
+  const height = dimensions(prop)[2];
+  const ratio = Math.max(0, Math.min(.3, finite(prop.shoeCabinetFloatingGapMeters, .17) / height));
+  const bodyHeight = 1 - ratio;
+  const body = parts.filter(part => !(part.materialRole === 'accent'
+    && finite(part.scale?.[0]) > .5 && finite(part.scale?.[1]) > .5
+    && finite(part.scale?.[2]) < .08 && finite(part.offset?.[2]) < .2))
+    .map(part => ({ ...part,
+      scale: [finite(part.scale?.[0], 1), finite(part.scale?.[1], 1), finite(part.scale?.[2], 1) * bodyHeight],
+      offset: [finite(part.offset?.[0]), finite(part.offset?.[1]), ratio + finite(part.offset?.[2], .5) * bodyHeight],
+    }));
+  // Recessed wall cleats stay above the same open base, never forming a plinth
+  // across the front or an invisible 13 cm laser obstruction below the body.
+  body.push(...[.18, .82].map(height => ({ shape: 'box', materialRole: 'shoe-wall-mount',
+    scale: [.82, .07, .035 * bodyHeight], offset: [0, -.445, ratio + height * bodyHeight] })));
+  return body;
+}
+
 /** 카탈로그 메타데이터는 보존하되 Bunfirvil 정밀 recipe가 같은 ID의 fallback을 덮어쓴다. */
 export function mergeRuntimeAssetCatalogs(
   catalogAssets: RuntimeAsset[],
@@ -698,6 +734,7 @@ export function mergeEditorPropsWithBase(
     // Old editable-option saves must not put fixed pantry/entry joinery back
     // on its former wall or into the clear passage. Stored/user rows stay intact.
     if (isBundangKitchenWallFinishSelectionProxy(base)
+      || isFloatingPremiumShoeCabinet(base)
       || base.fixedOptionLayout === true && ['entry-pantry-system-shelf', 'entry-sliding-partition-door'].includes(String(base.sourceOptionId))) return [base];
     if (override.localDeleted === true) return [];
     const yawDeg = Number(override.yawDeg);
@@ -735,6 +772,7 @@ export class ThreeWorldRenderer {
   private readonly woodFloorTexture = createBundangWoodFloorTexture();
   private readonly designWallTextures = createBundangDesignWallTextures();
   private readonly kitchenStoneTextures = createBundangKitchenStoneTextures();
+  private readonly serviceFloorTextures = { entry: createBundangServiceFloorTextures('entry'), utility: createBundangServiceFloorTextures('utility') };
   private readonly wallpaperTextures = { common: createBundangWallpaperTextures('common'), bedroom: createBundangWallpaperTextures('bedroom') };
   private readonly assets = new Map<string, RuntimeAsset>();
   private readonly variants = new Map<string, Record<string, string>>(Object.entries(DEFAULT_VARIANTS));
@@ -1412,7 +1450,7 @@ export class ThreeWorldRenderer {
     this.textureCache.forEach((texture) => texture.dispose());
     this.textureCache.clear();
     this.woodFloorTexture.dispose();
-    for (const maps of [this.designWallTextures, this.kitchenStoneTextures, ...Object.values(this.wallpaperTextures)]) {
+    for (const maps of [this.designWallTextures, this.kitchenStoneTextures, ...Object.values(this.wallpaperTextures), ...Object.values(this.serviceFloorTextures)]) {
       maps.albedo.dispose(); maps.bump.dispose(); maps.roughness.dispose();
     }
     this.renderer.dispose();
@@ -1596,25 +1634,55 @@ export class ThreeWorldRenderer {
     this.structureRoot.add(floor);
     this.canvas.dataset.woodFloorFinish = floorFinish;
 
+    const serviceFloorRooms: string[] = [];
     for (const roomValue of geometry.roomZones || []) {
       const room = roomValue as Record<string, unknown>;
       const polygon = rowPolygon(room);
-      if (polygon.length < 3 || String(room.material || 'wood') === 'wood') continue;
+      const roomId = String(room.id || room.roomId || '');
+      const serviceFloor = bundangServiceFloorKind(roomId);
+      if (polygon.length < 3 || !serviceFloor && String(room.material || 'wood') === 'wood') continue;
       const roomGeometry = this.shapeGeometry(object, polygon);
       if (!roomGeometry) continue;
+      if (serviceFloor) applyBundangServiceFloorUVs(roomGeometry, object,
+        this.world || { width: 64, height: 64 }, serviceFloor);
       const wet = ['tile-wet', 'tile-gray-grout'].includes(String(room.material || ''));
       const overlay = new THREE.Mesh(
         roomGeometry,
-        this.material(wet ? '#aaa9a6' : '#a9a59d', {
+        serviceFloor ? createBundangServiceFloorMaterial(this.serviceFloorTextures[serviceFloor], serviceFloor, cellSize)
+          : this.material(wet ? '#aaa9a6' : '#a9a59d', {
           roughness: 0.94,
           mapId: wet ? 'bundang-55b-gray-grout-tile-v1' : undefined,
         }),
       );
       overlay.position.y = 0.052;
       overlay.userData.laserFloor = true;
+      if (serviceFloor) {
+        overlay.userData.floorFinishProfile = BUNDANG_SERVICE_FLOOR_PROFILES[serviceFloor].id;
+        overlay.userData.roomZoneId = roomId;
+        overlay.userData.floorDimensionConfidence = 'inferred-photo-proportion';
+        serviceFloorRooms.push(roomId);
+      }
       overlay.receiveShadow = false;
       this.structureRoot.add(overlay);
     }
+    const serviceBridges = bundangServiceFloorBridges(geometry);
+    for (const bridge of serviceBridges) {
+      const bridgeGeometry = this.shapeGeometry(object, bridge.polygonMeters);
+      if (!bridgeGeometry) continue;
+      applyBundangServiceFloorUVs(bridgeGeometry, object, this.world || { width: 64, height: 64 }, bridge.kind);
+      const overlay = new THREE.Mesh(bridgeGeometry,
+        createBundangServiceFloorMaterial(this.serviceFloorTextures[bridge.kind], bridge.kind, cellSize));
+      // Retain the room overlays' existing level; this is a finish-only doorway strip.
+      overlay.position.y = .052;
+      overlay.receiveShadow = false;
+      overlay.userData.laserFloor = true;
+      overlay.userData.serviceFloorBridgeOpeningId = bridge.openingId;
+      overlay.userData.floorFinishProfile = BUNDANG_SERVICE_FLOOR_PROFILES[bridge.kind].id;
+      this.structureRoot.add(overlay);
+    }
+    this.canvas.dataset.serviceFloorRooms = serviceFloorRooms.join(',');
+    this.canvas.dataset.serviceFloorBridgeIds = serviceBridges.map(bridge => bridge.openingId).join(',');
+    this.canvas.dataset.serviceFloorDimensionConfidence = 'inferred-photo-proportion';
 
     const effectiveKitchenFixtures = bundangEffectiveKitchenFixtures(geometry);
     this.canvas.dataset.kitchenFixtureCount = String(effectiveKitchenFixtures.length);
@@ -2248,7 +2316,9 @@ export class ThreeWorldRenderer {
     const palette = this.propPalette(prop);
     const roomFinish = asset?.mountingKind === 'room-finish';
     const wallFinish = String(prop.installationRole || '').includes('wall-');
-    for (const part of asset?.parts?.length ? asset.parts : [{ shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5] }]) {
+    const sourceParts = asset?.parts?.length ? asset.parts : [{ shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5] }];
+    if (isFloatingPremiumShoeCabinet(prop)) group.userData.shoeCabinetFloatingGapMeters = finite(prop.shoeCabinetFloatingGapMeters, .17);
+    for (const part of floatingPremiumShoeCabinetParts(prop, sourceParts)) {
       const width = size[0] * finite(part.scale?.[0], 1) / cellSize;
       const depth = size[1] * finite(part.scale?.[1], 1) / cellSize;
       const height = size[2] * finite(part.scale?.[2], 1) / cellSize;
@@ -2279,6 +2349,8 @@ export class ThreeWorldRenderer {
       const kitchenStone = isBundangKitchenStonePart(prop, role);
       const material = kitchenStone
         ? createBundangKitchenStoneMaterial(this.kitchenStoneTextures, 1, cellSize)
+        : role === 'shoe-wall-mount'
+        ? this.material(palette.accent, { roughness: .7, metalness: .12 })
         : infinityBody
         ? createBundangWallpaperMaterial(this.wallpaperTextures.bedroom, 'bedroom', 1, cellSize)
         : role === 'glass'

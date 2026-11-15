@@ -2249,12 +2249,12 @@ input:focus-visible {
 .stage-option-chips::-webkit-scrollbar { width: 5px; }
 .stage-option-chips::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(213, 183, 112, .34); }
 .stage-option-chips > span:not(.stage-option-chip) { min-width: max-content; height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 7px; border: 1px solid rgba(179, 167, 137, .14); background: rgba(255, 255, 255, .025); }
-.stage-option-chip { min-width: max-content; height: 22px; display: inline-flex; align-items: stretch; border: 1px solid rgba(179, 167, 137, .14); background: rgba(255, 255, 255, .025); cursor: pointer; }
+.stage-option-chip { flex: 0 1 auto; min-width: 0; max-width: 100%; height: 22px; display: inline-flex; align-items: stretch; border: 1px solid rgba(179, 167, 137, .14); background: rgba(255, 255, 255, .025); cursor: pointer; }
 .stage-option-chip.is-world-selected { border-color: rgba(95, 210, 187, .78); background: rgba(70, 178, 158, .16); box-shadow: inset 0 0 0 1px rgba(132, 239, 216, .1), 0 0 10px rgba(50, 174, 151, .08); }
 .stage-option-chip.is-world-selected b { color: #d9fff6; }
 .stage-option-chip.is-world-selected em { color: #8ee8d4; }
 .stage-option-chip button { appearance: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
-.stage-option-select { min-width: max-content; display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 7px; background: transparent; }
+.stage-option-select { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 7px; background: transparent; }
 .stage-option-select:hover,
 .stage-option-select:focus-visible { background: rgba(213, 183, 112, .08); outline: none; }
 .stage-option-select:hover b,
@@ -2262,8 +2262,8 @@ input:focus-visible {
 .stage-option-remove { width: 17px; min-width: 17px; padding: 0; display: inline-grid; place-items: center; align-self: stretch; color: #837c6e !important; background: transparent !important; font: 700 12px/1 ui-sans-serif, sans-serif !important; }
 .stage-option-remove:hover,
 .stage-option-remove:focus-visible { color: #d8b66a !important; background: transparent !important; outline: none; }
-.stage-option-chips b { color: #aca38e; font-size: 11px; }
-.stage-option-chips em { color: #d5b96f; font: normal 650 10px ui-monospace, monospace; }
+.stage-option-chips b { min-width: 0; max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #aca38e; font-size: 11px; }
+.stage-option-chips em { flex: none; white-space: nowrap; color: #d5b96f; font: normal 650 10px ui-monospace, monospace; }
 .price-variant-label { display: inline-flex; margin-left: 6px; padding: 2px 5px; border: 1px solid rgba(225, 185, 99, .34); border-radius: 8px; color: #f0d18b; background: rgba(225, 185, 99, .1); font: normal 750 7px/1 inherit; vertical-align: middle; }
 .stage-option-footer { min-width: 0; padding: 7px 0 0 12px; display: grid; grid-template-columns:auto 1fr; align-content:center; align-items:center; gap:3px 8px; border-left:1px solid rgba(213,183,112,.18); background:linear-gradient(90deg,rgba(213,183,112,.035),transparent); }
 .stage-option-footer > span { color:#776e5b; font-size:9px; font-weight:750; white-space:nowrap; }
@@ -2537,11 +2537,11 @@ input:focus-visible {
   }
   .mobile-stage-options .stage-option-chips {
     min-height: 0; max-height: min(168px, 28svh); padding: 0;
-    flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 3px;
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 3px;
     touch-action: pan-y; overscroll-behavior: contain;
   }
   .mobile-stage-options .stage-option-chip {
-    flex: none; width: 100%; min-width: 0; max-width: 100%; height: auto;
+    flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%; height: auto;
     border: 0; background: transparent; box-shadow: none;
   }
   .mobile-stage-options .stage-option-chip + .stage-option-chip::before {
@@ -2549,9 +2549,9 @@ input:focus-visible {
   }
   .mobile-stage-options .stage-option-select {
     flex: 1; min-width: 0; max-width: 100%; min-height: 32px; padding: 3px 5px; border: 1px solid rgba(162, 204, 193, .18);
-    border-radius: 5px; background: rgba(186, 226, 214, .04); text-align: left; white-space: normal;
+    border-radius: 5px; background: rgba(186, 226, 214, .04); text-align: left; white-space: nowrap;
   }
-  .mobile-stage-options .stage-option-chips b { color: #cadbd5; font-size: clamp(9px, 2.35vw, 10px); line-height: 1.3; overflow-wrap: anywhere; }
+  .mobile-stage-options .stage-option-chips b { max-width: 18ch; color: #cadbd5; font-size: clamp(9px, 2.35vw, 10px); line-height: 1.3; }
   .mobile-stage-options .stage-option-chip.is-world-selected .stage-option-select {
     border-color: #78d9bd; background: rgba(82, 187, 156, .2); box-shadow: inset 0 0 0 1px #a1efd51a;
   }

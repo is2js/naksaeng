@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test.use({ hasTouch: true });
 
@@ -39,8 +39,8 @@ function expectMobileControlPlacement(layout: Awaited<ReturnType<typeof mobileCo
   expect(layout.options.left).toBeGreaterThanOrEqual(layout.stage.left);
   expect(layout.pad.right).toBeLessThanOrEqual(layout.stage.right);
   expect(layout.laser.height).toBeGreaterThanOrEqual(40);
-  expect(layout.direction).toBe('column');
-  expect(layout.wrap).toBe('nowrap');
+  expect(layout.direction).toBe('row');
+  expect(layout.wrap).toBe('wrap');
   for (const row of layout.rows) {
     expect(row.buttonHeight).toBeGreaterThanOrEqual(32);
     expect(row.fontSize).toBeGreaterThanOrEqual(9);
@@ -48,8 +48,24 @@ function expectMobileControlPlacement(layout: Awaited<ReturnType<typeof mobileCo
     expect(row.width).toBeLessThanOrEqual(layout.options.width);
   }
   for (let index = 1; index < layout.rows.length; index++) {
-    expect(layout.rows[index].top).toBeGreaterThanOrEqual(layout.rows[index - 1].bottom + 2);
+    const previous = layout.rows[index - 1], current = layout.rows[index];
+    if (Math.abs(current.top - previous.top) <= 1) {
+      expect(current.left).toBeGreaterThanOrEqual(previous.right + 2);
+    } else expect(current.top).toBeGreaterThanOrEqual(previous.bottom + 2);
   }
+}
+
+async function expectNameEllipsis(button: Locator, fullName: string, mustClip = true) {
+  await expect(button).toHaveAttribute('aria-label', `${fullName} 인게임 구성 선택`);
+  await expect(button.locator('b')).toHaveText(fullName);
+  const name = await button.locator('b').evaluate(element => ({
+    ellipsis: getComputedStyle(element).textOverflow, whiteSpace: getComputedStyle(element).whiteSpace,
+    overflow: getComputedStyle(element).overflowX, scrollWidth: element.scrollWidth, width: element.clientWidth,
+  }));
+  expect(name.ellipsis).toBe('ellipsis');
+  expect(name.whiteSpace).toBe('nowrap');
+  expect(name.overflow).toBe('hidden');
+  if (mustClip) expect(name.scrollWidth).toBeGreaterThan(name.width);
 }
 
 test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 합계 아래에만 남는다', async ({ page, context }) => {
@@ -94,6 +110,8 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   await expect(mobileOptions.locator('.stage-option-remove').first()).toBeHidden();
   expect(await mobileOptions.locator('.stage-option-chip').nth(1).evaluate(element => getComputedStyle(element, '::before').content)).toContain('+');
   const pantry = mobileOptions.locator('button[data-stage-option-select="entry-pantry-system-shelf"]');
+  const pantryFullName = (await pantry.locator('b').textContent())!;
+  await expect(pantry).toHaveAccessibleName(`${pantryFullName} 인게임 구성 선택`);
   await pantry.tap();
   await expect(mobileOptions.locator('.stage-option-chip[data-stage-option-select="entry-pantry-system-shelf"]')).toHaveClass(/is-world-selected/);
   await expect(page.locator('[data-option-card-id="entry-pantry-system-shelf"]')).toHaveClass(/is-world-linked/);
@@ -109,7 +127,7 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
     await page.setViewportSize(viewport);
     await expect(mobileOptions).toBeVisible();
     await expect(page.locator('.stage-option-quote')).toBeHidden();
-    await expect.poll(async () => (await mobileControlLayout(page)).direction).toBe('column');
+    await expect.poll(async () => (await mobileControlLayout(page)).direction).toBe('row');
     expectMobileControlPlacement(await mobileControlLayout(page));
     const overflow = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
       elements: [...document.querySelectorAll('body *')].flatMap(element => {
@@ -130,16 +148,29 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   // or GPU model is selected. Remove the temporary rows before interaction.
   await chips.evaluate(element => {
     const original = element.querySelector('.stage-option-chip')!;
-    for (let index = 0; index < 12; index++) {
+    const cloneWithName = (name: string, sample: string) => {
       const clone = original.cloneNode(true) as HTMLElement;
-      clone.dataset.layoutStress = 'true';
+      clone.dataset.layoutStress = sample;
       clone.setAttribute('aria-hidden', 'true');
       clone.querySelectorAll('button').forEach(button => { button.tabIndex = -1; });
-      clone.querySelector('b')!.textContent = `작은 화면 선택 옵션 세로 스크롤 확인 ${index + 1}`;
-      element.append(clone);
+      clone.querySelector('b')!.textContent = name;
+      clone.querySelector('.stage-option-select')!.setAttribute('aria-label', `${name} 인게임 구성 선택`);
+      return clone;
+    };
+    element.prepend(cloneWithName('마루', 'short-first'), cloneWithName('중문', 'short-second'));
+    for (let index = 0; index < 12; index++) {
+      element.append(cloneWithName(`작은 화면 선택 옵션 세로 스크롤 확인 ${index + 1}`, `long-${index}`));
     }
   });
   try {
+    const first = (await chips.locator('[data-layout-stress="short-first"]').boundingBox())!;
+    const second = (await chips.locator('[data-layout-stress="short-second"]').boundingBox())!;
+    expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(1);
+    expect(second.x).toBeGreaterThanOrEqual(first.x + first.width + 2);
+    expect(await chips.locator('[data-layout-stress="short-second"]').evaluate(element => getComputedStyle(element, '::before').content)).toContain('+');
+    // This real label may fit exactly; only genuinely long names must clip.
+    await expectNameEllipsis(pantry, pantryFullName, false);
+    await expectNameEllipsis(chips.locator('[data-layout-stress="long-0"] .stage-option-select'), '작은 화면 선택 옵션 세로 스크롤 확인 1');
     const stress = await mobileControlLayout(page);
     expectMobileControlPlacement(stress);
     expect(stress.scrollHeight).toBeGreaterThan(stress.clientHeight);
@@ -186,7 +217,40 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   await expect(page.locator('#mobile-palette-calculator')).toBeHidden();
   await expect(page.locator('.option-storage-description')).toBeVisible();
   await expect(page.locator('.option-design-reference')).toBeVisible();
-  await page.locator('#game-stage').screenshot({ path: 'test-results/mobile-controls-desktop.png' });
+  const desktopPantry = chips.locator('button[data-stage-option-select="entry-pantry-system-shelf"]');
+  await expect(desktopPantry).toHaveAccessibleName(`${pantryFullName} 인게임 구성 선택`);
+  await expect(desktopPantry.locator('b')).toHaveText(pantryFullName);
+  const desktopLongName = '침실1 파우더 결합형 드레스룸 붙박이장과 의류관리기 결합 구성 전체 이름';
+  await chips.evaluate((element, fullName) => {
+    const clone = element.querySelector('.stage-option-chip')!.cloneNode(true) as HTMLElement;
+    clone.dataset.layoutStress = 'desktop-long';
+    clone.querySelector('b')!.textContent = fullName;
+    clone.querySelector('.stage-option-select')!.setAttribute('aria-label', `${fullName} 인게임 구성 선택`);
+    element.prepend(clone);
+  }, desktopLongName);
+  try {
+    const longChip = chips.locator('[data-layout-stress="desktop-long"]');
+    await expectNameEllipsis(longChip.locator('.stage-option-select'), desktopLongName);
+    await expect(longChip.locator('em')).toBeVisible();
+    await expect(longChip.locator('.stage-option-remove')).toBeVisible();
+    const region = await longChip.evaluate(element => {
+      const box = (selector: string) => {
+        const { left, right, top, bottom } = element.querySelector(selector)!.getBoundingClientRect();
+        return { left, right, top, bottom };
+      };
+      const { left, right, top, bottom } = element.getBoundingClientRect();
+      return { chip: { left, right, top, bottom }, name: box('b'), price: box('em'), remove: box('.stage-option-remove') };
+    });
+    expect(region.price.left).toBeGreaterThanOrEqual(region.name.right);
+    expect(region.remove.left).toBeGreaterThanOrEqual(region.price.right);
+    for (const part of [region.price, region.remove]) {
+      expect(part.left).toBeGreaterThanOrEqual(region.chip.left);
+      expect(part.right).toBeLessThanOrEqual(region.chip.right);
+      expect(part.top).toBeGreaterThanOrEqual(region.chip.top);
+      expect(part.bottom).toBeLessThanOrEqual(region.chip.bottom);
+    }
+    await page.locator('#game-stage').screenshot({ path: 'test-results/mobile-controls-desktop.png' });
+  } finally { await chips.locator('[data-layout-stress]').evaluateAll(elements => elements.forEach(element => element.remove())); }
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.stage-option-quote')).toBeHidden();
   await expect(mobileOptions).toBeVisible();

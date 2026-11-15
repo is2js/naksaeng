@@ -10,21 +10,44 @@ function hash(x: number, y: number): number {
   return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
-/** Pale ivory aggregate, not timber/brown stone and not A042 design-wall grain. */
+/** Ivory composite with visible grey/gold mineral chips, not a flat cream tint. */
 export function bundangKitchenStonePixels(): { data: Uint8Array; bump: Uint8Array; roughness: Uint8Array; width: number; height: number } {
   const width = 256, height = 256;
   const data = new Uint8Array(width * height * 4), bump = new Uint8Array(data.length), roughness = new Uint8Array(data.length);
+  // At the existing 400mm metric repeat these irregular chips are about
+  // 8–17mm across. The old 2px/3mm flecks disappeared into the mipmap average.
+  // Periodic feature cells keep all four texture edges seamless.
+  const count = 20, cell = width / count;
+  const chips = Array.from({ length: count * count }, (_, index) => {
+    const x = index % count, y = Math.floor(index / count), tone = hash(x + 53, y + 97);
+    const angle = hash(x + 17, y + 211) * Math.PI;
+    return { x: .15 + hash(x + 19, y + 37) * .7, y: .15 + hash(x + 97, y + 131) * .7,
+      rx: 2.4 + hash(x + 11, y + 71) * 3, ry: 2.2 + hash(x + 173, y + 23) * 3,
+      cosine: Math.cos(angle), sine: Math.sin(angle),
+      color: tone < .4 ? [106, 108, 98] : tone < .65 ? [147, 137, 117]
+        : tone < .9 ? [187, 160, 116] : [250, 248, 237] };
+  });
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const fine = (hash(x, y) - .5) * 5;
-    const mineral = hash(x >> 1, y >> 1), edge = hash(x + 137, y + 91);
-    const aggregate = mineral < .09 && edge < .74 ? [199, 179, 142]
-      : mineral > .935 && edge < .72 ? [193, 194, 184]
-        : mineral > .84 && mineral < .90 && edge < .7 ? [253, 252, 242] : [242, 239, 229];
+    const noise = hash(x, y), fine = (noise - .5) * 4;
+    const base = noise < .025 ? [171, 161, 140] : [242, 239, 228];
+    let coverage = 0, aggregate = base;
+    const gridX = Math.floor(x / cell), gridY = Math.floor(y / cell);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const cx = gridX + dx, cy = gridY + dy;
+      const chip = chips[((cy + count) % count) * count + (cx + count) % count];
+      const px = x - (cx + chip.x) * cell, py = y - (cy + chip.y) * cell;
+      const u = Math.abs(px * chip.cosine + py * chip.sine) / chip.rx;
+      const v = Math.abs(-px * chip.sine + py * chip.cosine) / chip.ry;
+      // Random rotation/aspect and clipped corners avoid a circular/square grid.
+      const edge = Math.max(u, v, (u + v) / 1.48);
+      const weight = Math.max(0, Math.min(1, (1 - edge) * 4 + .5));
+      if (weight > coverage) { coverage = weight; aggregate = chip.color; }
+    }
     const index = (y * width + x) * 4;
     for (let channel = 0; channel < 3; channel++) {
-      data[index + channel] = Math.round(aggregate[channel] + fine);
-      bump[index + channel] = Math.round(128 + fine * 1.4 + (aggregate[0] - 242) * .13);
-      roughness[index + channel] = Math.round(235 + fine * .8);
+      data[index + channel] = Math.round(base[channel] * (1 - coverage) + aggregate[channel] * coverage + fine);
+      bump[index + channel] = Math.round(128 + fine * .7 + coverage * 3);
+      roughness[index + channel] = Math.round(235 - coverage * 13 + fine * .5);
     }
     data[index + 3] = bump[index + 3] = roughness[index + 3] = 255;
   }

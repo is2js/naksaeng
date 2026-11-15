@@ -40,12 +40,25 @@ function fresh(unit: string, variant: 'A' | 'B' | 'C' | 'D') {
 }
 
 describe('공식 마감재의 주방 벽·상판 Golden Shore', () => {
-  it('밝은 아이보리 골재 채널은 결정적이며 재질은 지도만 공유하고 벽별 opacity를 독립 소유한다', () => {
+  it('아이보리 바탕·짙은 골재 채널은 결정적이며 재질은 지도만 공유하고 벽별 opacity를 독립 소유한다', () => {
     const first = bundangKitchenStonePixels(), second = bundangKitchenStonePixels();
     expect([first.width, first.height]).toEqual([256, 256]);
     expect(first.data).toEqual(second.data);
     const reds = [...first.data].filter((_, index) => index % 4 === 0);
-    expect(reds.reduce((sum, value) => sum + value, 0) / reds.length).toBeGreaterThan(230);
+    const average = reds.reduce((sum, value) => sum + value, 0) / reds.length;
+    expect(average).toBeGreaterThan(205); // Keep the light ivory matrix.
+    expect(average).toBeLessThan(235);
+    expect(reds.filter(value => value < 150).length / reds.length).toBeGreaterThan(.06);
+    expect(reds.filter(value => value > 230).length / reds.length).toBeGreaterThan(.55);
+    let longestDarkRun = 0;
+    for (let y = 0; y < first.height; y++) {
+      let run = 0;
+      for (let x = 0; x < first.width; x++) {
+        run = first.data[(y * first.width + x) * 4] < 150 ? run + 1 : 0;
+        longestDarkRun = Math.max(longestDarkRun, run);
+      }
+    }
+    expect(longestDarkRun).toBeGreaterThanOrEqual(6); // Visible clusters, not single-pixel dark noise.
     expect(new Set(reds).size).toBeGreaterThan(15);
     const maps = createBundangKitchenStoneTextures();
     const a = createBundangKitchenStoneMaterial(maps), b = createBundangKitchenStoneMaterial(maps, .28);

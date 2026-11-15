@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { ShowcaseApp } from './app';
 import { householdEntryNicknameIsValid, waitForHouseholdSelection } from './household-selector';
 import { householdNicknameIsValid, type HouseholdVerificationConfigV1 } from './household-verification';
@@ -126,26 +127,71 @@ describe('public-first nickname entry UI', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('preserves Enter authentication and returns the server-confirmed operator role', async () => {
+  it.each([false, true])('reveals the ready dock only on an invalid-to-valid transition (share=%s)', share => {
     stubBrowser();
+    const { node, inputNickname } = selectorFixture(share);
+    const dock = node('#household-selection-dock');
+    const add = vi.spyOn(dock.classList, 'add');
+    const readyAnimations = () => add.mock.calls.filter(args => args.includes('is-entry-revealing')).length;
+    inputNickname('가');
+    expect(readyAnimations()).toBe(0);
+    inputNickname('가나');
+    expect(readyAnimations()).toBe(1);
+    expect(dock.classes.has('is-entry-ready')).toBe(true);
+    expect(dock.dataset.entryRole).toBe('public');
+    expect(node('.household-selector-shell').classes.has('is-nickname-editing')).toBe(true);
+    inputNickname('가나다');
+    inputNickname('가나다라');
+    expect(readyAnimations()).toBe(1);
+    inputNickname('가');
+    expect(dock.classes.has('is-entry-ready')).toBe(false);
+    expect(dock.classes.has('is-entry-revealing')).toBe(false);
+    inputNickname('가나');
+    expect(readyAnimations()).toBe(2);
+  });
+
+  it.each(['verified', 'operator'] as const)('preserves Enter authentication and gives %s one separate authenticated reveal', async role => {
+    stubBrowser();
+    const operator = role === 'operator';
     const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       schemaVersion: 1, authRevision: 2, ok: true, verified: true,
-      operator: true, operatorVerified: true, requested: false, status: 'operator',
+      operator, operatorVerified: operator, requested: false, status: role,
     })));
     vi.stubGlobal('fetch', fetch);
     const { node, result, inputNickname } = selectorFixture();
+    const dock = node('#household-selection-dock');
+    const add = vi.spyOn(dock.classList, 'add');
     inputNickname('운영이웃');
-    node('#household-operator-code').value = 'test-operator-code';
+    if (operator) node('#household-operator-code').value = 'test-operator-code';
     const preventDefault = vi.fn();
     node('#household-nickname').emit('keydown', { key: 'Enter', isComposing: false, preventDefault });
     await vi.waitFor(() => expect(node('#household-verify-nickname').textContent).toBe('인증 완료'));
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledOnce();
-    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toMatchObject({
-      buildingId: '106', unitType: '55A', nickname: '운영이웃', operatorCode: 'test-operator-code',
-    });
+    const request = JSON.parse(fetch.mock.calls[0][1]!.body as string);
+    expect(request).toMatchObject({ buildingId: '106', unitType: '55A', nickname: '운영이웃' });
+    if (operator) expect(request.operatorCode).toBe('test-operator-code');
+    else expect(request).not.toHaveProperty('operatorCode');
+    expect(dock.dataset.entryRole).toBe(role);
+    expect(dock.classes.has('is-authenticated')).toBe(true);
+    expect(dock.classes.has('is-auth-revealing')).toBe(true);
+    expect(dock.classes.has('is-entry-revealing')).toBe(false);
+    expect(node('.household-selector-shell').classes.has('is-nickname-editing')).toBe(false);
+    expect(add.mock.calls.filter(args => args.includes('is-entry-revealing'))).toHaveLength(1);
+    expect(add.mock.calls.filter(args => args.includes('is-auth-revealing'))).toHaveLength(1);
+    node('#household-verify-nickname').click();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(add.mock.calls.filter(args => args.includes('is-auth-revealing'))).toHaveLength(1);
     node('#household-enter').click();
-    await expect(result).resolves.toMatchObject({ role: 'operator', nickname: '운영이웃', selection: { unitType: '55A' } });
+    await expect(result).resolves.toMatchObject({ role, nickname: '운영이웃', selection: { unitType: '55A' } });
+  });
+
+  it('keeps a static mobile editing dock and disables the reveal motion for reduced-motion users', () => {
+    const css = readFileSync(new URL('../styles/household-input.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important/);
+    expect(css).toMatch(/\.household-selector-shell\.is-nickname-editing \.household-selection-dock\s*\{[^}]*position: static;/);
+    expect(css).toContain('.household-selection-dock.is-entry-ready:not(.is-authenticated)');
+    expect(css).toContain('.household-selection-dock.is-entry-ready.is-authenticated[data-entry-role]');
   });
 });
 

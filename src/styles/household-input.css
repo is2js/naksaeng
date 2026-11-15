@@ -73,6 +73,75 @@
   color: #748781;
 }
 
+/* Readiness is a persistent visual state; its motion runs only on a transition. */
+.household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) {
+  border-top-color: rgba(146, 237, 207, .9);
+  background: linear-gradient(115deg, rgba(24, 79, 69, .98), rgba(13, 46, 48, .99) 60%, rgba(71, 62, 32, .97));
+  box-shadow: 0 -3px 0 rgba(126, 235, 201, .13), 0 -12px 32px rgba(42, 145, 116, .25);
+}
+
+.household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) small {
+  color: #b3e8d5;
+}
+
+.household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) button {
+  border-color: #e8d49a;
+  color: #12382d;
+  background: linear-gradient(110deg, #a5e8ca, #e9d49c);
+  box-shadow: 0 0 18px rgba(164, 222, 170, .24);
+}
+
+.household-selector-shell .household-selection-dock.is-entry-ready.is-authenticated[data-entry-role] {
+  border-top-color: rgba(246, 166, 153, .94);
+  background: linear-gradient(115deg, rgba(104, 45, 43, .98), rgba(66, 30, 35, .99) 60%, rgba(92, 48, 40, .98));
+  box-shadow: 0 -3px 0 rgba(244, 146, 128, .15), 0 -14px 38px rgba(163, 63, 57, .3);
+  animation: none;
+}
+
+.household-selector-shell .household-selection-dock.is-authenticated small {
+  color: #f0b4a8;
+}
+
+.household-selector-shell .household-selection-dock.is-authenticated button {
+  border-color: #ffd0c1;
+  color: #4b211e;
+  background: linear-gradient(110deg, #f6afa0, #f6c4a9);
+  box-shadow: 0 0 20px rgba(239, 138, 117, .23);
+}
+
+.household-selector-shell .household-selection-dock.is-authenticated button:hover:not(:disabled) {
+  background: linear-gradient(110deg, #ffc5b7, #ffdbc0);
+}
+
+.household-selector-shell .household-selection-dock.is-entry-revealing,
+.household-selector-shell .household-selection-dock.is-entry-ready.is-authenticated.is-auth-revealing[data-entry-role] {
+  animation: household-entry-ready-rise 440ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.household-selector-shell .household-selection-dock.is-entry-revealing button,
+.household-selector-shell .household-selection-dock.is-auth-revealing button {
+  animation: household-entry-ready-shine 540ms ease-out both;
+}
+
+@keyframes household-entry-ready-rise {
+  from { opacity: .78; transform: translateY(14px); }
+  70% { opacity: 1; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes household-entry-ready-shine {
+  from, to { filter: brightness(1); }
+  45% { filter: brightness(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .household-selector-shell .household-selection-dock,
+  .household-selector-shell .household-selection-dock button {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Keep the real selection summary below the form while the mobile keyboard is
    in use. It returns to the existing raised/fixed dock after verification. */
 @media (pointer: coarse), (max-width: 760px) {

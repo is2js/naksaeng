@@ -304,6 +304,12 @@ export function waitForHouseholdSelection(
       requestAnimationFrame(() => panel.classList.add('is-entering'));
     };
 
+    const animateEntryDock = (state: 'is-entry-revealing' | 'is-auth-revealing'): void => {
+      dock.classList.remove('is-entry-revealing', 'is-auth-revealing');
+      void dock.offsetWidth;
+      dock.classList.add(state);
+    };
+
     const revealVerifiedDock = (): void => {
       if (!nicknameVerified) return;
       shell.classList.remove('is-nickname-editing');
@@ -314,19 +320,21 @@ export function waitForHouseholdSelection(
       requestVerification.disabled = true;
       nicknameStep.classList.add('is-complete');
       dock.hidden = false;
-      dock.classList.remove('is-authenticated');
-      void dock.offsetWidth;
       dock.classList.add('is-authenticated');
+      animateEntryDock('is-auth-revealing');
     };
 
     const publicEntryHint = '공개 권한으로 입장할 수 있습니다. 회원 기능은 인증 후 사용할 수 있습니다.';
 
     const updateSelectionSummary = (): void => {
+      const wasEntryReady = entryReady;
       entryReady = householdEntryNicknameIsValid(nickname) && Boolean(chosenBuildingId)
         && (shareAuthentication || Boolean(selected));
       enter.disabled = !entryReady;
       dock.dataset.entryRole = entryRole;
       dock.classList.toggle('is-entry-ready', entryReady);
+      if (!entryReady) dock.classList.remove('is-entry-revealing', 'is-auth-revealing');
+      else if (!wasEntryReady && !nicknameVerified) animateEntryDock('is-entry-revealing');
       if (shareAuthentication) {
         const nicknameText = nickname.trim() ? ` · ${nickname.trim()}` : '';
         summary.textContent = chosenBuildingId
@@ -362,7 +370,7 @@ export function waitForHouseholdSelection(
       requestVerification.disabled = shareAuthentication || verifyNickname.disabled;
       verifyNickname.removeAttribute('aria-busy');
       requestVerification.removeAttribute('aria-busy');
-      dock.classList.remove('is-authenticated');
+      dock.classList.remove('is-authenticated', 'is-auth-revealing');
       nicknameStatus.textContent = !nickname.trim() ? '' : !householdEntryNicknameIsValid(nickname)
         ? '닉네임은 제어문자 없이 2~20자로 입력해 주세요.'
         : householdVerificationConfigured(verificationConfig)

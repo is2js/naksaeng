@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { BUNDANG_INTERIOR_LIGHTING, STRUCTURAL_PROP_ASSETS, ThreeWorldRenderer } from './three-world';
+import { createBundangKitchenStoneTextures } from './bundang-kitchen-finish-material';
 
 function factory() {
   const renderer = Object.create(ThreeWorldRenderer.prototype) as any;
@@ -31,13 +32,19 @@ describe('밝은 실내 가구·가전 재질', () => {
 
   it('아일랜드의 흰 본체와 상판·서랍·빈 슬롯을 서로 구분한다', () => {
     const renderer = factory();
+    renderer.kitchenStoneTextures = createBundangKitchenStoneTextures();
     const asset = STRUCTURAL_PROP_ASSETS.find(asset => asset.assetId === 'bunfirvil-island-integrated-cabinet-base')!;
     const group = renderer.proceduralProp({ assetId: asset.assetId, materialVariantId: 'golden-shore-engineered-stone',
       dimensionsMeters: [1.8, .7, .9] }, asset) as THREE.Group;
     expect(materials(group, 'primary')[0].color.getHexString()).toBe('f2f5ef');
-    expect(materials(group, 'secondary')[0].color.getHexString()).toBe('ede7d9');
+    const top = materials(group, 'secondary')[0];
+    expect(top.color.getHexString()).toBe('ffffff'); // No double tint over the calibrated albedo.
+    expect(top.map).toBe(renderer.kitchenStoneTextures.albedo);
+    expect(top.bumpMap).toBe(renderer.kitchenStoneTextures.bump);
+    expect(top.userData.kitchenFinishProfile).toBe('golden-shore-engineered-stone');
     expect(materials(group, 'cabinet-opening')[0].color.getHexString()).toBe('a9b3ac');
     expect(materials(group, 'cabinet-seam')[0].color.getHexString()).not.toBe('f2f5ef');
+    Object.values(renderer.kitchenStoneTextures as Record<string, THREE.Texture>).forEach(texture => texture.dispose());
   });
 
   it('검은 오븐은 유리·본체·조작부가 읽히는 charcoal이며 환경맵 없는 고금속 암부를 피한다', () => {

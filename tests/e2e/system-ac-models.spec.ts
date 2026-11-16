@@ -5,7 +5,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await page.setViewportSize(viewport);
     await page.addInitScript(() => {
       sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-        schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+        schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       }));
     });
     await page.goto('./?map=bundang-first-village-55b-prototype&actor=200&variant=A');

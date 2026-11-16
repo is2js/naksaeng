@@ -66,7 +66,7 @@ test('공통 색감 dropdown은 작고 즉시 닫히며 입력·설치·읽기�
   await page.route('https://script.google.com/**', route => route.abort());
   await page.addInitScript(({ key, map }) => {
     if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       authRevision: 2, scope: 'playground', nickname: '색감 확인',
     }));
     if (!localStorage.getItem(`bunfirvil:layout:v1:${map}`)) localStorage.setItem(`bunfirvil:layout:v1:${map}`, JSON.stringify({

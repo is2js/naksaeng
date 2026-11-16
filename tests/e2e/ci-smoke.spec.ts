@@ -141,7 +141,7 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   verificationMode = 'mismatch';
   await page.getByPlaceholder('닉네임 입력').fill('잘못된닉네임');
   await page.getByRole('button', { name: '인증', exact: true }).click();
-  await expect(page.locator('#household-nickname-status')).toContainText('등록된 회원 정보를 확인할 수 없습니다.');
+  await expect(page.locator('#household-nickname-status')).toContainText('인증 정보를 확인할 수 없습니다.');
   await expect(page.locator('#household-enter')).toBeEnabled();
   verificationMode = 'match';
   await page.getByPlaceholder('닉네임 입력').fill('돌범이웃');

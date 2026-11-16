@@ -56,7 +56,7 @@ describe('household Google Sheet verification', () => {
     expect(() => parseHouseholdVerificationConfig({ ...config, timeoutMs: 999 })).toThrow(HouseholdVerificationError);
   });
 
-  it('posts the normalized triple without floor or household number', async () => {
+  it('posts normalized membership credentials without floor or household number', async () => {
     const fetchMock = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({
         schemaVersion: 1,
@@ -64,10 +64,11 @@ describe('household Google Sheet verification', () => {
         buildingId: '105',
         unitType: '55A',
         nickname: '피치',
+        memberCode: 'synthetic-member-code-A1',
       });
-      return new Response(JSON.stringify({ schemaVersion: 1, ok: true, verified: true, operator: false, requested: false, status: 'verified' }));
+      return new Response(JSON.stringify({ schemaVersion: 1, ok: true, verified: true, operator: false, requested: false, status: 'verified', memberCodeVerified: true, memberCodeRevision: 1 }));
     }) as unknown as typeof fetch;
-    await expect(verifyHousehold(config, { buildingId: '105동', unitType: '55a', nickname: ' 피치 ' }, fetchMock))
+    await expect(verifyHousehold(config, { buildingId: '105동', unitType: '55a', nickname: ' 피치 ', memberCode: ' synthetic-member-code-A1 ' }, fetchMock))
       .resolves.toMatchObject({ verified: true, operator: false, status: 'verified' });
   });
 
@@ -107,6 +108,45 @@ describe('household Google Sheet verification', () => {
     expect(readHouseholdVerificationSession(storage)).toBeNull();
   });
 
+  it('rejects nickname-only member responses for every authentication action', async () => {
+    const input = { buildingId: '105', unitType: '55A', nickname: '이웃', memberCode: 'synthetic-member-code-A1' };
+    for (const proof of [{}, { memberCodeVerified: true }, { memberCodeVerified: false, memberCodeRevision: 1 }, { memberCodeVerified: true, memberCodeRevision: '1' }]) {
+      const fetchMock = async () => new Response(JSON.stringify({
+        schemaVersion: 1, authRevision: 2, scope: 'share', ok: true, verified: true, operator: false, status: 'verified', ...proof,
+      }));
+      for (const send of [verifyHousehold, verifyShareViewer, requestHouseholdVerification]) {
+        await expect(send(config, input, fetchMock)).rejects.toMatchObject({ code: 'backend-update-required' });
+      }
+    }
+  });
+
+  it('invalidates old member sessions but keeps code-protected member sessions without secrets', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(HOUSEHOLD_VERIFICATION_SESSION_KEY, JSON.stringify({
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: 100, role: 'verified', authRevision: 2,
+    }));
+    expect(readHouseholdVerificationSession(storage)).toBeNull();
+    expect(storage.getItem(HOUSEHOLD_VERIFICATION_SESSION_KEY)).toBeNull();
+    writeHouseholdVerificationSession('verified', '이웃', storage, 100);
+    expect(readHouseholdVerificationSession(storage)).toMatchObject({ role: 'verified', memberCodeRevision: 1 });
+    const saved = JSON.parse(storage.getItem(HOUSEHOLD_VERIFICATION_SESSION_KEY)!);
+    expect(saved).not.toHaveProperty('memberCode');
+    expect(saved).not.toHaveProperty('operatorCode');
+  });
+
+  it('does not send either secret with a registration request', async () => {
+    const fetchMock = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body));
+      expect(payload).not.toHaveProperty('memberCode');
+      expect(payload).not.toHaveProperty('operatorCode');
+      return new Response(JSON.stringify({ schemaVersion: 1, ok: true, verified: false, operator: false, requested: true, status: 'requested' }));
+    }) as unknown as typeof fetch;
+    await requestHouseholdVerification(config, {
+      buildingId: '105', unitType: '55A', nickname: '이웃', memberCode: 'synthetic-member-code-A1', operatorCode: 'synthetic-operator-code-A1',
+    }, fetchMock);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('round-trips a public entry in the existing tab session without granting verified or operator privileges', () => {
     for (const scope of ['playground', 'share'] as const) {
       const storage = new MemoryStorage();
@@ -122,10 +162,10 @@ describe('household Google Sheet verification', () => {
 
   it('separates share viewer membership from the shared apartment type', async () => {
     const fetchMock = async (_: URL | RequestInfo, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toEqual({ schemaVersion: 1, action: 'verifyShareViewer', buildingId: '105', unitType: '', nickname: '이웃' });
-      return new Response(JSON.stringify({ schemaVersion: 1, authRevision: 2, ok: true, verified: true, operator: false, status: 'verified', scope: 'share' }));
+      expect(JSON.parse(String(init?.body))).toEqual({ schemaVersion: 1, action: 'verifyShareViewer', buildingId: '105', unitType: '', nickname: '이웃', memberCode: 'synthetic-member-code-A1' });
+      return new Response(JSON.stringify({ schemaVersion: 1, authRevision: 2, ok: true, verified: true, operator: false, status: 'verified', scope: 'share', memberCodeVerified: true, memberCodeRevision: 1 }));
     };
-    expect((await verifyShareViewer(config, { buildingId: '105', nickname: '이웃' }, fetchMock)).scope).toBe('share');
+    expect((await verifyShareViewer(config, { buildingId: '105', nickname: '이웃', memberCode: 'synthetic-member-code-A1' }, fetchMock)).scope).toBe('share');
     const storage = new MemoryStorage();
     writeHouseholdVerificationSession('verified', '이웃', storage, Date.now(), 'share');
     expect(readHouseholdVerificationSession(storage)?.scope).toBe('share');

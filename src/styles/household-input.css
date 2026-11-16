@@ -75,20 +75,24 @@
 
 /* Readiness is a persistent visual state; its motion runs only on a transition. */
 .household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) {
-  border-top-color: rgba(146, 237, 207, .9);
-  background: linear-gradient(115deg, rgba(24, 79, 69, .98), rgba(13, 46, 48, .99) 60%, rgba(71, 62, 32, .97));
-  box-shadow: 0 -3px 0 rgba(126, 235, 201, .13), 0 -12px 32px rgba(42, 145, 116, .25);
+  border-top-color: rgba(117, 200, 223, .9);
+  background: rgba(20, 43, 69, .96);
+  box-shadow: 0 -3px 0 rgba(117, 200, 223, .13), 0 -12px 32px rgba(35, 115, 153, .25);
 }
 
 .household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) small {
-  color: #b3e8d5;
+  color: #8fb3c8;
 }
 
 .household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) button {
-  border-color: #e8d49a;
-  color: #12382d;
-  background: linear-gradient(110deg, #a5e8ca, #e9d49c);
-  box-shadow: 0 0 18px rgba(164, 222, 170, .24);
+  border-color: #75c8df;
+  color: #11283d;
+  background: #86d9ed;
+  box-shadow: 0 0 18px rgba(117, 200, 223, .24);
+}
+
+.household-selector-shell .household-selection-dock.is-entry-ready:not(.is-authenticated) button:hover:not(:disabled) {
+  background: #a4e8f7;
 }
 
 .household-selector-shell .household-selection-dock.is-entry-ready.is-authenticated[data-entry-role] {

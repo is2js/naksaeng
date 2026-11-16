@@ -8,7 +8,7 @@ test('확정일 옵션 자납과 미정 III 자납을 분리하고 집단대출�
   await page.addInitScript(() => {
     sessionStorage.clear();
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       authRevision: 2, scope: 'playground', nickname: '자금 확인',
     }));
     sessionStorage.setItem('bunfirvil:sale-calculator:v1', JSON.stringify({

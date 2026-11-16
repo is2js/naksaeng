@@ -25,7 +25,7 @@ test('authenticated nickname remains literal across appearances, transformation,
     const key = 'bunfirvil:household-verification:v1';
     if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({
       schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-      role: 'verified', authRevision: 2, scope: 'playground', nickname: name,
+      role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: name,
     }));
   }, nickname);
   await page.goto('./?map=bundang-first-village-55a-prototype&variant=A');
@@ -83,7 +83,7 @@ test('shared playground keeps the owner name on the actor and in the title', asy
   const token = envelope.toString('base64url');
   await context.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-    role: 'verified', authRevision: 2, scope: 'share', nickname: '방문자',
+    role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'share', nickname: '방문자',
   })));
   await page.goto(`./#share=v1.${token}`);
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });
@@ -104,7 +104,7 @@ test('authenticated nickname remains visible on the actor on a mobile viewport',
   await page.setViewportSize({ width: 390, height: 844 });
   await context.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-    role: 'verified', authRevision: 2, scope: 'playground', nickname: '모바일이웃',
+    role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '모바일이웃',
   })));
   await page.goto('./?map=bundang-first-village-55a-prototype&variant=A');
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });

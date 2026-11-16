@@ -243,7 +243,7 @@ test('laser release/cancel, owned surfaces, camera changes and reference notice 
   const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   try {
     await mobileContext.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', authRevision: 2, scope: 'playground', nickname: '모바일 검수',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '모바일 검수',
     })));
     const mobile = await mobileContext.newPage();
     mobile.on('pageerror', error => errors.push(error.message));

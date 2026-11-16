@@ -125,7 +125,7 @@ export interface HouseholdSelectionResultV1 {
   nickname: string;
 }
 
-export function householdShellHeader(exportId: string, fallback = false, overview = false): string {
+export function householdShellHeader(exportId: string, fallback = false, overview = false, showStorageControls = true): string {
   const operator = householdVerificationIsOperator();
   const householdHref = overview ? resolveProjectUrl('') : resolveProjectUrl('households/');
   const householdLabel = overview ? '세대 선택' : '전체 동·호 현황';
@@ -143,7 +143,7 @@ export function householdShellHeader(exportId: string, fallback = false, overvie
     </nav>
     <div class="household-header-actions" aria-label="세대 메뉴">
       ${operator ? `<a class="household-header-action" href="${householdHref}" aria-label="${householdLabel}"><span>${householdLabel}</span><small aria-hidden="true">${overview ? '선택' : '현황'}</small></a>` : ''}
-      <button type="button" id="selector-open-storage" class="household-header-action" aria-label="저장 관리"><span>저장 관리</span><small aria-hidden="true">저장</small></button>
+      ${showStorageControls ? '<button type="button" id="selector-open-storage" class="household-header-action" aria-label="저장 관리"><span>저장 관리</span><small aria-hidden="true">저장</small></button>' : ''}
       <div class="build-chip" title="현재 정적 자산 스냅샷">
         <span class="status-dot ${fallback ? 'is-amber' : ''}"></span>
         <span><small>STATIC BUILD</small><b>${escapeHtml(exportId)}</b></span>
@@ -169,7 +169,7 @@ export function waitForHouseholdSelection(
   return new Promise((resolve) => {
     let selected: HouseholdSelectionV1 | null = null;
     mount.innerHTML = `<div class="household-selector-shell app-shell ${shareAuthentication ? 'is-share-authentication' : ''}">
-      ${householdShellHeader(catalog.exportId, fallback)}
+      ${householdShellHeader(catalog.exportId, fallback, false, !shareAuthentication)}
       <main class="household-selector-main">
         <div class="household-wizard-shell">
         <section class="household-selector-intro" id="household-selector-intro">
@@ -213,9 +213,9 @@ export function waitForHouseholdSelection(
               <label><span>닉네임</span><input id="household-nickname" type="text" minlength="2" maxlength="20" autocomplete="off" placeholder="닉네임 입력" aria-describedby="household-nickname-status" /></label>
             </div>
             <div id="household-operator-code-group" class="household-operator-code" hidden>
-              <label for="household-operator-code">운영자 인증코드</label>
-              <input id="household-operator-code" type="password" maxlength="128" autocomplete="off" placeholder="별도 운영자 인증코드" />
-              <small>공개 닉네임과 다른 코드를 입력하세요. 코드가 공유 링크나 브라우저 저장소에 저장되지는 않습니다.</small>
+              <label for="household-operator-code">회원 인증코드</label>
+              <input id="household-operator-code" type="password" maxlength="128" autocomplete="off" placeholder="안내받은 회원 인증코드" />
+              <small>닉네임과 별도로 전달받은 인증코드를 입력하세요. 코드는 공유 링크나 브라우저 저장소에 저장되지 않습니다.</small>
             </div>
             <output id="household-nickname-status" aria-live="polite"></output>
             <div class="household-registration-request" ${shareAuthentication ? 'hidden' : ''}>
@@ -230,7 +230,7 @@ export function waitForHouseholdSelection(
         <div><small>${shareAuthentication ? '공유 놀이터 열람' : '선택 세대'}</small><b id="household-selection-summary">${shareAuthentication ? '동과 닉네임을 확인해 주세요.' : '동·층·호를 선택해 주세요.'}</b></div>
         <button type="button" id="household-enter" disabled>${shareAuthentication ? '공유 놀이터 열람' : '놀이터 입장'}</button>
       </aside>
-      ${householdStorageDialogMarkup()}
+      ${shareAuthentication ? '' : householdStorageDialogMarkup()}
     </div>`;
 
     const shell = mount.querySelector<HTMLElement>('.household-selector-shell')!;
@@ -255,6 +255,7 @@ export function waitForHouseholdSelection(
     const nicknameStatus = mount.querySelector<HTMLOutputElement>('#household-nickname-status');
     const operatorGroup = mount.querySelector<HTMLElement>('#household-operator-code-group')!;
     const operatorInput = mount.querySelector<HTMLInputElement>('#household-operator-code')!;
+    const operatorLabel = operatorGroup.querySelector<HTMLLabelElement>('label')!;
     if (!picker || !detail || !nicknameStage || !rows || !title || !description || !legend || !buildingStep || (!shareAuthentication && !unitStep) || !nicknameStep || !selectedBuilding || !nicknameBuilding || !dock || !summary || !enter || !nicknameInput || !verifyNickname || !requestVerification || !nicknameStatus) throw new Error('세대 선택 화면을 구성하지 못했습니다.');
     let chosenBuildingId: string | null = null;
     let nickname = '';
@@ -289,6 +290,11 @@ export function waitForHouseholdSelection(
       verificationAttempt += 1;
       verificationController?.abort();
       verificationController = null;
+    };
+
+    const setAuthenticationCodeKind = (kind: 'member' | 'operator'): void => {
+      operatorLabel.textContent = kind === 'operator' ? '운영자 인증코드' : '회원 인증코드';
+      operatorInput.placeholder = kind === 'operator' ? '별도 운영자 인증코드' : '안내받은 회원 인증코드';
     };
 
     const paintBuildingChoice = (): void => {
@@ -352,13 +358,16 @@ export function waitForHouseholdSelection(
       summary.textContent = `${selected.buildingId}동 ${selected.householdNumber}호 · ${selected.floor}층 · ${selected.unitType}${nicknameText} · ${facing}`;
     };
 
-    const resetNicknameVerification = (clearNickname: boolean): void => {
+    const resetNicknameVerification = (clearNickname: boolean, preserveCode = false): void => {
       invalidateVerification();
       nicknameVerified = false;
       entryRole = 'public';
-      operatorInput.value = '';
+      if (!preserveCode) {
+        operatorInput.value = '';
+        operatorGroup.hidden = true;
+        setAuthenticationCodeKind('member');
+      }
       operatorInput.disabled = false;
-      operatorGroup.hidden = true;
       if (clearNickname) {
         nickname = '';
         nicknameInput.value = '';
@@ -374,7 +383,7 @@ export function waitForHouseholdSelection(
       nicknameStatus.textContent = !nickname.trim() ? '' : !householdEntryNicknameIsValid(nickname)
         ? '닉네임은 제어문자 없이 2~20자로 입력해 주세요.'
         : householdVerificationConfigured(verificationConfig)
-          ? publicEntryHint
+          ? preserveCode ? `인증코드를 확인한 뒤 인증을 다시 눌러 주세요. ${publicEntryHint}` : publicEntryHint
           : `회원 인증 서비스를 사용할 수 없습니다. ${publicEntryHint}`;
       updateSelectionSummary();
     };
@@ -548,28 +557,44 @@ export function waitForHouseholdSelection(
       button.setAttribute('aria-busy', 'true');
       nicknameStatus.textContent = register ? '닉네임 등록을 요청하고 있습니다.' : '닉네임을 확인하고 있습니다.';
       try {
-        const input = { buildingId, unitType, nickname: candidate, operatorCode: operatorInput.value };
+        // The server alone decides whether the supplied secret is a member or
+        // operator code. Registration requests never carry either secret.
+        const input = {
+          buildingId, unitType, nickname: candidate,
+          ...(!register ? { memberCode: operatorInput.value, operatorCode: operatorInput.value } : {}),
+        };
         const response = shareAuthentication
           ? await verifyShareViewer(verificationConfig, input, undefined, controller.signal)
           : register ? await requestHouseholdVerification(verificationConfig, input, undefined, controller.signal)
             : await verifyHousehold(verificationConfig, input, undefined, controller.signal);
         if (attempt !== verificationAttempt || normalizeHouseholdNickname(nickname) !== candidate) return;
-        nicknameVerified = response.verified;
-        entryRole = response.operator ? 'operator' : response.verified ? 'verified' : 'public';
-        verifyNickname.textContent = response.verified ? '인증 완료' : '인증';
+        const codeChallenge = ['member_code_required', 'member_code_setup_required', 'operator_code_required', 'operator_setup_required'].includes(response.code || '');
+        nicknameVerified = !register && response.verified && !codeChallenge;
+        entryRole = nicknameVerified ? response.operator ? 'operator' : 'verified' : 'public';
+        verifyNickname.textContent = nicknameVerified ? '인증 완료' : '인증';
         if (response.code === 'operator_code_required') {
+          setAuthenticationCodeKind('operator');
           operatorGroup.hidden = false;
           nicknameStatus.textContent = `운영자 인증코드를 입력해 주세요. 반복 실패 시 10분 후 다시 시도하세요. ${publicEntryHint}`;
         } else if (response.code === 'operator_setup_required') {
+          setAuthenticationCodeKind('operator');
+          operatorGroup.hidden = false;
           nicknameStatus.textContent = `운영자 인증코드가 설정되지 않았습니다. Sheet의 분퍼빌 회원 관리 메뉴에서 먼저 설정해 주세요. ${publicEntryHint}`;
+        } else if (response.code === 'member_code_required') {
+          setAuthenticationCodeKind('member');
+          operatorGroup.hidden = false;
+          nicknameStatus.textContent = `회원 인증코드를 입력한 뒤 인증을 다시 눌러 주세요. ${publicEntryHint}`;
+        } else if (response.code === 'member_code_setup_required') {
+          setAuthenticationCodeKind('member');
+          operatorGroup.hidden = false;
+          nicknameStatus.textContent = `인증을 완료할 수 없습니다. 전달받은 인증 정보를 확인하거나 운영자에게 문의해 주세요. ${publicEntryHint}`;
         } else if (response.code === 'membership_suspended') {
           nicknameStatus.textContent = `회원 기능을 사용할 수 없습니다. 운영자에게 회원 상태를 확인해 주세요. ${publicEntryHint}`;
         } else {
-          nicknameStatus.textContent = response.operator ? '운영자 인증이 완료되었습니다. 관리 메뉴를 사용할 수 있습니다.'
-            : response.verified ? (shareAuthentication ? '공유 열람 인증이 완료되었습니다.' : '세대 및 닉네임 인증이 완료되었습니다.')
+          nicknameStatus.textContent = nicknameVerified && response.operator ? '운영자 인증이 완료되었습니다. 관리 메뉴를 사용할 수 있습니다.'
+            : nicknameVerified ? (shareAuthentication ? '공유 열람 인증이 완료되었습니다.' : '세대·닉네임 및 회원 코드 인증이 완료되었습니다.')
             : response.status === 'requested' ? `등록 요청이 확인 대기 중입니다. 승인 후 인증 확인을 눌러 주세요. ${publicEntryHint}`
-            : response.status === 'rejected' ? `등록 요청이 반려되었습니다. 운영자에게 문의해 주세요. ${publicEntryHint}`
-            : `등록된 회원 정보를 확인할 수 없습니다. ${publicEntryHint}`;
+            : `인증 정보를 확인할 수 없습니다. 닉네임과 인증코드를 확인한 후 다시 시도해 주세요. ${publicEntryHint}`;
         }
         revealVerifiedDock();
       } catch (error) {
@@ -598,8 +623,7 @@ export function waitForHouseholdSelection(
     verifyNickname.addEventListener('click', () => { void authenticate(false); });
     requestVerification.addEventListener('click', () => { void authenticate(true); });
     operatorInput.addEventListener('input', () => {
-      invalidateVerification();
-      verifyNickname.disabled = false;
+      resetNicknameVerification(false, true);
     });
     for (const input of [nicknameInput, operatorInput]) {
       input.addEventListener('keydown', (event) => {
@@ -638,7 +662,7 @@ export function waitForHouseholdSelection(
       resolve({ selection: selected, role: entryRole, nickname: normalizeHouseholdNickname(nickname) });
     });
 
-    bindHouseholdStorageControls(mount);
+    if (!shareAuthentication) bindHouseholdStorageControls(mount);
 
     const initialBuilding = new URLSearchParams(window.location.hash.slice(1)).get('building');
     if (initialBuilding) showBuilding(initialBuilding, false);

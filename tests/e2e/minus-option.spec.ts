@@ -14,7 +14,7 @@ test('마이너스 옵션은 기존 옵션을 확인 후 교체하고 기본 제
       schemaVersion: 1,
       provider: 'google-apps-script',
       verifiedAt: Date.now(),
-      role: 'verified',
+      role: 'verified', memberCodeRevision: 1,
     }));
   });
   await page.goto(`./?map=${MAP_ID}&actor=200&variant=A`);

@@ -12,7 +12,7 @@ test('51A guide stays in the playground, separate guides return, and the entranc
     if (!sessionStorage.getItem('bunfirvil:household-verification:v1')) {
       sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
         schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-        role: 'verified', authRevision: 2, scope: 'playground', nickname: '가이드테스트',
+        role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '가이드테스트',
       }));
     }
     if (!localStorage.getItem(`bunfirvil:review:v1:${id}`)) {
@@ -154,7 +154,7 @@ test('the in-playground guide preserves a read-only share without exposing authe
   const token = envelope.toString('base64url');
   await page.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-    role: 'verified', authRevision: 2, scope: 'share', nickname: '열람테스트',
+    role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'share', nickname: '열람테스트',
   })));
   await page.goto(`./#share=v1.${token}`);
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 60_000 });

@@ -28,7 +28,7 @@ test('낙생지구 진입과 계산기 입력·복원·모바일·인쇄 동작�
   await page.evaluate(({ contextKey, returnUrl }) => {
     sessionStorage.clear();
     localStorage.setItem('bunfirvil:review:v1:bundang-first-village-55a-prototype', JSON.stringify({ notes: 'retained-review', selectedOptionIds: [] }));
-    sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({ schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified' }));
+    sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({ schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1 }));
     sessionStorage.setItem(contextKey, JSON.stringify({ schemaVersion: 1, unitType: '55A', priceFloorBand: '5+', applicantRoute: 'main-subscription', optionIds: ['system-ac-2-general', 'wide-plank-floor-finish'], returnUrl }));
   }, { contextKey: CONTEXT_KEY, returnUrl: RETURN_URL });
   await page.addInitScript(() => {

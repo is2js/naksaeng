@@ -11,7 +11,7 @@ async function seed(page: Page): Promise<void> {
   await page.addInitScript(({ contextKey, verificationKey }) => {
     sessionStorage.clear();
     sessionStorage.setItem(verificationKey, JSON.stringify({ schemaVersion: 1,
-      provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified' }));
+      provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1 }));
     sessionStorage.setItem(contextKey, JSON.stringify({ schemaVersion: 1,
       unitType: '55A', priceFloorBand: '5+', applicantRoute: 'main-subscription',
       optionIds: ['system-ac-2-general', 'wide-plank-floor-finish'],

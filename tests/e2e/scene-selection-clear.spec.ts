@@ -82,7 +82,7 @@ test('옵션 활성 표시만 이동·공격·스킬·배경 클릭으로 해제
   await page.route('https://script.google.com/**', route => route.abort());
   await page.addInitScript(map => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       authRevision: 2, scope: 'playground', nickname: '선택 해제 확인',
     }));
     localStorage.setItem(`bunfirvil:layout:v1:${map}`, JSON.stringify({

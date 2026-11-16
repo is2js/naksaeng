@@ -9,7 +9,7 @@ test('verified playground controls, guides, and calculator history return stay u
         schemaVersion: 1,
         provider: 'google-apps-script',
         verifiedAt: Date.now(),
-        role: 'verified',
+        role: 'verified', memberCodeRevision: 1,
       }));
     }
     if (!sessionStorage.getItem('bunfirvil:sale-calculator:v1')) {

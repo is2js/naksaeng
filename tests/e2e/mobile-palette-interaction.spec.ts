@@ -47,7 +47,7 @@ test('간결한 범례·반응형 색감 선택·칩 토글·안전한 모달·�
   page.on('pageerror', error => errors.push(error.message));
   await page.route('https://script.google.com/**', route => route.abort());
   await page.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-    schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+    schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
     authRevision: 2, scope: 'playground', nickname: '모바일 조작 확인',
   })));
   const client = await context.newCDPSession(page);

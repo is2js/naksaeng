@@ -20,7 +20,7 @@ async function seedCalculatorSession(page: Page, context: CalculatorContext): Pr
       schemaVersion: 1,
       provider: 'google-apps-script',
       verifiedAt: Date.now(),
-      role: 'verified',
+      role: 'verified', memberCodeRevision: 1,
     }));
     sessionStorage.setItem(calculatorKey, JSON.stringify(calculatorContext));
     Object.defineProperty(window, 'print', {

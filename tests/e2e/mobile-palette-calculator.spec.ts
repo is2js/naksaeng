@@ -73,7 +73,7 @@ test('모바일 이름 칩은 맵 선택과 연결되고 계산기는 팔레트 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       authRevision: 2, scope: 'playground', nickname: '모바일 확인',
     }));
     if (!sessionStorage.getItem('bunfirvil:sale-calculator:v1')) sessionStorage.setItem('bunfirvil:sale-calculator:v1', JSON.stringify({

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 async function enterPlayground(page: import('@playwright/test').Page): Promise<void> {
   await page.addInitScript(() => sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
     schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-    role: 'verified', authRevision: 2, scope: 'playground', nickname: '연기 검수',
+    role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '연기 검수',
   })));
   await page.goto('./?map=bundang-first-village-55a-prototype&variant=A');
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });

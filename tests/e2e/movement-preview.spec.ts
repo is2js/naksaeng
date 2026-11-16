@@ -6,7 +6,7 @@ test('diagonal release keeps the completed facing and can capture a playground r
   await context.addInitScript(() => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
       schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-      role: 'verified', authRevision: 2, scope: 'playground', nickname: '미리보기',
+      role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '미리보기',
     }));
     localStorage.setItem('bunfirvil:review:v1:bundang-first-village-55a-prototype', JSON.stringify({
       schemaVersion: 1, selectedOptionIds: ['living-design-wall-panel', 'wide-plank-floor-finish'],

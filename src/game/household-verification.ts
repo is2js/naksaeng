@@ -24,6 +24,7 @@ export interface HouseholdVerificationRequestV1 {
   buildingId: string;
   unitType: string;
   nickname: string;
+  memberCode?: string;
   operatorCode?: string;
 }
 
@@ -36,6 +37,8 @@ export interface HouseholdVerificationResponseV1 {
   status: HouseholdVerificationStatus;
   code?: string;
   scope?: HouseholdVerificationScope;
+  memberCodeVerified?: true;
+  memberCodeRevision?: 1;
 }
 
 export interface HouseholdVerificationSessionV1 {
@@ -44,6 +47,7 @@ export interface HouseholdVerificationSessionV1 {
   verifiedAt: number;
   role: HouseholdVerificationRole;
   authRevision?: 2;
+  memberCodeRevision?: 1;
   scope?: HouseholdVerificationScope;
   /** 현재 탭에서 공유 링크 작성자 표시에만 사용하며 localStorage에는 기록하지 않는다. */
   nickname?: string;
@@ -130,7 +134,8 @@ async function sendHouseholdVerification(
     buildingId: normalizeHouseholdBuilding(input.buildingId),
     unitType: action === 'verifyShareViewer' ? '' : normalizeHouseholdUnitType(input.unitType),
     nickname: normalizeHouseholdNickname(input.nickname),
-    ...(input.operatorCode ? { operatorCode: input.operatorCode.trim() } : {}),
+    ...(action !== 'requestHouseholdVerification' && input.memberCode?.trim() ? { memberCode: input.memberCode.trim() } : {}),
+    ...(action !== 'requestHouseholdVerification' && input.operatorCode?.trim() ? { operatorCode: input.operatorCode.trim() } : {}),
   };
   const controller = new AbortController();
   const cancel = (): void => controller.abort();
@@ -165,10 +170,11 @@ async function sendHouseholdVerification(
   if (!row || row.schemaVersion !== 1 || typeof row.ok !== 'boolean' || typeof row.verified !== 'boolean'
     || typeof row.operator !== 'boolean' || !validStatus) throw new HouseholdVerificationError('invalid-response');
   if (!row.ok) throw new HouseholdVerificationError('network');
-  if (row.operator && (row.authRevision !== 2 || row.operatorVerified !== true)
-    || action === 'verifyShareViewer' && (row.authRevision !== 2 || row.scope !== 'share')) throw new HouseholdVerificationError('backend-update-required');
   if (row.verified !== (row.status === 'verified' || row.status === 'operator')
     || row.operator !== (row.status === 'operator')) throw new HouseholdVerificationError('invalid-response');
+  if (row.operator && (row.authRevision !== 2 || row.operatorVerified !== true)
+    || row.verified && !row.operator && (row.memberCodeVerified !== true || row.memberCodeRevision !== 1)
+    || action === 'verifyShareViewer' && (row.authRevision !== 2 || row.scope !== 'share')) throw new HouseholdVerificationError('backend-update-required');
   return {
     schemaVersion: 1,
     ok: true,
@@ -177,6 +183,7 @@ async function sendHouseholdVerification(
     requested: row.requested === true,
     status: row.status as HouseholdVerificationStatus,
     scope: action === 'verifyShareViewer' ? 'share' : 'playground',
+    ...(row.verified && !row.operator ? { memberCodeVerified: true as const, memberCodeRevision: 1 as const } : {}),
     ...(typeof row.code === 'string' ? { code: row.code } : {}),
   };
 }
@@ -216,8 +223,9 @@ export function readHouseholdVerificationSession(storage: SessionStoragePort | n
       || typeof parsed.verifiedAt !== 'number' || !Number.isFinite(parsed.verifiedAt) || parsed.verifiedAt <= 0
       || (parsed.role !== 'public' && parsed.role !== 'verified' && parsed.role !== 'operator')
       || (parsed.scope !== undefined && parsed.scope !== 'share' && parsed.scope !== 'playground')) return null;
-    // Old nickname-only operator sessions must authenticate again.
-    if (parsed.role === 'operator' && parsed.authRevision !== 2) {
+    // Nickname-only sessions predate the role's required code proof.
+    if (parsed.role === 'operator' && parsed.authRevision !== 2
+      || parsed.role === 'verified' && parsed.memberCodeRevision !== 1) {
       storage.removeItem(HOUSEHOLD_VERIFICATION_SESSION_KEY);
       return null;
     }
@@ -228,6 +236,7 @@ export function readHouseholdVerificationSession(storage: SessionStoragePort | n
       verifiedAt: parsed.verifiedAt,
       role: parsed.role,
       ...(parsed.authRevision === 2 ? { authRevision: 2 as const } : {}),
+      ...(parsed.role === 'verified' ? { memberCodeRevision: 1 as const } : {}),
       scope: parsed.scope === 'share' ? 'share' : 'playground',
       ...(nickname && Array.from(nickname).length <= 20 ? { nickname } : {}),
     };
@@ -253,6 +262,7 @@ export function writeHouseholdVerificationSession(
     verifiedAt,
     role,
     authRevision: 2,
+    ...(role === 'verified' ? { memberCodeRevision: 1 as const } : {}),
     scope,
     ...(normalizedNickname && Array.from(normalizedNickname).length <= 20 ? { nickname: normalizedNickname } : {}),
   };

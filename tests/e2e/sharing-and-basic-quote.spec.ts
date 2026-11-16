@@ -8,7 +8,7 @@ test('공유 정보를 확인하고 수동 복사하며 옵션 없이도 계산�
   test.setTimeout(120_000);
   await page.addInitScript(({ map }) => {
     if (!sessionStorage.getItem('bunfirvil:household-verification:v1')) sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', authRevision: 2, scope: 'playground', nickname: '이웃',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '이웃',
     }));
     if (!sessionStorage.getItem('bunfirvil:sale-calculator:v1')) sessionStorage.setItem('bunfirvil:sale-calculator:v1', JSON.stringify({
       schemaVersion: 1, unitType: '55A', priceFloorBand: '5+',
@@ -45,7 +45,7 @@ test('공유 정보를 확인하고 수동 복사하며 옵션 없이도 계산�
 test('WebGL을 사용할 수 없는 경우 레이저 실측 불가를 안내한다', async ({ page }) => {
   await page.addInitScript(() => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', authRevision: 2, scope: 'playground', nickname: '이웃',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1, authRevision: 2, scope: 'playground', nickname: '이웃',
     }));
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (kind: string, ...args: unknown[]) {

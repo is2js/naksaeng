@@ -25,6 +25,9 @@ describe('mode-specific playground guides', () => {
     expect(body({})).toContain('레이저 실측');
     expect(body({})).toContain('40%');
     expect(body({})).toContain('3초');
+    expect(body({})).not.toContain('회원 개인코드');
+    expect(body({})).toContain('링크 복사');
+    expect(body({})).toContain('암호화');
   });
 
   it('retains authenticated furniture controls and member hotbar numbering', () => {
@@ -32,6 +35,7 @@ describe('mode-specific playground guides', () => {
     expect(body({ role: 'verified' })).toContain('가구배치');
     expect(body({ role: 'verified' })).toContain('Shift + 휠');
     expect(body({ role: 'verified' })).toContain('평면 타입 전환');
+    expect(body({ role: 'verified' })).toContain('개인코드');
   });
 
   it('keeps operator documents unavailable to public/member/shared readers', () => {

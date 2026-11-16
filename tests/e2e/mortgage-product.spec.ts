@@ -10,7 +10,7 @@ test('모기지 감정가격·매각/전액상환 계획은 입력 포커스와 
   await page.addInitScript(({ contextKey }) => {
     if (!sessionStorage.getItem(contextKey)) {
       sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({ schemaVersion: 1,
-        provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified' }));
+        provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1 }));
       sessionStorage.setItem(contextKey, JSON.stringify({ schemaVersion: 1, unitType: '55A', priceFloorBand: '5+',
         applicantRoute: 'main-subscription', optionIds: ['system-ac-2-general'],
         returnUrl: '/naksaeng/bunfirvil/?map=bundang-first-village-55a-prototype&actor=200&variant=A' }));

@@ -24,7 +24,7 @@ test('좌하단 옵션 chip은 옵션·가구 탭 모두에서 인게임 mask와
   await page.route('https://script.google.com/**', route => route.abort());
   await page.addInitScript(() => {
     sessionStorage.setItem('bunfirvil:household-verification:v1', JSON.stringify({
-      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified',
+      schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(), role: 'verified', memberCodeRevision: 1,
       authRevision: 2, scope: 'playground', nickname: '옵션 연결 확인',
     }));
     localStorage.removeItem('bunfirvil:review:v1:bundang-first-village-55a-prototype');

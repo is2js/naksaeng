@@ -12,11 +12,13 @@ test('operator code, cross-type share membership and modal keyboard regression s
   await page.route(endpoint, async route => {
     const input = route.request().postDataJSON();
     const operator = input.nickname === '운영테스트' && input.operatorCode === testCode;
-    const member = input.nickname === '일반테스트' && input.buildingId === '105' && (input.action === 'verifyShareViewer' || input.unitType === '55A');
+    const memberIdentity = input.nickname === '일반테스트' && input.buildingId === '105' && (input.action === 'verifyShareViewer' || input.unitType === '55A');
+    const member = memberIdentity && input.memberCode === testCode;
     if (input.action === 'verifyShareViewer') expect(input.unitType).toBe('');
     await route.fulfill({ json: { schemaVersion: 1, authRevision: 2, ok: true, verified: operator || member, operator, operatorVerified: operator,
+      memberCodeVerified: member, memberCodeRevision: 1,
       status: operator ? 'operator' : member ? 'verified' : 'not_found', scope: input.action === 'verifyShareViewer' ? 'share' : 'playground',
-      code: input.nickname === '운영테스트' && !operator ? 'operator_code_required' : undefined } });
+      code: input.nickname === '운영테스트' && !operator ? 'operator_code_required' : memberIdentity && !member ? 'member_code_required' : undefined } });
   });
   await page.goto('./?map=bundang-first-village-51a-prototype&variant=D');
   await page.locator('[data-choose-building="105"]').click();
@@ -54,6 +56,10 @@ test('operator code, cross-type share membership and modal keyboard regression s
   await expect(page.locator('#household-request-verification')).not.toBeVisible();
   await page.locator('#household-nickname').fill('일반테스트'); // A 55A member views a 51A share.
   await page.locator('#household-nickname').press('Enter');
+  await expect(page.locator('#household-operator-code-group')).toBeVisible();
+  await page.locator('#household-operator-code').fill(testCode);
+  await page.locator('#household-operator-code').press('Enter');
+  await expect(page.locator('#household-selection-dock')).toHaveAttribute('data-entry-role', 'verified');
   await expect(page.locator('#household-enter')).toBeEnabled();
   await page.locator('#household-enter').click();
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 45_000 });

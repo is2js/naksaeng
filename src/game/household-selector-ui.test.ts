@@ -36,6 +36,7 @@ class SelectorElement {
   };
   focus = vi.fn();
   private listeners = new Map<string, Array<(event: any) => void>>();
+  private children = new Map<string, SelectorElement>();
   addEventListener(type: string, listener: (event: any) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) || []), listener]);
   }
@@ -45,6 +46,10 @@ class SelectorElement {
   click(): void { if (!this.disabled) this.emit('click'); }
   setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
   removeAttribute(name: string): void { this.attributes.delete(name); }
+  querySelector(selector: string): SelectorElement {
+    if (!this.children.has(selector)) this.children.set(selector, new SelectorElement());
+    return this.children.get(selector)!;
+  }
   querySelectorAll(): SelectorElement[] { return []; }
 }
 
@@ -127,6 +132,18 @@ describe('public-first nickname entry UI', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])('only binds local reset in ordinary entry, never in share entry (share=%s)', share => {
+    stubBrowser();
+    const confirm = vi.fn(() => false);
+    Object.assign(window, { confirm });
+    const { mount, node } = selectorFixture(share, false);
+    for (const id of ['selector-open-storage', 'selector-storage-dialog', 'selector-reset-all']) {
+      expect(mount.innerHTML.includes(`id="${id}"`)).toBe(!share);
+    }
+    node('#selector-reset-all').click();
+    expect(confirm).toHaveBeenCalledTimes(share ? 0 : 1);
+  });
+
   it.each([false, true])('reveals the ready dock only on an invalid-to-valid transition (share=%s)', share => {
     stubBrowser();
     const { node, inputNickname } = selectorFixture(share);
@@ -155,14 +172,14 @@ describe('public-first nickname entry UI', () => {
     const operator = role === 'operator';
     const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       schemaVersion: 1, authRevision: 2, ok: true, verified: true,
-      operator, operatorVerified: operator, requested: false, status: role,
+      operator, operatorVerified: operator, memberCodeVerified: !operator, memberCodeRevision: 1, requested: false, status: role,
     })));
     vi.stubGlobal('fetch', fetch);
     const { node, result, inputNickname } = selectorFixture();
     const dock = node('#household-selection-dock');
     const add = vi.spyOn(dock.classList, 'add');
     inputNickname('운영이웃');
-    if (operator) node('#household-operator-code').value = 'test-operator-code';
+    node('#household-operator-code').value = operator ? 'test-operator-code' : 'test-member-code';
     const preventDefault = vi.fn();
     node('#household-nickname').emit('keydown', { key: 'Enter', isComposing: false, preventDefault });
     await vi.waitFor(() => expect(node('#household-verify-nickname').textContent).toBe('인증 완료'));
@@ -171,7 +188,7 @@ describe('public-first nickname entry UI', () => {
     const request = JSON.parse(fetch.mock.calls[0][1]!.body as string);
     expect(request).toMatchObject({ buildingId: '106', unitType: '55A', nickname: '운영이웃' });
     if (operator) expect(request.operatorCode).toBe('test-operator-code');
-    else expect(request).not.toHaveProperty('operatorCode');
+    else expect(request.memberCode).toBe('test-member-code');
     expect(dock.dataset.entryRole).toBe(role);
     expect(dock.classes.has('is-authenticated')).toBe(true);
     expect(dock.classes.has('is-auth-revealing')).toBe(true);
@@ -184,6 +201,54 @@ describe('public-first nickname entry UI', () => {
     expect(add.mock.calls.filter(args => args.includes('is-auth-revealing'))).toHaveLength(1);
     node('#household-enter').click();
     await expect(result).resolves.toMatchObject({ role, nickname: '운영이웃', selection: { unitType: '55A' } });
+  });
+
+  it.each([false, true])('requires a member code and clears it after success or identity changes (share=%s)', async share => {
+    stubBrowser();
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body));
+      const valid = request.memberCode === 'synthetic-member-code-A1';
+      return new Response(JSON.stringify({
+        schemaVersion: 1, authRevision: 2, ok: true, verified: valid, operator: false,
+        status: valid ? 'verified' : 'not_found', scope: share ? 'share' : 'playground',
+        ...(valid ? { memberCodeVerified: true, memberCodeRevision: 1 } : { code: 'member_code_required' }),
+      }));
+    });
+    vi.stubGlobal('fetch', fetch);
+    const { node, inputNickname, result } = selectorFixture(share);
+    inputNickname('회원이웃');
+    node('#household-verify-nickname').click();
+    await vi.waitFor(() => expect(node('#household-operator-code-group').hidden).toBe(false));
+    expect(node('#household-selection-dock').dataset.entryRole).toBe('public');
+    expect(node('#household-enter').disabled).toBe(false);
+    node('#household-operator-code').value = 'not-the-member-code';
+    node('#household-operator-code').emit('input');
+    inputNickname('다른이웃');
+    expect(node('#household-operator-code').value).toBe('');
+    expect(node('#household-operator-code-group').hidden).toBe(true);
+    inputNickname('회원이웃');
+    node('#household-operator-code').value = 'synthetic-member-code-A1';
+    node('#household-operator-code').emit('input');
+    node('#household-verify-nickname').click();
+    await vi.waitFor(() => expect(node('#household-verify-nickname').textContent).toBe('인증 완료'));
+    expect(node('#household-operator-code').value).toBe('');
+    expect(node('#household-operator-code').disabled).toBe(true);
+    expect(node('#household-selection-dock').dataset.entryRole).toBe('verified');
+    node('#household-enter').click();
+    await expect(result).resolves.toMatchObject({ role: 'verified', nickname: '회원이웃' });
+  });
+
+  it('does not promote a registration request even if its response claims successful membership', async () => {
+    stubBrowser();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      schemaVersion: 1, ok: true, verified: true, operator: false, status: 'verified', memberCodeVerified: true, memberCodeRevision: 1,
+    }))));
+    const { node, inputNickname } = selectorFixture();
+    inputNickname('회원이웃');
+    node('#household-request-verification').click();
+    await vi.waitFor(() => expect(node('#household-request-verification').attributes.has('aria-busy')).toBe(false));
+    expect(node('#household-selection-dock').dataset.entryRole).toBe('public');
+    expect(node('#household-verify-nickname').textContent).not.toBe('인증 완료');
   });
 
   it('keeps a static mobile editing dock and disables the reveal motion for reduced-motion users', () => {

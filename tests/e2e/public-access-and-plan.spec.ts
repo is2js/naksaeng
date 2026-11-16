@@ -16,7 +16,7 @@ async function changeTestRole(page: Page, role: 'verified' | 'operator'): Promis
   await page.evaluate(({ key, role }) => {
     sessionStorage.setItem(key, JSON.stringify({
       schemaVersion: 1, provider: 'google-apps-script', verifiedAt: Date.now(),
-      role, authRevision: 2, scope: 'playground', nickname: role === 'operator' ? '운영 검수' : '회원 검수',
+      role, authRevision: 2, ...(role === 'verified' ? { memberCodeRevision: 1 } : {}), scope: 'playground', nickname: role === 'operator' ? '운영 검수' : '회원 검수',
     }));
   }, { key: sessionKey, role });
   if (role === 'verified') await page.goto(`./?map=${mapId}&variant=A`);
@@ -62,7 +62,7 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
     await expect(page.locator('.household-nickname-controls #household-verify-nickname')).toHaveCount(0);
     await expect(enter).toBeEnabled();
     await verify.click();
-    await expect(page.locator('#household-nickname-status')).toContainText('등록된 회원 정보를 확인할 수 없습니다');
+    await expect(page.locator('#household-nickname-status')).toContainText('인증 정보를 확인할 수 없습니다');
     await expect(nickname).toBeEnabled();
     await expect(verify).toBeEnabled();
     await expect(page.locator('#household-request-verification')).toBeEnabled();

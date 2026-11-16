@@ -36,14 +36,18 @@ export class FinishThemeControls {
   private readonly abort = new AbortController();
   private readonly dialog: HTMLDialogElement | null;
   private readonly picker: HTMLButtonElement | null;
+  private readonly desktopSelect: HTMLSelectElement | null;
   private readonly status: HTMLElement | null;
   private readonly radioName: string;
+  private readonly mobileQuery = window.matchMedia('(pointer: coarse), (max-width: 760px)');
   private readonly pointers = new Set<number>();
   private themeId: BundangFinishThemeId = BUNDANG_DEFAULT_FINISH_THEME_ID;
   private backdropTap: BackdropTap | null = null;
   private backdropClickReady = false;
   private returnFocus: HTMLElement | null = null;
   private modalSessionActive = false;
+  private desktopSessionActive = false;
+  private syncingPickerMode = false;
   private destroyed = false;
 
   constructor(private readonly options: FinishThemeControlsOptions) {
@@ -63,6 +67,18 @@ export class FinishThemeControls {
 
     // Public and shared views intentionally have neither a picker nor a dialog.
     if (options.canChoose) {
+      this.desktopSelect = document.createElement('select');
+      this.desktopSelect.id = 'finish-theme-select';
+      this.desktopSelect.className = 'finish-theme-select';
+      this.desktopSelect.setAttribute('aria-label', '화면 색감 선택');
+      this.desktopSelect.title = '화면 색감 선택';
+      for (const theme of BUNDANG_FINISH_THEMES) {
+        const option = document.createElement('option');
+        option.value = theme.id;
+        option.textContent = `${theme.rank}순위 · ${theme.label}${theme.id === BUNDANG_DEFAULT_FINISH_THEME_ID ? ' (추천 · 기본)' : ''}`;
+        this.desktopSelect.append(option);
+      }
+      this.root.append(this.desktopSelect);
       this.picker = document.createElement('button');
       this.picker.type = 'button';
       this.picker.id = 'finish-theme-open';
@@ -78,9 +94,13 @@ export class FinishThemeControls {
       options.dialogHost.append(this.dialog);
       this.isolateEvents(this.dialog, false);
       this.bindDialog();
+      this.bindDesktopSelect();
       this.picker.addEventListener('click', () => this.open(), { signal: this.abort.signal });
+      this.mobileQuery.addEventListener('change', () => this.syncPickerMode(), { signal: this.abort.signal });
+      this.syncPickerMode();
     } else {
       this.picker = null;
+      this.desktopSelect = null;
       this.dialog = null;
       this.status = null;
     }
@@ -95,10 +115,71 @@ export class FinishThemeControls {
     try {
       this.close();
     } finally {
-      this.abort.abort();
-      this.resetBackdropTap();
-      this.dialog?.remove();
-      this.root.remove();
+      try {
+        this.finishDesktopSession();
+      } finally {
+        this.abort.abort();
+        this.resetBackdropTap();
+        this.dialog?.remove();
+        this.root.remove();
+      }
+    }
+  }
+
+  private bindDesktopSelect(): void {
+    const select = this.desktopSelect!;
+    const signal = this.abort.signal;
+    select.addEventListener('focus', () => this.beginDesktopSession(), { signal });
+    select.addEventListener('pointerdown', event => {
+      if (event.button === 0) this.beginDesktopSession();
+    }, { signal });
+    select.addEventListener('keydown', event => {
+      if (event.key === 'Escape' || event.key === 'Tab') this.finishDesktopSession();
+      else this.beginDesktopSession();
+    }, { signal });
+    select.addEventListener('blur', () => this.finishDesktopSession(), { signal });
+    select.addEventListener('change', () => {
+      if (this.destroyed || this.mobileQuery.matches) return;
+      this.beginDesktopSession();
+      try {
+        this.selectTheme(select.value);
+      } finally {
+        // The native option popup closes itself after committing a choice.
+        this.finishDesktopSession();
+      }
+    }, { signal });
+  }
+
+  private beginDesktopSession(): void {
+    if (this.destroyed || this.syncingPickerMode || this.mobileQuery.matches
+      || this.desktopSessionActive || this.modalSessionActive) return;
+    this.options.beforeOpen();
+    this.desktopSessionActive = true;
+  }
+
+  private finishDesktopSession(): void {
+    if (!this.desktopSessionActive) return;
+    this.desktopSessionActive = false;
+    this.options.afterClose();
+  }
+
+  private syncPickerMode(): void {
+    if (!this.picker || !this.desktopSelect || this.destroyed) return;
+    const active = document.activeElement;
+    const restoreFocus = active === this.picker || active === this.desktopSelect
+      || Boolean(active && this.dialog?.contains(active));
+    this.syncingPickerMode = true;
+    try {
+      // Clear the old presentation before transferring focus. The shared page
+      // preference survives, but a modal/input session never survives a resize.
+      this.returnFocus = null;
+      this.close();
+      this.finishDesktopSession();
+      this.picker.hidden = !this.mobileQuery.matches;
+      this.desktopSelect.hidden = this.mobileQuery.matches;
+      if (restoreFocus) (this.mobileQuery.matches ? this.picker : this.desktopSelect).focus({ preventScroll: true });
+    } finally {
+      this.syncingPickerMode = false;
     }
   }
 
@@ -173,12 +254,7 @@ export class FinishThemeControls {
       const input = event.target;
       if (this.destroyed || !this.options.canChoose || !(input instanceof HTMLInputElement)
         || input.type !== 'radio' || input.name !== this.radioName || !input.checked) return;
-      const theme = BUNDANG_FINISH_THEMES.find(candidate => candidate.id === input.value);
-      if (!theme || theme.id === this.themeId) return;
-      this.themeId = theme.id;
-      this.paint();
-      this.options.onChange(theme.id);
-      if (this.status) this.status.textContent = `${theme.label} 마감으로 미리보기 중입니다.`;
+      this.selectTheme(input.value);
     }, { signal });
     dialog.addEventListener('pointerdown', event => {
       this.backdropClickReady = false;
@@ -222,7 +298,7 @@ export class FinishThemeControls {
 
   private open(): void {
     const dialog = this.dialog;
-    if (this.destroyed || !this.options.canChoose || !dialog || dialog.open) return;
+    if (this.destroyed || !this.options.canChoose || !this.mobileQuery.matches || !dialog || dialog.open) return;
     this.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.options.beforeOpen();
     this.modalSessionActive = true;
@@ -267,9 +343,20 @@ export class FinishThemeControls {
     this.backdropClickReady = false;
   }
 
+  private selectTheme(id: unknown): void {
+    if (this.destroyed || !this.options.canChoose) return;
+    const theme = BUNDANG_FINISH_THEMES.find(candidate => candidate.id === id);
+    if (!theme || theme.id === this.themeId) return;
+    this.themeId = theme.id;
+    this.paint();
+    this.options.onChange(theme.id);
+    if (this.status) this.status.textContent = `${theme.label} 마감으로 미리보기 중입니다.`;
+  }
+
   private paint(): void {
     const theme = resolveBundangFinishTheme(this.themeId);
     this.root.dataset.themeId = theme.id;
+    if (this.desktopSelect) this.desktopSelect.value = theme.id;
     for (const material of MATERIALS) {
       this.root.querySelector<HTMLElement>(`[data-finish-material="${material.key}"]`)!.style.backgroundColor = theme[material.key];
     }

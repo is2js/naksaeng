@@ -534,6 +534,11 @@ input:focus-visible {
   isolation: isolate;
 }
 
+/* The scene receives programmatic pointer focus, not a native control ring. */
+.game-stage:focus,
+#world-canvas:focus,
+#three-world-canvas:focus { outline: 0; }
+
 #world-canvas,
 #three-world-canvas,
 .actor-layer,
@@ -2045,7 +2050,7 @@ input:focus-visible {
 }
 
 .option-card:hover { border-color: rgba(139, 183, 176, 0.25); background: rgba(14, 33, 37, 0.72); transform: translateX(-2px); }
-.option-card.is-selected { border-color: rgba(225, 185, 99, 0.35); background: linear-gradient(90deg, rgba(225, 185, 99, 0.09), rgba(8, 23, 27, 0.7)); }
+.option-card.is-selected { border-color: rgba(225, 185, 99, 0.35); background: linear-gradient(90deg, rgba(225, 185, 99, .18), rgba(225, 185, 99, .08)), rgba(8, 23, 27, .7); }
 .option-card.is-world-linked { border-color: rgba(93, 216, 192, .74); background: linear-gradient(90deg, rgba(67, 183, 161, .15), rgba(8, 23, 27, .76)); box-shadow: inset 3px 0 rgba(119, 239, 215, .72), 0 0 14px rgba(56, 181, 157, .1); }
 .option-card.is-option-locked { opacity: .48; cursor: not-allowed; filter: saturate(.55); }
 .option-card.is-option-locked:hover { border-color: rgba(139, 183, 176, .1); background: rgba(6, 18, 22, .62); transform: none; }
@@ -2482,6 +2487,10 @@ input:focus-visible {
   .game-stage, .rpg-actor, #world-canvas, #three-world-canvas { touch-action: pan-y; }
   .game-stage.has-interior-ghost canvas,
   .game-stage[data-istarpark-laser-active="true"] canvas { touch-action: none; }
+  .serverless-banner .playground-banner-reference,
+  .serverless-banner > .playground-banner-disclaimer,
+  .playground-banner > i,
+  .playground-banner > span:last-child { display: none; }
   /* Keep the existing palette, but make each choice readable and tappable on a phone. */
   .palette-tabs { height: 48px; }
   .palette-tabs button { font-size: 13px; }

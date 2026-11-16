@@ -41,7 +41,7 @@ async function positionScrollTarget(page: Page, selector: string) {
   }, selector);
 }
 
-test('간결한 범례·모바일 칩 토글·안전한 자녀 모달·옵션 스크롤 연결을 유지한다', async ({ page, context }, testInfo) => {
+test('간결한 범례·반응형 색감 선택·칩 토글·안전한 모달·옵션 스크롤을 유지한다', async ({ page, context }, testInfo) => {
   test.setTimeout(process.env.CI ? 360_000 : 180_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -56,30 +56,59 @@ test('간결한 범례·모바일 칩 토글·안전한 자녀 모달·옵션 �
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: false });
   await expect(page.locator('#stage-loader')).toHaveClass(/is-hidden/, { timeout: 60_000 });
   const canvas = page.locator('#three-world-canvas');
+  const stage = page.locator('#game-stage');
+  const banner = page.locator('.serverless-banner');
+  await expect(banner.locator('.playground-banner-reference')).toBeVisible();
+  await expect(banner.locator('.playground-banner-disclaimer')).toBeVisible();
+  await expect(banner.locator('.playground-banner-disclaimer')).toHaveText('실제 모습과 차이가 있을 수 있습니다.');
   const legend = page.locator('.finish-theme-legend');
   await expect(legend).toBeVisible();
   await expect(legend.locator('.finish-theme-legend-heading')).toHaveCount(0);
   await expect(legend.locator('.finish-theme-materials > li > span')).toHaveText(['벽', '벽 단면', '마루']);
   await expect(legend.locator('.finish-theme-swatch')).toHaveCount(3);
   for (const swatch of await legend.locator('.finish-theme-swatch').all()) await expect(swatch).toBeVisible();
-  await page.locator('#finish-theme-open').click();
-  await expect(page.locator('#finish-theme-dialog')).toBeVisible();
-  await page.locator('input[name="finish-theme"][value="warm-taupe"]').check();
+  const themeSelect = page.locator('#finish-theme-select');
+  await expect(themeSelect).toBeVisible();
+  await expect(themeSelect.locator('option')).toHaveCount(5);
+  await expect(page.locator('#finish-theme-open')).toBeHidden();
+  await themeSelect.selectOption('warm-taupe');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'warm-taupe');
-  await page.locator('#finish-theme-dialog').getByRole('button', { name: '색감 선택 닫기' }).click();
+  await expect(page.locator('#finish-theme-dialog')).toBeHidden();
   await expect(legend.locator('.finish-theme-legend-heading')).toHaveCount(0);
+  const pantryCard = page.locator(`[data-option-card-id="${pantryId}"]`);
+  const unselectedBackground = await pantryCard.evaluate(element => getComputedStyle(element).backgroundImage);
   await page.locator('input[data-option-id="wide-plank-floor-finish"]').check({ force: true });
   await page.locator(`input[data-option-id="${pantryId}"]`).check({ force: true });
   await expect(page.locator('#option-selected-count')).toHaveText('2개');
+  await expect(pantryCard).toHaveClass(/is-selected/);
+  await expect(pantryCard).not.toHaveClass(/is-world-linked/);
+  await expect(pantryCard).toHaveCSS('background-image', /225,\s*185,\s*99/);
+  expect(await pantryCard.evaluate(element => getComputedStyle(element).backgroundImage)).not.toBe(unselectedBackground);
   const baseline = await optionState(page);
+  // A scene pointer can focus the game, but must not paint a browser outline.
+  await stage.click({ position: { x: 40, y: 200 } });
+  await expect(stage).toBeFocused();
+  await expect(stage).toHaveCSS('outline-style', 'none');
+  await expect(stage).toHaveCSS('outline-width', '0px');
   const chip = page.locator(`#stage-option-chips .stage-option-chip[data-stage-option-select="${pantryId}"]`);
   await chip.locator('.stage-option-select').click();
-  await chip.locator('.stage-option-select').click(); // Desktop stays one-way activation.
   await expect(chip).toHaveClass(/is-world-selected/);
-  await page.locator('#game-stage').screenshot({ path: testInfo.outputPath('legend-only-desktop.png') });
+  await chip.locator('.stage-option-select').click();
+  await expect(chip).not.toHaveClass(/is-world-selected/);
+  await expect(canvas).toHaveAttribute('data-selected-editor-prop-id', '');
+  await expect(canvas).not.toHaveAttribute('data-selected-editor-mask', /.+/);
+  expect(await optionState(page)).toEqual(baseline);
+  await chip.locator('.stage-option-select').click();
+  await expect(chip).toHaveClass(/is-world-selected/);
+  await stage.screenshot({ path: testInfo.outputPath('legend-only-desktop.png') });
 
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(banner.locator('.playground-banner-reference')).toBeHidden();
+  await expect(banner.locator('.playground-banner-disclaimer')).toBeHidden();
+  expect((await banner.innerText()).trim()).toBe('평면도, 사이버주택전시관 기반 추론가상공간입니다.');
+  await expect(themeSelect).toBeHidden();
+  await expect(page.locator('#finish-theme-open')).toBeVisible();
   await expect(legend.locator('.finish-theme-legend-heading')).toHaveCount(0);
   // The existing selection survives the resize; first tap turns it OFF.
   await chip.locator('.stage-option-select').tap();

@@ -18,7 +18,9 @@ async function storedState(page: Page) {
 async function selectChip(page: Page, optionId: string, touch = false) {
   const chip = page.locator(`#stage-option-chips .stage-option-chip[data-stage-option-select="${optionId}"]`);
   const button = chip.locator('.stage-option-select');
-  if (touch) await button.tap(); else await button.click();
+  if (!(await chip.evaluate(element => element.classList.contains('is-world-selected')))) {
+    if (touch) await button.tap(); else await button.click();
+  }
   await expect(chip).toHaveClass(/is-world-selected/);
   await expect(page.locator('#three-world-canvas')).toHaveAttribute('data-selected-editor-prop-id', /.+/);
   await expect(page.locator('#three-world-canvas')).toHaveAttribute('data-selected-editor-mask', 'rpg-gold');
@@ -143,14 +145,17 @@ test('옵션 활성 표시만 이동·공격·스킬·배경 클릭으로 해제
     await expect(canvas).toHaveAttribute('data-selected-editor-prop-id', selected);
     await expect(page.locator(`#stage-option-chips [data-stage-option-select="${pantryId}"]`).first()).toHaveClass(/is-world-selected/);
   } finally { await page.locator('#selection-clear-external-input').evaluate(input => input.remove()); }
-  await page.locator('#finish-theme-open').click();
-  await expect(page.locator('#finish-theme-dialog')).toBeVisible();
-  await page.locator('#finish-theme-dialog input:checked').press('w');
-  await page.locator('#finish-theme-dialog input:checked').press('Space');
-  await page.locator('#finish-theme-dialog input:checked').press('ArrowRight');
+  await page.locator('#open-help:visible, #viewer-open-help:visible').click();
+  const help = page.locator('#help-dialog');
+  await expect(help).toBeVisible();
+  await expect(help.locator('article')).toBeVisible();
+  await help.locator('article').focus();
+  await page.keyboard.press('w');
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowRight');
   await expect(canvas).toHaveAttribute('data-selected-editor-prop-id', selected);
   await page.keyboard.press('Escape');
-  await expect(page.locator('#finish-theme-dialog')).toBeHidden();
+  await expect(help).toBeHidden();
   expect(await storedState(page)).toEqual(baseline);
 
   for (const surface of ['wall', 'plane'] as const) {

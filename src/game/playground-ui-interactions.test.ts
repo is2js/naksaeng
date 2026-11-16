@@ -15,9 +15,9 @@ function chipApp(mobileLayout: boolean, selectedStageOptionId = optionId) {
   return app;
 }
 
-describe('모바일 좌하단 옵션 강조 토글', () => {
-  it('같은 항목을 다시 누르면 강조만 끄고 적용 옵션·배치 저장은 건드리지 않는다', () => {
-    const app = chipApp(true), selectedIds = app.selectedOptionIds;
+describe('좌하단 옵션 강조 토글', () => {
+  it.each([true, false])('mobile=%s: 같은 항목을 다시 누르면 강조만 끄고 적용 옵션·배치 저장은 건드리지 않는다', (mobile) => {
+    const app = chipApp(mobile), selectedIds = app.selectedOptionIds;
     app.selectStageOptionInWorld(optionId);
     expect(app.clearSceneSelection).toHaveBeenCalledOnce();
     expect(app.selectedStageOptionId).toBe('');
@@ -28,8 +28,8 @@ describe('모바일 좌하단 옵션 강조 토글', () => {
     expect(app.saveInteriorLayout).not.toHaveBeenCalled();
   });
 
-  it('다른 항목이나 비활성 항목을 누르면 선택하고, 미적용 항목은 무시한다', () => {
-    const app = chipApp(true, '');
+  it.each([true, false])('mobile=%s: 비활성 항목은 선택하고 미적용 항목은 무시한다', (mobile) => {
+    const app = chipApp(mobile, '');
     app.selectStageOptionInWorld('not-installed');
     expect(app.clearSceneSelection).not.toHaveBeenCalled();
     expect(app.focusOptionInPalette).not.toHaveBeenCalled();
@@ -38,13 +38,6 @@ describe('모바일 좌하단 옵션 강조 토글', () => {
     expect(app.focusOptionInPalette).toHaveBeenCalledWith(optionId);
   });
 
-  it('데스크톱의 같은 항목 클릭은 기존 재선택 동작을 유지한다', () => {
-    const app = chipApp(false);
-    app.selectStageOptionInWorld(optionId);
-    expect(app.clearSceneSelection).not.toHaveBeenCalled();
-    expect(app.focusOptionInPalette).toHaveBeenCalledWith(optionId);
-    expect(app.selectedStageOptionId).toBe(optionId);
-  });
 });
 
 describe('자녀 인형 모달의 명시적 닫기 정책', () => {

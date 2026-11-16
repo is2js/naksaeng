@@ -46,6 +46,7 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   const stage = page.locator('#game-stage');
   const controls = page.locator('.finish-theme-controls');
   const legend = page.locator('.finish-theme-legend');
+  const themeSelect = page.locator('#finish-theme-select');
   const picker = page.locator('#finish-theme-open');
   const dialog = page.locator('#finish-theme-dialog');
   const radio = (id: string) => dialog.locator(`input[name="finish-theme"][value="${id}"]`);
@@ -63,18 +64,18 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await expect(legend.locator('[data-finish-material="cap"]')).toHaveCSS('background-image', 'none');
   await expect(legend.locator('[data-finish-material="floor"]')).not.toHaveCSS('background-image', 'none');
   await expect(picker).toHaveCount(0);
+  await expect(themeSelect).toHaveCount(0);
   await expect(dialog).toHaveCount(0);
 
   await changeRole(page, client, 'verified');
-  await expect(picker).toBeVisible();
-  await picker.click();
-  await expect(dialog).toBeVisible();
-  expect(await dialog.locator('input[name="finish-theme"]').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual(themeIds);
-  await expect(radio('stone-greige')).toBeChecked();
-  await radio('warm-taupe').check();
-  await expect(dialog.locator('input:checked')).toHaveCount(1);
+  await expect(themeSelect).toBeVisible();
+  await expect(picker).toBeHidden();
+  expect(await themeSelect.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(themeIds);
+  await expect(themeSelect).toHaveValue('stone-greige');
+  await themeSelect.selectOption('warm-taupe');
+  await expect(themeSelect).toHaveValue('warm-taupe');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'warm-taupe');
-  await dialog.getByRole('button', { name: '색감 선택 닫기' }).click();
+  await expect(dialog).toBeHidden();
   await page.locator('input[data-option-id="wide-plank-floor-finish"]').check({ force: true });
   await expect(page.locator('#option-selected-count')).toHaveText('1개');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'warm-taupe');
@@ -88,6 +89,8 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(legend).toBeVisible();
+  await expect(themeSelect).toBeHidden();
+  await expect(picker).toBeVisible();
   await expect(legend.locator('svg')).toHaveCount(0);
   for (const swatch of await legend.locator('.finish-theme-swatch').all()) {
     await expect(swatch).toBeVisible();
@@ -127,6 +130,7 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
 
   await picker.tap();
   await expect(dialog).toBeVisible();
+  await expect(radio('warm-taupe')).toBeChecked();
   await radio('neutral-ash').tap();
   await expect(canvas).toHaveAttribute('data-finish-theme', 'neutral-ash');
   const actor = page.locator('.rpg-actor--100');
@@ -174,10 +178,10 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await page.setViewportSize({ width: 1440, height: 1000 });
   await changeRole(page, client, 'operator');
   await expect(stage).toHaveAttribute('data-access-role', 'operator');
-  await picker.click();
-  await radio('deep-greige').check();
+  await expect(themeSelect).toBeVisible();
+  await themeSelect.selectOption('deep-greige');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'deep-greige');
-  await dialog.getByRole('button', { name: '색감 선택 닫기' }).click();
+  await expect(dialog).toBeHidden();
   await page.locator('#share-showcase').click();
   const sharedUrl = await page.locator('#share-link-value').inputValue();
   await page.locator('#share-dialog').getByRole('button', { name: '닫기' }).click();
@@ -188,6 +192,7 @@ test('색감 선택은 회원만 가능하고 범례·입력·공유 열람은 P
   await expect(stage).toHaveAttribute('data-access-role', 'operator');
   await expect(canvas).toHaveAttribute('data-finish-theme', 'stone-greige');
   await expect(picker).toHaveCount(0);
+  await expect(themeSelect).toHaveCount(0);
   await expect(dialog).toHaveCount(0);
   expect(errors).toEqual([]);
 });

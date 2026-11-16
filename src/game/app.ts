@@ -610,10 +610,10 @@ export class ShowcaseApp {
           </div>
         </header>
 
-        <div class="serverless-banner" role="status">
+        <div class="serverless-banner playground-banner" role="status">
           <span class="banner-pulse" aria-hidden="true"></span>
-          <b>평면도, 사이버주택전시관 기반 추론가상공간입니다. 공고문, 실제 주택전시관 정보를 참고하세요</b>
-          <span>게시 자료는 참고용</span>
+          <b>평면도, 사이버주택전시관 기반 추론가상공간입니다.<span class="playground-banner-reference"> 공고문, 실제 주택전시관 정보를 참고하세요</span></b>
+          <span class="playground-banner-disclaimer">실제 모습과 차이가 있을 수 있습니다.</span>
           <i></i>
           <span>데이터는 이 브라우저에만 저장됩니다.</span>
         </div>
@@ -3734,7 +3734,7 @@ export class ShowcaseApp {
 
   private selectStageOptionInWorld(optionId: string): void {
     if (!optionId || !this.selectedOptionIds.includes(optionId)) return;
-    if (this.mobileLayout && this.selectedStageOptionId === optionId) {
+    if (this.selectedStageOptionId === optionId) {
       this.clearSceneSelection();
       return;
     }

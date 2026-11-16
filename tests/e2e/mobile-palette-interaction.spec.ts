@@ -67,13 +67,15 @@ test('간결한 범례·반응형 색감 선택·칩 토글·안전한 모달·�
   await expect(legend.locator('.finish-theme-materials > li > span')).toHaveText(['벽', '벽 단면', '마루']);
   await expect(legend.locator('.finish-theme-swatch')).toHaveCount(3);
   for (const swatch of await legend.locator('.finish-theme-swatch').all()) await expect(swatch).toBeVisible();
-  const themeSelect = page.locator('#finish-theme-select');
-  await expect(themeSelect).toBeVisible();
-  await expect(themeSelect.locator('option')).toHaveCount(5);
-  await expect(page.locator('#finish-theme-open')).toBeHidden();
-  await themeSelect.selectOption('warm-taupe');
+  const themePicker = page.locator('#finish-theme-open');
+  const themeList = page.locator('#finish-theme-list');
+  await expect(themePicker).toBeVisible();
+  await themePicker.click();
+  await expect(themeList.locator('[role="option"]')).toHaveCount(5);
+  await themeList.locator('[data-finish-theme-id="warm-taupe"]').click();
   await expect(canvas).toHaveAttribute('data-finish-theme', 'warm-taupe');
-  await expect(page.locator('#finish-theme-dialog')).toBeHidden();
+  await expect(themeList).toBeHidden();
+  await expect(page.locator('#finish-theme-select, #finish-theme-dialog')).toHaveCount(0);
   await expect(legend.locator('.finish-theme-legend-heading')).toHaveCount(0);
   const pantryCard = page.locator(`[data-option-card-id="${pantryId}"]`);
   const unselectedBackground = await pantryCard.evaluate(element => getComputedStyle(element).backgroundImage);
@@ -107,8 +109,7 @@ test('간결한 범례·반응형 색감 선택·칩 토글·안전한 모달·�
   await expect(banner.locator('.playground-banner-reference')).toBeHidden();
   await expect(banner.locator('.playground-banner-disclaimer')).toBeHidden();
   expect((await banner.innerText()).trim()).toBe('평면도, 사이버주택전시관 기반 추론가상공간입니다.');
-  await expect(themeSelect).toBeHidden();
-  await expect(page.locator('#finish-theme-open')).toBeVisible();
+  await expect(themePicker).toBeVisible();
   await expect(legend.locator('.finish-theme-legend-heading')).toHaveCount(0);
   // The existing selection survives the resize; first tap turns it OFF.
   await chip.locator('.stage-option-select').tap();

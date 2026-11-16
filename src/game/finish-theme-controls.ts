@@ -8,6 +8,7 @@ import {
 
 export interface FinishThemeControlsOptions {
   stage: HTMLElement;
+  /** Retained for the existing app integration; the popup is anchored in stage. */
   dialogHost: HTMLElement;
   /** This is an access decision supplied by the app, not a preference. */
   canChoose: boolean;
@@ -22,37 +23,19 @@ const MATERIALS = [
   { key: 'floor', label: '마루' },
 ] as const;
 
-interface BackdropTap {
-  pointerId: number;
-  x: number;
-  y: number;
-  slop: number;
-  valid: boolean;
-}
-
 /** Display-only, page-lifetime colour controls. Never writes storage or share data. */
 export class FinishThemeControls {
   private readonly root: HTMLElement;
   private readonly abort = new AbortController();
-  private readonly dialog: HTMLDialogElement | null;
   private readonly picker: HTMLButtonElement | null;
-  private readonly desktopSelect: HTMLSelectElement | null;
+  private readonly list: HTMLElement | null;
+  private readonly optionButtons: HTMLButtonElement[] = [];
   private readonly status: HTMLElement | null;
-  private readonly radioName: string;
-  private readonly mobileQuery = window.matchMedia('(pointer: coarse), (max-width: 760px)');
-  private readonly pointers = new Set<number>();
   private themeId: BundangFinishThemeId = BUNDANG_DEFAULT_FINISH_THEME_ID;
-  private backdropTap: BackdropTap | null = null;
-  private backdropClickReady = false;
-  private returnFocus: HTMLElement | null = null;
-  private modalSessionActive = false;
-  private desktopSessionActive = false;
-  private syncingPickerMode = false;
+  private menuOpen = false;
   private destroyed = false;
 
   constructor(private readonly options: FinishThemeControlsOptions) {
-    const dialogId = 'finish-theme-dialog';
-    this.radioName = 'finish-theme';
     this.root = document.createElement('section');
     this.root.className = 'finish-theme-controls';
     this.root.setAttribute('aria-label', '벽·벽 단면·마루 마감 안내');
@@ -63,45 +46,31 @@ export class FinishThemeControls {
       </li>`).join('')}</ul>
     </div>`;
     options.stage.append(this.root);
-    this.isolateEvents(this.root, true);
+    this.isolateEvents();
 
-    // Public and shared views intentionally have neither a picker nor a dialog.
+    // Public and shared views intentionally have neither a trigger nor options.
     if (options.canChoose) {
-      this.desktopSelect = document.createElement('select');
-      this.desktopSelect.id = 'finish-theme-select';
-      this.desktopSelect.className = 'finish-theme-select';
-      this.desktopSelect.setAttribute('aria-label', '화면 색감 선택');
-      this.desktopSelect.title = '화면 색감 선택';
-      for (const theme of BUNDANG_FINISH_THEMES) {
-        const option = document.createElement('option');
-        option.value = theme.id;
-        option.textContent = `${theme.rank}순위 · ${theme.label}${theme.id === BUNDANG_DEFAULT_FINISH_THEME_ID ? ' (추천 · 기본)' : ''}`;
-        this.desktopSelect.append(option);
-      }
-      this.root.append(this.desktopSelect);
       this.picker = document.createElement('button');
       this.picker.type = 'button';
       this.picker.id = 'finish-theme-open';
       this.picker.className = 'finish-theme-picker';
-      this.picker.textContent = '색감 선택';
+      this.picker.textContent = '▼';
       this.picker.setAttribute('aria-label', '화면 색감 선택');
-      this.picker.setAttribute('aria-haspopup', 'dialog');
-      this.picker.setAttribute('aria-controls', dialogId);
+      this.picker.setAttribute('aria-haspopup', 'listbox');
+      this.picker.setAttribute('aria-controls', 'finish-theme-list');
       this.picker.setAttribute('aria-expanded', 'false');
-      this.root.append(this.picker);
-      this.dialog = this.createDialog(dialogId);
-      this.status = this.dialog.querySelector('[role="status"]');
-      options.dialogHost.append(this.dialog);
-      this.isolateEvents(this.dialog, false);
-      this.bindDialog();
-      this.bindDesktopSelect();
-      this.picker.addEventListener('click', () => this.open(), { signal: this.abort.signal });
-      this.mobileQuery.addEventListener('change', () => this.syncPickerMode(), { signal: this.abort.signal });
-      this.syncPickerMode();
+      this.picker.title = '화면 색감 선택';
+      this.list = this.createList();
+      this.status = document.createElement('span');
+      this.status.className = 'finish-theme-sr-only';
+      this.status.setAttribute('role', 'status');
+      this.status.setAttribute('aria-live', 'polite');
+      this.status.setAttribute('aria-atomic', 'true');
+      this.root.append(this.picker, this.list, this.status);
+      this.bindPicker();
     } else {
       this.picker = null;
-      this.desktopSelect = null;
-      this.dialog = null;
+      this.list = null;
       this.status = null;
     }
     this.paint();
@@ -113,120 +82,48 @@ export class FinishThemeControls {
     if (this.destroyed) return;
     this.destroyed = true;
     try {
-      this.close();
+      this.close(false);
     } finally {
-      try {
-        this.finishDesktopSession();
-      } finally {
-        this.abort.abort();
-        this.resetBackdropTap();
-        this.dialog?.remove();
-        this.root.remove();
-      }
+      this.abort.abort();
+      this.root.remove();
     }
   }
 
-  private bindDesktopSelect(): void {
-    const select = this.desktopSelect!;
-    const signal = this.abort.signal;
-    select.addEventListener('focus', () => this.beginDesktopSession(), { signal });
-    select.addEventListener('pointerdown', event => {
-      if (event.button === 0) this.beginDesktopSession();
-    }, { signal });
-    select.addEventListener('keydown', event => {
-      if (event.key === 'Escape' || event.key === 'Tab') this.finishDesktopSession();
-      else this.beginDesktopSession();
-    }, { signal });
-    select.addEventListener('blur', () => this.finishDesktopSession(), { signal });
-    select.addEventListener('change', () => {
-      if (this.destroyed || this.mobileQuery.matches) return;
-      this.beginDesktopSession();
-      try {
-        this.selectTheme(select.value);
-      } finally {
-        // The native option popup closes itself after committing a choice.
-        this.finishDesktopSession();
-      }
-    }, { signal });
-  }
-
-  private beginDesktopSession(): void {
-    if (this.destroyed || this.syncingPickerMode || this.mobileQuery.matches
-      || this.desktopSessionActive || this.modalSessionActive) return;
-    this.options.beforeOpen();
-    this.desktopSessionActive = true;
-  }
-
-  private finishDesktopSession(): void {
-    if (!this.desktopSessionActive) return;
-    this.desktopSessionActive = false;
-    this.options.afterClose();
-  }
-
-  private syncPickerMode(): void {
-    if (!this.picker || !this.desktopSelect || this.destroyed) return;
-    const active = document.activeElement;
-    const restoreFocus = active === this.picker || active === this.desktopSelect
-      || Boolean(active && this.dialog?.contains(active));
-    this.syncingPickerMode = true;
-    try {
-      // Clear the old presentation before transferring focus. The shared page
-      // preference survives, but a modal/input session never survives a resize.
-      this.returnFocus = null;
-      this.close();
-      this.finishDesktopSession();
-      this.picker.hidden = !this.mobileQuery.matches;
-      this.desktopSelect.hidden = this.mobileQuery.matches;
-      if (restoreFocus) (this.mobileQuery.matches ? this.picker : this.desktopSelect).focus({ preventScroll: true });
-    } finally {
-      this.syncingPickerMode = false;
-    }
-  }
-
-  private createDialog(dialogId: string): HTMLDialogElement {
-    const dialog = document.createElement('dialog');
-    dialog.id = dialogId;
-    dialog.className = 'finish-theme-dialog';
-    dialog.setAttribute('aria-labelledby', `${dialogId}-title`);
-    dialog.setAttribute('aria-describedby', `${dialogId}-description`);
-    dialog.innerHTML = `<section class="finish-theme-dialog-shell">
-      <header class="finish-theme-dialog-header">
-        <div><h2 id="${dialogId}-title">화면 색감 선택</h2><p>조합을 누르면 놀이터에 바로 적용됩니다.</p></div>
-        <button class="finish-theme-close" type="button" aria-label="색감 선택 닫기">×</button>
-      </header>
-      <fieldset class="finish-theme-options"><legend class="finish-theme-sr-only">마감 조합 5개 중 선택</legend></fieldset>
-      <p class="finish-theme-scope-note" id="${dialogId}-description">이 페이지에서만 적용됩니다. 새로고침하면 1순위 기본 마감으로 돌아가며, 저장·공유되지 않습니다. 시각화만 바뀌며 옵션 수량·금액에는 영향이 없습니다.</p>
-      <p class="finish-theme-sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
-    </section>`;
-    const fieldset = dialog.querySelector('fieldset')!;
+  private createList(): HTMLElement {
+    const list = document.createElement('div');
+    list.id = 'finish-theme-list';
+    list.className = 'finish-theme-list';
+    list.hidden = true;
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', '색감 조합');
     for (const theme of BUNDANG_FINISH_THEMES) {
-      const card = document.createElement('label');
-      card.className = 'finish-theme-option';
-      card.dataset.finishThemeId = theme.id;
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = this.radioName;
-      radio.value = theme.id;
-      const copy = document.createElement('span');
-      copy.className = 'finish-theme-option-copy';
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'finish-theme-option';
+      option.dataset.finishThemeId = theme.id;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.tabIndex = -1;
       const heading = document.createElement('span');
       heading.className = 'finish-theme-option-heading';
       const rank = document.createElement('span');
       rank.className = 'finish-theme-rank';
       rank.textContent = `${theme.rank}순위`;
-      const name = document.createElement('b');
+      const name = document.createElement('span');
+      name.className = 'finish-theme-option-name';
       name.textContent = theme.label;
-      heading.append(rank, name);
-      if (theme.id === BUNDANG_DEFAULT_FINISH_THEME_ID) {
-        const recommended = document.createElement('em');
-        recommended.textContent = '추천 · 기본';
-        heading.append(recommended);
-      }
+      const check = document.createElement('span');
+      check.className = 'finish-theme-option-check';
+      check.textContent = '✓';
+      check.setAttribute('aria-hidden', 'true');
+      heading.append(rank, name, check);
       const materials = document.createElement('span');
       materials.className = 'finish-theme-option-materials';
       for (const material of MATERIALS) {
         const item = document.createElement('span');
         const swatch = document.createElement('i');
+        swatch.className = 'finish-theme-material-swatch finish-theme-swatch finish-theme-option-swatch';
+        swatch.dataset.finishMaterial = material.key;
         swatch.style.backgroundColor = theme[material.key];
         swatch.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span');
@@ -234,137 +131,183 @@ export class FinishThemeControls {
         item.append(swatch, label);
         materials.append(item);
       }
-      copy.append(heading, materials);
-      card.append(radio, copy);
-      fieldset.append(card);
+      option.append(heading, materials);
+      this.optionButtons.push(option);
+      list.append(option);
     }
-    return dialog;
+    const note = document.createElement('p');
+    note.className = 'finish-theme-scope-note';
+    note.textContent = '현재 페이지에서만 적용 · 저장·공유 및 수량·금액 변경 없음';
+    list.append(note);
+    return list;
   }
 
-  private bindDialog(): void {
-    const dialog = this.dialog!;
+  private bindPicker(): void {
+    const picker = this.picker!;
+    const list = this.list!;
     const signal = this.abort.signal;
-    dialog.querySelector('button')!.addEventListener('click', () => this.close(), { signal });
-    dialog.addEventListener('cancel', event => {
-      event.preventDefault();
-      this.close();
+    picker.addEventListener('click', () => {
+      if (this.menuOpen) this.close(true);
+      else this.open();
     }, { signal });
-    dialog.addEventListener('close', () => { if (!dialog.open) this.finishClose(); }, { signal });
-    dialog.addEventListener('change', event => {
-      const input = event.target;
-      if (this.destroyed || !this.options.canChoose || !(input instanceof HTMLInputElement)
-        || input.type !== 'radio' || input.name !== this.radioName || !input.checked) return;
-      this.selectTheme(input.value);
+    picker.addEventListener('keydown', event => {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        if ((event.key === 'Enter' || event.key === ' ') && this.menuOpen) this.close(true);
+        else this.open(event.key === 'Home' ? 0 : event.key === 'End' ? this.optionButtons.length - 1 : undefined);
+      }
     }, { signal });
-    dialog.addEventListener('pointerdown', event => {
-      this.backdropClickReady = false;
-      const isFirst = this.pointers.size === 0;
-      this.pointers.add(event.pointerId);
-      this.backdropTap = isFirst && event.target === dialog && event.button === 0
-        ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY, slop: event.pointerType === 'touch' ? 10 : 6, valid: true }
-        : null;
+    list.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[role="option"]') : null;
+      if (target && this.optionButtons.includes(target)) this.selectTheme(target.dataset.finishThemeId);
     }, { signal });
-    dialog.addEventListener('pointermove', event => this.moveBackdropTap(event), { signal });
-    dialog.addEventListener('pointerup', event => {
-      this.moveBackdropTap(event);
-      this.backdropClickReady = this.pointers.size === 1 && this.backdropTap?.pointerId === event.pointerId
-        && this.backdropTap.valid && event.target === dialog;
-      this.pointers.delete(event.pointerId);
-      this.backdropTap = null;
+    list.addEventListener('keydown', event => {
+      const focused = this.optionButtons.indexOf(document.activeElement as HTMLButtonElement);
+      const index = focused >= 0 ? focused : BUNDANG_FINISH_THEMES.findIndex(theme => theme.id === this.themeId);
+      let next: number | undefined;
+      if (event.key === 'ArrowDown') next = (index + 1) % this.optionButtons.length;
+      else if (event.key === 'ArrowUp') next = (index + this.optionButtons.length - 1) % this.optionButtons.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = this.optionButtons.length - 1;
+      else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (index >= 0) this.selectTheme(this.optionButtons[index].dataset.finishThemeId);
+      }
+      if (next !== undefined) {
+        event.preventDefault();
+        this.focusOption(next);
+      }
     }, { signal });
-    dialog.addEventListener('pointercancel', () => this.resetBackdropTap(), { signal });
-    dialog.addEventListener('click', event => {
-      const shouldClose = event.target === dialog && this.backdropClickReady;
-      this.backdropClickReady = false;
-      if (shouldClose) this.close();
+    this.root.addEventListener('keydown', event => {
+      if (!this.menuOpen) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.close(true);
+      } else if (event.key === 'Tab') this.close(false);
     }, { signal });
-    window.addEventListener('blur', () => this.resetBackdropTap(), { signal });
-    window.addEventListener('pagehide', () => this.resetBackdropTap(), { signal });
+    document.addEventListener('pointerdown', event => {
+      if (!this.menuOpen || !(event.target instanceof Node) || this.root.contains(event.target)) return;
+      const dismissesOverStage = this.options.stage.contains(event.target);
+      try {
+        this.close(false);
+      } finally {
+        // Consume only the first dismissing stage gesture; it must not become
+        // a laser point or furniture selection. Other page controls stay native.
+        if (dismissesOverStage) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    }, { capture: true, signal });
+    window.addEventListener('scroll', event => {
+      // Only the list may scroll without dismissing the anchored popup.
+      if (event.target instanceof Node && list.contains(event.target)) return;
+      this.close(false);
+    }, { capture: true, passive: true, signal });
+    for (const type of ['resize', 'blur', 'pagehide'] as const) {
+      window.addEventListener(type, () => this.close(false), { signal });
+    }
+    window.visualViewport?.addEventListener('resize', () => this.close(false), { signal });
+    window.visualViewport?.addEventListener('scroll', () => this.close(false), { signal });
   }
 
-  private isolateEvents(element: HTMLElement, blockWheel: boolean): void {
+  private isolateEvents(): void {
     const signal = this.abort.signal;
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click', 'dblclick', 'contextmenu', 'keydown', 'keyup'] as const) {
-      element.addEventListener(type, event => {
+      this.root.addEventListener(type, event => {
         event.stopPropagation();
         if (type === 'contextmenu' || type === 'dblclick') event.preventDefault();
       }, { signal });
     }
-    element.addEventListener('wheel', event => {
+    this.root.addEventListener('wheel', event => {
       event.stopPropagation();
-      if (blockWheel || event.target === element) event.preventDefault();
+      if (!(event.target instanceof Node) || !this.list?.contains(event.target)) event.preventDefault();
     }, { signal, passive: false });
   }
 
-  private open(): void {
-    const dialog = this.dialog;
-    if (this.destroyed || !this.options.canChoose || !this.mobileQuery.matches || !dialog || dialog.open) return;
-    this.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  private open(index?: number): void {
+    if (this.destroyed || !this.options.canChoose || !this.list || this.menuOpen) return;
     this.options.beforeOpen();
-    this.modalSessionActive = true;
-    try {
-      dialog.showModal();
-    } catch (error) {
-      this.finishClose();
-      throw error;
+    this.menuOpen = true;
+    this.root.classList.add('is-open');
+    this.picker!.setAttribute('aria-expanded', 'true');
+    this.list.hidden = false;
+    if (!this.positionList()) {
+      this.close(false);
+      return;
     }
-    this.picker?.setAttribute('aria-expanded', 'true');
-    dialog.querySelector<HTMLInputElement>('input:checked')?.focus({ preventScroll: true });
+    this.focusOption(index ?? BUNDANG_FINISH_THEMES.findIndex(theme => theme.id === this.themeId));
   }
 
-  private close(): void {
-    if (this.dialog?.open) this.dialog.close();
-    // close is queued by the browser; release paused input synchronously once.
-    this.finishClose();
-  }
-
-  private finishClose(): void {
-    if (!this.modalSessionActive) return;
-    this.modalSessionActive = false;
-    this.resetBackdropTap();
-    this.picker?.setAttribute('aria-expanded', 'false');
-    const focus = this.returnFocus;
-    this.returnFocus = null;
+  private close(restoreFocus: boolean): void {
+    if (!this.menuOpen) return;
+    this.menuOpen = false;
+    this.root.classList.remove('is-open');
+    this.list!.hidden = true;
+    this.picker!.setAttribute('aria-expanded', 'false');
+    for (const option of this.optionButtons) option.tabIndex = -1;
     try {
       this.options.afterClose();
     } finally {
-      if (!this.destroyed && focus?.isConnected) focus.focus({ preventScroll: true });
+      if (restoreFocus && !this.destroyed && this.picker?.isConnected) this.picker.focus({ preventScroll: true });
     }
   }
 
-  private moveBackdropTap(event: PointerEvent): void {
-    const tap = this.backdropTap;
-    if (tap?.pointerId === event.pointerId && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > tap.slop) tap.valid = false;
+  private focusOption(index: number): void {
+    const option = this.optionButtons[index];
+    if (!option) return;
+    for (const candidate of this.optionButtons) candidate.tabIndex = candidate === option ? 0 : -1;
+    option.focus({ preventScroll: true });
+    option.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
-  private resetBackdropTap(): void {
-    this.pointers.clear();
-    this.backdropTap = null;
-    this.backdropClickReady = false;
+  private positionList(): boolean {
+    const list = this.list!;
+    const stage = this.options.stage.getBoundingClientRect();
+    const anchor = this.root.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const leftEdge = Math.max(stage.left + 8, viewportLeft + 8);
+    const rightEdge = Math.min(stage.right - 8, viewportLeft + (viewport?.width ?? window.innerWidth) - 8);
+    const topEdge = Math.max(stage.top + 8, viewportTop + 8);
+    const bottomEdge = Math.min(stage.bottom - 8, viewportTop + (viewport?.height ?? window.innerHeight) - 8);
+    const width = Math.min(260, rightEdge - leftEdge);
+    const below = bottomEdge - anchor.bottom - 6;
+    const above = anchor.top - topEdge - 6;
+    const openBelow = below >= Math.min(260, above);
+    const height = Math.min(openBelow ? below : above, bottomEdge - topEdge);
+    if (width <= 0 || height < 44) return false;
+    list.style.width = `${width}px`;
+    list.style.maxHeight = `${height}px`;
+    const left = Math.max(leftEdge, Math.min(anchor.left, rightEdge - width));
+    const top = openBelow ? anchor.bottom + 6 : anchor.top - 6 - list.getBoundingClientRect().height;
+    list.style.left = `${left - anchor.left - this.root.clientLeft}px`;
+    list.style.top = `${Math.max(topEdge, Math.min(top, bottomEdge - list.getBoundingClientRect().height)) - anchor.top - this.root.clientTop}px`;
+    return true;
   }
 
   private selectTheme(id: unknown): void {
-    if (this.destroyed || !this.options.canChoose) return;
+    if (this.destroyed || !this.menuOpen || !this.options.canChoose) return;
     const theme = BUNDANG_FINISH_THEMES.find(candidate => candidate.id === id);
-    if (!theme || theme.id === this.themeId) return;
+    if (!theme) return;
+    const changed = theme.id !== this.themeId;
     this.themeId = theme.id;
     this.paint();
-    this.options.onChange(theme.id);
-    if (this.status) this.status.textContent = `${theme.label} 마감으로 미리보기 중입니다.`;
+    try {
+      if (changed) this.options.onChange(theme.id);
+      if (this.status) this.status.textContent = `${theme.label} 색감을 적용했습니다.`;
+    } finally {
+      this.close(true);
+    }
   }
 
   private paint(): void {
     const theme = resolveBundangFinishTheme(this.themeId);
     this.root.dataset.themeId = theme.id;
-    if (this.desktopSelect) this.desktopSelect.value = theme.id;
     for (const material of MATERIALS) {
-      this.root.querySelector<HTMLElement>(`[data-finish-material="${material.key}"]`)!.style.backgroundColor = theme[material.key];
+      this.root.querySelector<HTMLElement>(`.finish-theme-legend [data-finish-material="${material.key}"]`)!.style.backgroundColor = theme[material.key];
     }
-    if (!this.dialog) return;
-    this.dialog.dataset.themeId = theme.id;
-    this.dialog.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach(input => {
-      input.checked = input.value === theme.id;
-      input.closest('label')?.classList.toggle('is-selected', input.checked);
-    });
+    for (const option of this.optionButtons) option.setAttribute('aria-selected', String(option.dataset.finishThemeId === theme.id));
   }
 }

@@ -3363,6 +3363,9 @@ export class ShowcaseApp {
     const dialog = document.createElement('dialog');
     dialog.className = 'child-companion-dialog';
     dialog.setAttribute('aria-label', '자녀 인형 소환');
+    // Keep partially entered child choices when tapping the backdrop/padding.
+    // Explicit actions and the native Escape close request remain available.
+    dialog.setAttribute('closedby', 'closerequest');
     const choices = this.childCompanionChoices.length
       ? this.childCompanionChoices.map((choice) => ({ ...choice }))
       : [{ age: 'infant' as ChildAgeGroup, gender: 'boy' as ChildGender }];
@@ -3382,9 +3385,9 @@ export class ShowcaseApp {
         <div class="child-wizard-actions"><button type="button" data-child-action="back">이전</button><button type="button" data-child-action="next">${step === choices.length ? '소환' : '다음 자녀'}</button></div>`;
     };
     dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) { dialog.close(); return; }
-      const action = (event.target as HTMLElement).closest<HTMLElement>('[data-child-action]')?.dataset.childAction;
-      if (!action) return;
+      const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-child-action]') : null;
+      if (!button || button.disabled || !dialog.contains(button)) return;
+      const action = button.dataset.childAction;
       if (action === 'close') { dialog.close(); return; }
       if (action === 'dismiss') { this.setChildCompanions([]); dialog.close(); return; }
       if (action === 'plus' && choices.length < MAX_CHILD_COMPANIONS) choices.push({ age: 'infant', gender: 'boy' });
@@ -3731,6 +3734,10 @@ export class ShowcaseApp {
 
   private selectStageOptionInWorld(optionId: string): void {
     if (!optionId || !this.selectedOptionIds.includes(optionId)) return;
+    if (this.mobileLayout && this.selectedStageOptionId === optionId) {
+      this.clearSceneSelection();
+      return;
+    }
     this.selectedStageOptionId = optionId;
     const chips = this.get<HTMLElement>('#stage-option-chips');
     chips.querySelectorAll<HTMLElement>('.stage-option-chip').forEach((chip) => {

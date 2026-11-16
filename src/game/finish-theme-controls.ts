@@ -33,7 +33,6 @@ interface BackdropTap {
 /** Display-only, page-lifetime colour controls. Never writes storage or share data. */
 export class FinishThemeControls {
   private readonly root: HTMLElement;
-  private readonly name: HTMLElement;
   private readonly abort = new AbortController();
   private readonly dialog: HTMLDialogElement | null;
   private readonly picker: HTMLButtonElement | null;
@@ -54,13 +53,11 @@ export class FinishThemeControls {
     this.root.className = 'finish-theme-controls';
     this.root.setAttribute('aria-label', '벽·벽 단면·마루 마감 안내');
     this.root.innerHTML = `<div class="finish-theme-legend">
-      <p class="finish-theme-legend-heading"><span>화면 색감</span><b></b></p>
       <ul class="finish-theme-materials" aria-label="마감 색상 범례">${MATERIALS.map(material => `<li>
         <i class="finish-theme-material-swatch finish-theme-swatch" data-finish-material="${material.key}" aria-hidden="true"></i>
         <span>${material.label}</span>
       </li>`).join('')}</ul>
     </div>`;
-    this.name = this.root.querySelector('b')!;
     options.stage.append(this.root);
     this.isolateEvents(this.root, true);
 
@@ -273,9 +270,6 @@ export class FinishThemeControls {
   private paint(): void {
     const theme = resolveBundangFinishTheme(this.themeId);
     this.root.dataset.themeId = theme.id;
-    this.name.textContent = theme.label;
-    this.name.title = theme.label;
-    this.root.setAttribute('aria-label', `${theme.label}: 벽·벽 단면·마루 마감 안내`);
     for (const material of MATERIALS) {
       this.root.querySelector<HTMLElement>(`[data-finish-material="${material.key}"]`)!.style.backgroundColor = theme[material.key];
     }

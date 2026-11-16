@@ -11,7 +11,7 @@
   max-width: min(390px, calc(100% - 220px));
   min-width: 0;
   box-sizing: border-box;
-  padding: 9px 10px;
+  padding: 6px 8px;
   border: 1px solid rgb(148 196 189 / .24);
   border-radius: 8px;
   background: rgb(4 18 22 / .9);
@@ -29,9 +29,6 @@
   top: calc(var(--finish-controls-top) + var(--laser-reference-height, 56px) + 8px);
 }
 .finish-theme-legend { min-width: 0; flex: 1; }
-.finish-theme-legend-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin: 0 0 7px; }
-.finish-theme-legend-heading > span { color: #9db6b0; font-size: 11px; }
-.finish-theme-legend-heading > b { overflow: hidden; color: #e0eee9; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .finish-theme-materials { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .finish-theme-materials > li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; }
 .finish-theme-material-swatch { display: inline-block; width: 13px; height: 13px; flex: 0 0 13px; box-sizing: border-box; border: 1px solid rgb(255 255 255 / .35); border-radius: 2px; }
@@ -136,7 +133,6 @@
     font-size: 10px;
   }
   .game-stage[data-istarpark-laser-active="true"] .finish-theme-controls { --finish-controls-top: 128px; }
-  .finish-theme-legend-heading { display: none; }
   .finish-theme-material-swatch { width: 10px; height: 10px; flex-basis: 10px; filter: grayscale(1); }
   .finish-theme-materials { flex-wrap: wrap; justify-content: space-between; gap: 4px 7px; }
   .finish-theme-materials > li { gap: 3px; }

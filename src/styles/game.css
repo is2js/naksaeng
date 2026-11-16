@@ -2486,6 +2486,13 @@ input:focus-visible {
   .palette-tabs { height: 48px; }
   .palette-tabs button { font-size: 13px; }
   .palette-viewbar button { min-height: 44px; font-size: 11px; }
+  /* Chain vertical swipes to the page, including through the clipped palette body. */
+  #option-palette-body,
+  #option-categories,
+  #option-list {
+    overscroll-behavior-y: auto;
+    touch-action: pan-x pan-y pinch-zoom;
+  }
   .option-categories { gap: 6px; }
   .option-categories button { min-height: 44px; padding: 8px 11px; font-size: 12px; }
   .option-copy b { overflow: visible; font-size: 13px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }

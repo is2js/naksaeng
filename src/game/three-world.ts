@@ -16,6 +16,7 @@ import {
 } from './apartment-transform';
 import { castsExteriorStructureShadow } from './structure-shadow';
 import { solidBlockCrossesSightline } from './solid-block-occlusion';
+import { distanceToOcclusionSegment, nearbyBathroomFixtureTargets } from './bathroom-fixture-occlusion';
 import {
   bundangEditorSelectionPropIds,
   bundangEffectiveKitchenFixtures,
@@ -433,6 +434,8 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
       // 선반은 등판에서 장 깊이의 약 1/3만 앞으로 나온다.
       { shape: 'box', scale: [.96, .333, .025], offset: [0, -.3335, .61], materialRole: 'desk-shelf' },
       { shape: 'box', scale: [.96, 1, .035], offset: [0, 0, .345], materialRole: 'accent' },
+      // A fine front edge separates the white worktop from its white enclosure.
+      { shape: 'box', scale: [.96, .018, .014], offset: [0, .507, .345], materialRole: 'furniture-edge' },
       { shape: 'box', scale: [.26, .92, .325], offset: [.36, -.03, .165], materialRole: 'primary' },
       ...[.075, .18, .285].map((offsetZ): RuntimePart => ({
         shape: 'box', scale: [.245, .05, .09], offset: [.36, .47, offsetZ], materialRole: 'secondary',
@@ -603,6 +606,14 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
       { shape: 'box', scale: [0.29, 0.055, 0.45], offset: [0.31, 0.50, 0.69], materialRole: 'refrigerator-front-alt' },
       { shape: 'box', scale: [0.29, 0.055, 0.165], offset: [0.31, 0.50, 0.36], materialRole: 'refrigerator-storage-front' },
       { shape: 'box', scale: [0.29, 0.055, 0.165], offset: [0.31, 0.50, 0.175], materialRole: 'refrigerator-storage-front' },
+      // Door gaps remain readable at the normal isometric zoom without darkening
+      // the white door panels or changing the refrigerator's physical footprint.
+      ...[-.155, .155].map((x): RuntimePart => ({
+        shape: 'box', scale: [.008, .018, .80], offset: [x, .545, .47], materialRole: 'furniture-edge',
+      })),
+      ...[[-.31, .457], [0, .457], [.31, .457], [.31, .272]].map(([x, z]): RuntimePart => ({
+        shape: 'box', scale: [.29, .018, .008], offset: [x, .545, z], materialRole: 'furniture-edge',
+      })),
       ...[-0.31, 0].flatMap((offset): RuntimePart[] => ([
         { shape: 'box', scale: [0.20, 0.035, 0.012], offset: [offset, 0.535, 0.465], materialRole: 'refrigerator-handle' },
       ])),
@@ -1962,17 +1973,33 @@ export class ThreeWorldRenderer {
     let fadedCount = 0;
     const visibleWallOccluders: Array<{ mesh: THREE.Mesh; opacity: number }> = [];
     const occluders = [...this.structureOccluders, ...this.finishOccluders];
+    // Small bathrooms can show the actor beside a toilet while a nearby wall
+    // still covers the fixture. Add a second sightline only inside the same
+    // bathroom and only to its nearby toilet; physical geometry is untouched.
+    const fixtureTargets = focusActor && this.world
+      ? nearbyBathroomFixtureTargets(this.apartment, this.renderedProps?.values() || [],
+        { x: focusActor.displayX, y: focusActor.displayY }).map(([x, y]): NumericPoint => {
+        const point = this.worldPoint(x, y, 0);
+        return [point.x, point.z];
+      }) : [];
+    const fixtureWallDistance = 1.35 / Math.max(.01, finite(this.apartment?.geometry?.cellSizeMeters, .5));
     for (const entry of occluders) {
-      const occluded = Boolean(focus && (entry.footprint
-        ? solidBlockCrossesSightline(entry.footprint, camera, focus)
-        : entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, focus, entry.contactHalfThickness))));
+      const crossesSightline = (target: NumericPoint) => entry.footprint
+        ? solidBlockCrossesSightline(entry.footprint, camera, target)
+        : entry.segments.some(([start, end]) => wallCrossesSightline(start, end, camera, target, entry.contactHalfThickness));
+      const actorOccluded = Boolean(focus && crossesSightline(focus));
+      const occluded = actorOccluded || Boolean(focus && fixtureTargets.some((target) =>
+        entry.segments.some(([start, end]) => distanceToOcclusionSegment(target, start, end) <= fixtureWallDistance)
+          && crossesSightline(target)));
       const target = occluded ? Math.min(entry.baseOpacity, 0.28) : entry.baseOpacity;
       if (occluded) fadedCount += 1;
       const duration = target < entry.currentOpacity ? 160 : 240;
       const blend = Math.min(1, elapsed / Math.max(1, duration));
       entry.currentOpacity += (target - entry.currentOpacity) * blend;
       if (Math.abs(entry.currentOpacity - target) < 0.004) entry.currentOpacity = target;
-      if (occluded && entry.mesh.visible) visibleWallOccluders.push({ mesh: entry.mesh, opacity: entry.currentOpacity });
+      // A wall faded only to expose a nearby fixture must not mask the actor
+      // standing in front of it; actor silhouette masks follow the actor ray.
+      if (actorOccluded && entry.mesh.visible) visibleWallOccluders.push({ mesh: entry.mesh, opacity: entry.currentOpacity });
       const materials = Array.isArray(entry.mesh.material) ? entry.mesh.material : [entry.mesh.material];
       for (const material of materials) {
         const nextTransparent = entry.currentOpacity < 0.995;
@@ -2313,7 +2340,19 @@ export class ThreeWorldRenderer {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.geometry = prop.mirrored ? this.reflectedGeometry(mesh.geometry) : mesh.geometry.clone();
-      mesh.material = this.material(palette.primary, { roughness: 0.82 });
+      // The original toilet GLB contains distinct porcelain and dark details.
+      // Replacing the entire material array with one white material erased those
+      // details and collapsed its material groups into a single flat surface.
+      const isToilet = prop.assetId === 'toilet-floor-mounted' || prop.assetId === 'toilet-integrated-bidet';
+      if (isToilet) {
+        const originalMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const replacement = originalMaterials.map((source) => /charcoal|dark|black/i.test(source.name)
+          ? this.material('#7d8783', { roughness: .66, metalness: .04 })
+          : this.material(palette.primary, { roughness: 0.82 }));
+        mesh.material = Array.isArray(mesh.material) ? replacement : replacement[0];
+      } else {
+        mesh.material = this.material(palette.primary, { roughness: 0.82 });
+      }
       // 외부 지면 그림자는 외벽 전용이므로 가구/가전은 전역 shadow caster에서 제외한다.
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -2383,8 +2422,14 @@ export class ThreeWorldRenderer {
       const role = String(part.materialRole || 'primary');
       const infinityBody = prop.assetId === 'interior-infinity-door-panel' && role === 'primary';
       const kitchenStone = isBundangKitchenStonePart(prop, role);
+      const isToiletSeat = (prop.assetId === 'toilet-floor-mounted' || prop.assetId === 'toilet-integrated-bidet')
+        && role === 'secondary' && shape === 'ellipsoid';
       const material = kitchenStone
         ? createBundangKitchenStoneMaterial(this.kitchenStoneTextures, 1, cellSize)
+        : isToiletSeat
+        ? this.material('#c7d0cb', { roughness: .72 })
+        : role === 'furniture-edge'
+        ? this.material('#9fa9a3', { roughness: .72 })
         : role === 'shoe-wall-mount'
         ? this.material(palette.accent, { roughness: .7, metalness: .12 })
         : infinityBody

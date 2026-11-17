@@ -1,0 +1,73 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { apartmentUnitWorldPoint } from './apartment-transform';
+import { fitBundang59ABathtub } from './bundang-59a-bathtub';
+import { applyBundangMeasuredGeometry } from './bundang-measured-geometry';
+import { applyPlanVariantInteriorOverrides, planVariantDefinition } from './plan-variants';
+import { readBundangPrototypeApartments } from './test-support/bundang-prototypes';
+import type { ApartmentGeometry, ApartmentInteriorProp, ShowcaseCatalog, WorldObject } from './types';
+
+let sources: Map<string, WorldObject>;
+let runtime: { bundangPrototypeOptionProps(geometry: ApartmentGeometry, unit: string, ids: string[]): ApartmentInteriorProp[] };
+beforeAll(async () => {
+  sources = await readBundangPrototypeApartments();
+  const publicRoot = path.join(process.cwd(), 'public');
+  const catalog = JSON.parse(await readFile(path.join(publicRoot, 'generated/catalog.v1.json'), 'utf8')) as ShowcaseCatalog;
+  runtime = await import(pathToFileURL(path.join(publicRoot, catalog.renderAssets!.optionModuleUrl)).href) as typeof runtime;
+});
+
+describe('59A bathroom-2 built-in bathtub', () => {
+  it.each(['A', 'B', 'C', 'D'] as const)('fits between actual wall faces in plan %s and preserves the same physical span', variant => {
+    const source = sources.get('59A')!;
+    const before = structuredClone(source);
+    const apartment = structuredClone(source);
+    expect(applyBundangMeasuredGeometry(apartment)).toBe(true);
+    const geometry = apartment.geometry!;
+    const west = geometry.wallSegments!.find(wall => wall.id === 'bathroom-2-west-before')!;
+    const east = geometry.wallSegments!.find(wall => wall.id === 'outer-east')!;
+    const left = Number((west.a as number[])[0]) + Number(west.thicknessMeters) / 2;
+    const right = Number((east.a as number[])[0]) - Number(east.thicknessMeters) / 2;
+    expect(right - left).toBeGreaterThan(1.8);
+    applyPlanVariantInteriorOverrides(apartment, variant);
+    const fixture = runtime.bundangPrototypeOptionProps(geometry, '59A', []).find(prop => prop.anchorId === 'bathroom-2.wetFixture')!;
+    const fixtureProps = runtime.bundangPrototypeOptionProps(geometry, '59A', []);
+    const basin = fixtureProps.find(prop => prop.anchorId === 'bathroom-2.basin')!;
+    const toilet = fixtureProps.find(prop => prop.anchorId === 'bathroom-2.toilet')!;
+    const fallback = geometry.interiorProps!.find(prop => prop.anchorId === 'bathroom-2.wetFixture')!;
+    expect(fixture.assetId).toBe('bathtub-built-in');
+    const [center, depth] = fixture.positionMeters!;
+    const [width] = fixture.dimensionsMeters as number[];
+    expect(center - width / 2 - left).toBeCloseTo(.005, 2);
+    expect(right - center - width / 2).toBeCloseTo(.005, 2);
+    expect(fallback.positionMeters![0]).toBeCloseTo(center, 2);
+    expect((fallback.dimensionsMeters as number[])[0]).toBeCloseTo(width, 3);
+    const originalBasin = (source.geometry!.optionAnchors!.bathrooms as any)['bathroom-2'].basin.dimensionsMeters;
+    expect(basin.dimensionsMeters).toEqual(originalBasin);
+    expect((geometry.interiorProps!.find(prop => prop.anchorId === 'bathroom-2.basin')!.dimensionsMeters)).toEqual(originalBasin);
+    const [basinWidth, basinDepth] = basin.dimensionsMeters as number[];
+    const [toiletWidth, toiletDepth] = toilet.dimensionsMeters as number[];
+    const tubDepth = (fixture.dimensionsMeters as number[])[1];
+    // 90°/270° fixtures face into the bathroom: their local width runs along Y.
+    expect(basin.positionMeters![1] - basinWidth / 2 - depth - tubDepth / 2).toBeGreaterThanOrEqual(.019);
+    expect(toilet.positionMeters![1] - toiletWidth / 2 - basin.positionMeters![1] - basinWidth / 2).toBeGreaterThanOrEqual(.019);
+    expect(right - basin.positionMeters![0] - basinDepth / 2).toBeCloseTo(.005, 2);
+    const south = geometry.wallSegments!.find(wall => wall.id === 'bathroom-2-south')!;
+    const southFace = (south.a as number[])[1] - Number(south.thicknessMeters) / 2;
+    expect(southFace - toilet.positionMeters![1] - toiletWidth / 2).toBeGreaterThanOrEqual(.019);
+    const opening = geometry.openings!.find(row => row.id === 'bathroom-2-west-opening')!;
+    const openingStart = Math.min(Number((opening.a as number[])[1]), Number((opening.b as number[])[1]));
+    expect(depth + tubDepth / 2).toBeLessThan(openingStart);
+    expect(basin.positionMeters![0] - basinDepth / 2).toBeGreaterThan(left + .2);
+    expect(toilet.positionMeters![0] - toiletDepth / 2).toBeGreaterThan(left + .2);
+    const structuralBefore = structuredClone({ walls: geometry.wallSegments, openings: geometry.openings });
+    fitBundang59ABathtub(geometry, source.geometry!);
+    expect({ walls: geometry.wallSegments, openings: geometry.openings }).toEqual(structuralBefore);
+    apartment.transform = planVariantDefinition('59A', variant).transform;
+    const start = apartmentUnitWorldPoint(apartment, [center - width / 2, depth]);
+    const end = apartmentUnitWorldPoint(apartment, [center + width / 2, depth]);
+    expect(Math.hypot(end.x - start.x, end.y - start.y) * geometry.cellSizeMeters!).toBeCloseTo(width, 5);
+    expect(source).toEqual(before);
+  });
+});

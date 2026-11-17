@@ -106,4 +106,27 @@ describe('외벽·창 구조부의 actor-only fade', () => {
     expect(renderer.canvas.dataset.wallFadeOpacity).toBe('1.000');
     expect(JSON.stringify(apartment.geometry)).toBe(source);
   });
+
+  it('같은 욕실의 변기 가까이에서는 배우는 보이더라도 변기를 가리는 가까운 벽을 반투명하게 한다', () => {
+    const { renderer, apartment, frame, focus } = harness();
+    apartment.geometry!.roomZones = [{ id: 'bathroom-2', boundsMeters: [0, 0, 3, 3] }];
+    renderer.renderedProps = new Map([['toilet', {
+      id: 'toilet', assetId: 'toilet-floor-mounted', roomZoneId: 'bathroom-2', positionMeters: [1.2, .5],
+    }]]);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(.1, 2.3, 2), new THREE.MeshBasicMaterial());
+    wall.userData.laserObstacleId = 'bathroom-fixture-wall';
+    renderer.structureOccluders.push({
+      mesh: wall, segments: [[[2, 0], [2, 2]]], contactHalfThickness: .05,
+      baseOpacity: 1, currentOpacity: 1, castsShadow: false,
+    });
+    focus(2.2, .5); // Camera and actor are on the same side, but the toilet is behind the wall.
+    expect(frame(80).some(part => part.mesh === wall)).toBe(false); // No actor mask while the actor is in front.
+    expect((wall.material as THREE.Material).opacity).toBeLessThan(.3);
+    focus(2.8, 2.5); // Still inside the room, but no longer near the toilet.
+    expect(frame(120).some(part => part.mesh === wall)).toBe(false);
+    expect((wall.material as THREE.Material).opacity).toBe(1);
+    renderer.renderedProps.clear(); // Minus option removes the target completely.
+    focus(2.2, .5);
+    expect(frame(120).some(part => part.mesh === wall)).toBe(false);
+  });
 });

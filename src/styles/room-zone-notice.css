@@ -1,0 +1,41 @@
+.room-zone-notice {
+  position: absolute;
+  z-index: 30;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(230px, calc(100% - 170px));
+  padding: 5px 13px;
+  border: 1px solid rgb(200 185 127 / .36);
+  border-radius: 6px;
+  background: rgb(10 21 23 / .88);
+  box-shadow: 0 4px 14px rgb(0 0 0 / .3);
+  color: #f2e5bd;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.room-zone-notice[hidden] { display: none; }
+.room-zone-notice.is-visible { animation: room-zone-enter 2400ms ease both; }
+.game-stage[data-laser-reference-notice="visible"] .room-zone-notice {
+  top: calc(var(--laser-reference-height, 56px) + 18px);
+}
+@keyframes room-zone-enter {
+  0% { opacity: 0; transform: translate(-50%, -6px); }
+  12%, 76% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -3px); }
+}
+@media (pointer: coarse), (max-width: 760px) {
+  /* The top corners contain the material legend and minimap. */
+  .room-zone-notice { top: 108px; max-width: calc(100% - 90px); padding: 4px 9px; font-size: 11px; }
+  .game-stage[data-istarpark-laser-active="true"] .room-zone-notice { top: 150px; }
+  .game-stage[data-laser-reference-notice="visible"] .room-zone-notice { top: calc(var(--laser-reference-height, 56px) + 150px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-zone-notice.is-visible { animation: none; }
+}

@@ -1,5 +1,7 @@
 import { escapeHtml, resolveProjectUrl, resolveReferencedUrl } from './base';
 import '../styles/share-dialog.css';
+import '../styles/room-zone-notice.css';
+import { RoomZoneNotice } from './room-zone-notice';
 import { loadCatalog, mapFromQuery } from './catalog';
 import { hasValidMapQuery } from './household-catalog';
 import { waitForHouseholdSelection } from './household-selector';
@@ -294,6 +296,7 @@ export class ShowcaseApp {
   private pendingSceneSelection: PendingSceneSelection | null = null;
   private cameraTrackingPaused = false;
   private animationFrame = 0;
+  private readonly roomZoneNotice = new RoomZoneNotice(() => this.mount.querySelector<HTMLElement>('#room-zone-notice'));
   private suspended = false;
   private lastMetricPaint = 0;
   private assetCount = 0;
@@ -511,6 +514,7 @@ export class ShowcaseApp {
     this.destroyed = true;
     this.stopInspectionLaser('destroy');
     this.laserReferenceNotice.destroy();
+    this.roomZoneNotice.destroy();
     this.floorplanReferenceDialog?.destroy();
     this.finishThemeControls?.destroy();
     this.cancelInteriorGhost('', false);
@@ -528,6 +532,7 @@ export class ShowcaseApp {
     if (this.destroyed || this.suspended) return;
     this.suspended = true;
     this.laserReferenceNotice.pause();
+    this.roomZoneNotice.suspend();
     this.cancelInspectionLaserGesture();
     this.clearInspectionLaserPointer();
     this.touchPad?.reset();
@@ -732,6 +737,7 @@ export class ShowcaseApp {
               </div>
 
               <div id="toast" class="game-toast" role="status" aria-live="polite"></div>
+              <div id="room-zone-notice" class="room-zone-notice" role="status" aria-live="polite" hidden></div>
               <div id="plan-experience-notice" class="plan-experience-notice" role="status" aria-live="polite" hidden></div>
               <div id="stage-loader" class="stage-loader" aria-live="polite">
                 <span class="loader-orbit"><i></i></span>
@@ -2915,6 +2921,7 @@ export class ShowcaseApp {
     if (this.readOnlyShare && this.sharedState && map.id !== this.sharedState.mapId) return;
     this.planVariant = planVariantDefinition(map.unitType, this.planVariant).variant;
     this.stopInspectionLaser('map-change');
+    this.roomZoneNotice.setApartment(null);
     this.cancelInteriorGhost('', false);
     this.lastInteriorPointerPoint = null;
     const token = ++this.mapLoadToken;
@@ -2928,6 +2935,7 @@ export class ShowcaseApp {
     if (token !== this.mapLoadToken || this.destroyed) return;
     const planDefinition = applyPlanVariant(world, this.planVariant);
     this.world = world;
+    this.roomZoneNotice.setApartment(this.activeApartment());
     this.get<HTMLElement>('#game-stage').dataset.geometryRevision = String(
       this.activeApartment()?.geometry?.bundangGeometryRevision
         || this.activeApartment()?.geometry?.bundangMeasuredGeometryRevision || 'source',
@@ -4087,6 +4095,7 @@ export class ShowcaseApp {
       }
     }
     const active = this.actors.get(this.activeActor);
+    if (active) this.roomZoneNotice.update({ x: active.displayX, y: active.displayY }, time);
     if (active && !this.cameraTrackingPaused && this.paletteTab !== 'furniture'
       && (!this.selectedLocalPropId || this.mobileLayout)
       && (!this.mobileLayout || this.canTouchMove())) this.renderer.follow(active);

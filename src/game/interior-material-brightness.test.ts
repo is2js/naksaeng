@@ -17,6 +17,51 @@ function materials(group: THREE.Group, role: string): THREE.MeshStandardMaterial
 }
 
 describe('밝은 실내 가구·가전 재질', () => {
+  it('책상 상판 앞선과 LG 냉장고 문 사이를 가느다란 중성색으로 구분한다', () => {
+    const renderer = factory();
+    for (const [id, expectedEdges] of [
+      ['bunfirvil-secondary-bedroom-desk-module', 1],
+      ['refrigerator-cabinet-lg-built-in', 6],
+    ] as const) {
+      const asset = STRUCTURAL_PROP_ASSETS.find(entry => entry.assetId === id)!;
+      const group = renderer.proceduralProp({ assetId: id, materialVariantId: 'pet-warm-ivory',
+        dimensionsMeters: asset.defaultDimensionsMeters }, asset) as THREE.Group;
+      const edgeMaterials = materials(group, 'furniture-edge');
+      expect(edgeMaterials).toHaveLength(expectedEdges);
+      expect(edgeMaterials.every(material => material.color.getHexString() === '9fa9a3')).toBe(true);
+      expect(edgeMaterials.every(material => material.opacity === 1)).toBe(true);
+    }
+  });
+
+  it('양변기의 다중 재질은 도자기와 어두운 부속을 구분하고 원본 자산은 건드리지 않는다', () => {
+    const renderer = factory();
+    renderer.variants.set('white-ceramic', { primary: '#f4f5f2', secondary: '#d8dcda', accent: '#9ba4a2' });
+    const ceramic = new THREE.MeshStandardMaterial({ color: '#ffffff' }); ceramic.name = 'BUNDANG_WHITE_CERAMIC';
+    const dark = new THREE.MeshStandardMaterial({ color: '#111111' }); dark.name = 'BUNDANG_CHARCOAL';
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), [ceramic, dark]);
+    const template = new THREE.Group(); template.add(mesh);
+    const prop = { assetId: 'toilet-floor-mounted', materialVariantId: 'white-ceramic', dimensionsMeters: [.4, .7, .75] };
+    const group = renderer.modelProp(template, prop, { assetId: prop.assetId }) as THREE.Group;
+    const rendered = group.children[0] as THREE.Mesh;
+    expect(Array.isArray(rendered.material)).toBe(true);
+    expect((rendered.material as THREE.MeshStandardMaterial[]).map(material => material.color.getHexString()))
+      .toEqual(['f4f5f2', '7d8783']);
+    expect(mesh.material).toEqual([ceramic, dark]);
+    expect(ceramic.color.getHexString()).toBe('ffffff');
+  });
+
+  it('절차형 양변기는 흰 본체와 좌변기 덮개를 부드럽게 분리한다', () => {
+    const renderer = factory();
+    renderer.variants.set('integrated-bidet-white', { primary: '#f8f8f4', secondary: '#e3e7e4', accent: '#aeb8b5' });
+    const prop = { assetId: 'toilet-integrated-bidet', materialVariantId: 'integrated-bidet-white', dimensionsMeters: [.4, .7, .75] };
+    const asset = { assetId: prop.assetId, parts: [
+      { shape: 'ellipsoid', materialRole: 'primary' }, { shape: 'ellipsoid', materialRole: 'secondary' },
+    ] };
+    const group = renderer.proceduralProp(prop, asset) as THREE.Group;
+    expect(materials(group, 'primary')[0].color.getHexString()).toBe('f8f8f4');
+    expect(materials(group, 'secondary')[0].color.getHexString()).toBe('c7d0cb');
+  });
+
   it('팬트리는 프리뷰의 옛 팔레트와 무관하게 흰 선반과 구분되는 회색 지지대를 유지한다', () => {
     const renderer = factory();
     const asset = STRUCTURAL_PROP_ASSETS.find(asset => asset.assetId === 'entry-pantry-rounded-system-cabinet')!;

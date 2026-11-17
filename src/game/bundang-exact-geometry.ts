@@ -1,5 +1,6 @@
 import table from './bundang-exact-geometry.v1.json';
 import { BUNDANG_EXACT_GEOMETRY_REVISION, BUNDANG_EXACT_LOGICAL_DOORWAYS, normalizeBundangExactSource } from './bundang-exact-source';
+import { fitBundang59ABathtub } from './bundang-59a-bathtub';
 import type { ApartmentGeometry, WorldObject } from './types';
 
 type Point = [number, number];
@@ -139,6 +140,7 @@ export function applyBundangExactGeometry(apartment: WorldObject): boolean {
     if (key in source) geometry[key] = mapNode(source[key]);
   }
   if (source.ceilingPanels) geometry.ceilingPanels = mapNode(source.ceilingPanels, true) as ApartmentGeometry['ceilingPanels'];
+  if (unit === '59A') fitBundang59ABathtub(geometry, source);
   const gaps = BUNDANG_EXACT_LOGICAL_DOORWAYS[unit];
   if (gaps?.length) {
     const anchors = geometry.optionAnchors ||= {};

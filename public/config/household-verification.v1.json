@@ -2,6 +2,6 @@
   "schemaVersion": 1,
   "enabled": true,
   "provider": "google-apps-script",
-  "endpoint": "https://script.google.com/macros/s/AKfycbyss8ilCaHfAuUp5WTRZPCi7oenknOHE5Xx47uZ6BYW2NjXdNWxRHwpJED4qJw3CyGU/exec",
+  "endpoint": "https://script.google.com/macros/s/AKfycby5WkMLx-SaMWz2JLlEFhxXKmmwGbabNZzcdGhnxYUNzJEfUEnWHrDLnrHajFCkDF4/exec",
   "timeoutMs": 8000
 }

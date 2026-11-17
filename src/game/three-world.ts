@@ -333,7 +333,9 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
       { shape: 'box', scale: [.96, .94, .40], offset: [0, -.03, .20], materialRole: 'primary' },
       { shape: 'box', scale: [.92, .04, .18], offset: [0, .49, .10], materialRole: 'secondary' },
       { shape: 'box', scale: [.92, .04, .18], offset: [0, .49, .30], materialRole: 'secondary' },
-      { shape: 'box', scale: [1, 1, .035], offset: [0, 0, .415], materialRole: 'accent' },
+      { shape: 'box', scale: [.92, .012, .006], offset: [0, .516, .20], materialRole: 'cabinet-seam' },
+      { shape: 'box', scale: [1, 1, .035], offset: [0, 0, .415], materialRole: 'dresser-worktop' },
+      { shape: 'box', scale: [.96, .016, .006], offset: [0, .508, .415], materialRole: 'furniture-edge' },
       { shape: 'box', scale: [.90, .025, .47], offset: [0, -.48, .73], materialRole: 'mirror' },
       { shape: 'box', scale: [.96, .035, .49], offset: [0, -.465, .73], materialRole: 'mirror-frame' },
     ],
@@ -419,7 +421,7 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
     defaultDimensionsMeters: [.9, .58, 2.2],
     parts: [
       // 붙박이장과 같은 장 안에 들어간 데스크처럼 보이도록 등판·지붕·양 측판을 잇는다.
-      { shape: 'box', scale: [1, .035, .965], offset: [0, -.482, .5], materialRole: 'primary' },
+      { shape: 'box', scale: [1, .035, .965], offset: [0, -.482, .5], materialRole: 'desk-back' },
       { shape: 'box', scale: [1, 1, .035], offset: [0, 0, .982], materialRole: 'cabinet-roof' },
       { shape: 'box', scale: [.035, 1, .965], offset: [-.482, 0, .5], materialRole: 'cabinet-side' },
       { shape: 'box', scale: [.035, 1, .965], offset: [.482, 0, .5], materialRole: 'cabinet-side' },
@@ -433,7 +435,8 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
       })),
       // 선반은 등판에서 장 깊이의 약 1/3만 앞으로 나온다.
       { shape: 'box', scale: [.96, .333, .025], offset: [0, -.3335, .61], materialRole: 'desk-shelf' },
-      { shape: 'box', scale: [.96, 1, .035], offset: [0, 0, .345], materialRole: 'accent' },
+      { shape: 'box', scale: [.96, .012, .006], offset: [0, -.162, .61], materialRole: 'furniture-edge' },
+      { shape: 'box', scale: [.96, 1, .035], offset: [0, 0, .345], materialRole: 'desk-worktop' },
       // A fine front edge separates the white worktop from its white enclosure.
       { shape: 'box', scale: [.96, .018, .014], offset: [0, .507, .345], materialRole: 'furniture-edge' },
       { shape: 'box', scale: [.26, .92, .325], offset: [.36, -.03, .165], materialRole: 'primary' },
@@ -2350,6 +2353,18 @@ export class ThreeWorldRenderer {
           ? this.material('#7d8783', { roughness: .66, metalness: .04 })
           : this.material(palette.primary, { roughness: 0.82 }));
         mesh.material = Array.isArray(mesh.material) ? replacement : replacement[0];
+      } else if (prop.assetId === 'vanity-basin-compact') {
+        // Keep the ceramic bowl/top distinct from the cabinet on every floorplan.
+        // Preserve material groups and recolour clones only; never flatten a GLB
+        // or force an originally wood cabinet on user-selected white furniture.
+        const originalMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const body = new THREE.Color(palette.primary);
+        const whiteBody = Math.min(body.r, body.g, body.b) > .64;
+        if (whiteBody) body.lerp(new THREE.Color(palette.secondary), .85);
+        const replacement = originalMaterials.map(source => /ceramic|porcelain/i.test(source.name)
+          ? this.material(whiteBody ? palette.primary : '#f4f5f2', { roughness: .46, metalness: .02 })
+          : this.material(`#${body.getHexString()}`, { roughness: .82 }));
+        mesh.material = Array.isArray(mesh.material) ? replacement : replacement[0];
       } else {
         mesh.material = this.material(palette.primary, { roughness: 0.82 });
       }
@@ -2391,7 +2406,16 @@ export class ThreeWorldRenderer {
     const palette = this.propPalette(prop);
     const roomFinish = asset?.mountingKind === 'room-finish';
     const wallFinish = String(prop.installationRole || '').includes('wall-');
-    const sourceParts = asset?.parts?.length ? asset.parts : [{ shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5] }];
+    let sourceParts = asset?.parts?.length ? asset.parts : [{ shape: 'box', scale: [1, 1, 1], offset: [0, 0, 0.5] }];
+    const bodyColor = new THREE.Color(palette.primary);
+    if (/^istarpark-owned-computer-desk-(1200|800)$/.test(String(prop.assetId))
+      && Math.min(bodyColor.r, bodyColor.g, bodyColor.b) > .64) {
+      // The exported white desks use one role for both the top and four legs.
+      // Distinguish them without changing their dimensions or custom wood colours.
+      sourceParts = sourceParts.map(part => ({ ...part,
+        materialRole: finite(part.scale?.[2], 1) < .2 ? 'desk-worktop' : 'desk-leg',
+      }));
+    }
     if (isFloatingPremiumShoeCabinet(prop)) group.userData.shoeCabinetFloatingGapMeters = finite(prop.shoeCabinetFloatingGapMeters, .17);
     for (const part of floatingPremiumShoeCabinetParts(prop, sourceParts)) {
       const width = size[0] * finite(part.scale?.[0], 1) / cellSize;
@@ -2426,6 +2450,16 @@ export class ThreeWorldRenderer {
         && role === 'secondary' && shape === 'ellipsoid';
       const material = kitchenStone
         ? createBundangKitchenStoneMaterial(this.kitchenStoneTextures, 1, cellSize)
+        : role === 'desk-worktop' || role === 'dresser-worktop'
+        ? this.material('#fafbf7', { roughness: .58 })
+        : role === 'desk-back'
+        ? this.material('#d2dbd4', { roughness: .9 })
+        : role === 'desk-leg'
+        ? this.material('#b7c2ba', { roughness: .76 })
+        : role === 'cabinet-side' || role === 'cabinet-roof'
+        ? this.material('#e5eae3', { roughness: .82 })
+        : role === 'desk-shelf' || role === 'upper-cabinet'
+        ? this.material(role === 'desk-shelf' ? '#edf1e9' : '#e0e6df', { roughness: .76 })
         : isToiletSeat
         ? this.material('#c7d0cb', { roughness: .72 })
         : role === 'furniture-edge'

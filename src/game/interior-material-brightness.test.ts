@@ -20,7 +20,7 @@ describe('밝은 실내 가구·가전 재질', () => {
   it('책상 상판 앞선과 LG 냉장고 문 사이를 가느다란 중성색으로 구분한다', () => {
     const renderer = factory();
     for (const [id, expectedEdges] of [
-      ['bunfirvil-secondary-bedroom-desk-module', 1],
+      ['bunfirvil-secondary-bedroom-desk-module', 2],
       ['refrigerator-cabinet-lg-built-in', 6],
     ] as const) {
       const asset = STRUCTURAL_PROP_ASSETS.find(entry => entry.assetId === id)!;
@@ -31,6 +31,78 @@ describe('밝은 실내 가구·가전 재질', () => {
       expect(edgeMaterials.every(material => material.color.getHexString() === '9fa9a3')).toBe(true);
       expect(edgeMaterials.every(material => material.opacity === 1)).toBe(true);
     }
+  });
+
+  it('붙박이 책상의 상판·등판·외곽장·상부장·선반은 서로 다른 불투명 재질로 구분한다', () => {
+    const renderer = factory();
+    const asset = STRUCTURAL_PROP_ASSETS.find(entry => entry.assetId === 'bunfirvil-secondary-bedroom-desk-module')!;
+    const group = renderer.proceduralProp({ assetId: asset.assetId, materialVariantId: 'pet-warm-ivory',
+      dimensionsMeters: asset.defaultDimensionsMeters }, asset) as THREE.Group;
+    const roles = ['desk-worktop', 'desk-back', 'cabinet-side', 'upper-cabinet', 'desk-shelf'];
+    const colors = roles.map(role => materials(group, role)[0].color.getHexString());
+    expect(new Set(colors).size).toBe(roles.length);
+    expect(colors[0]).toBe('fafbf7');
+    expect(colors[1]).toBe('d2dbd4');
+    for (const role of roles) expect(materials(group, role).every(m => !m.transparent && m.opacity === 1)).toBe(true);
+  });
+
+  it('파우더장 2단 서랍과 밝은 화장대 상판의 경계가 분리된다', () => {
+    const renderer = factory();
+    const asset = STRUCTURAL_PROP_ASSETS.find(entry => entry.assetId === 'bunfirvil-dress-room-powder-vanity')!;
+    const group = renderer.proceduralProp({ assetId: asset.assetId, materialVariantId: 'pet-warm-ivory',
+      dimensionsMeters: asset.defaultDimensionsMeters }, asset) as THREE.Group;
+    expect(materials(group, 'cabinet-seam')).toHaveLength(1);
+    expect(materials(group, 'dresser-worktop')[0].color.getHexString()).toBe('fafbf7');
+    expect(materials(group, 'furniture-edge')).toHaveLength(1);
+  });
+
+  it('흰 사용자 책상은 상판과 다리를 구분하되 목재 팔레트·원본 recipe는 보존한다', () => {
+    const renderer = factory();
+    const asset = { assetId: 'istarpark-owned-computer-desk-1200', parts: [
+      { shape: 'box', scale: [1, 1, .075], offset: [0, 0, .9625], materialRole: 'primary' },
+      ...[-.39, .39].flatMap(x => [-.39, .39].map(y => ({ shape: 'box', scale: [.08, .08, .925],
+        offset: [x, y, .4625], materialRole: 'primary' }))),
+    ] };
+    const source = JSON.stringify(asset);
+    for (const id of ['istarpark-owned-computer-desk-1200', 'istarpark-owned-computer-desk-800']) {
+      const prop = { assetId: id, materialVariantId: 'pet-warm-ivory', dimensionsMeters: [1.2, .8, .745] };
+      const group = renderer.proceduralProp(prop, asset) as THREE.Group;
+      expect(materials(group, 'desk-worktop')).toHaveLength(1);
+      expect(materials(group, 'desk-leg')).toHaveLength(4);
+      expect(materials(group, 'desk-worktop')[0].color.getHexString())
+        .not.toBe(materials(group, 'desk-leg')[0].color.getHexString());
+      const wood = renderer.proceduralProp({ ...prop, materialVariantId: 'warm-oak-ivory' }, asset) as THREE.Group;
+      expect(materials(wood, 'desk-worktop')).toHaveLength(0);
+      expect(materials(wood, 'primary')).toHaveLength(5);
+    }
+    expect(JSON.stringify(asset)).toBe(source);
+  });
+
+  it('세면대 GLB의 흰 볼과 하부장은 다중 재질을 보존하며 다른 팔레트도 유지한다', () => {
+    const renderer = factory();
+    renderer.variants.set('white-ceramic', { primary: '#f4f5f2', secondary: '#d8dcda', accent: '#9ba4a2' });
+    const ceramic = new THREE.MeshStandardMaterial(); ceramic.name = 'BUNDANG_WHITE_CERAMIC';
+    const body = new THREE.MeshStandardMaterial(); body.name = 'BUNDANG_WARM_OAK';
+    for (const source of [[body, ceramic], ceramic]) {
+      const template = new THREE.Group();
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), source); template.add(mesh);
+      const group = renderer.modelProp(template, { assetId: 'vanity-basin-compact', materialVariantId: 'white-ceramic',
+        dimensionsMeters: [.68, .48, .85] }, { assetId: 'vanity-basin-compact' }) as THREE.Group;
+      const rendered = (group.children[0] as THREE.Mesh).material;
+      expect(Array.isArray(rendered)).toBe(Array.isArray(source));
+      if (Array.isArray(rendered)) {
+        const [cabinet, bowl] = rendered as THREE.MeshStandardMaterial[];
+        expect(cabinet.color.getHexString()).not.toBe(bowl.color.getHexString());
+        expect(cabinet.roughness).toBeGreaterThan(bowl.roughness);
+      }
+      expect(mesh.material).toBe(source);
+    }
+    const woodTemplate = new THREE.Group();
+    woodTemplate.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), [body, ceramic]));
+    const wood = renderer.modelProp(woodTemplate, { assetId: 'vanity-basin-compact', materialVariantId: 'warm-oak-ivory',
+      dimensionsMeters: [.68, .48, .85] }, { assetId: 'vanity-basin-compact' }) as THREE.Group;
+    const woodMaterials = (wood.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial[];
+    expect(woodMaterials.map(m => m.color.getHexString())).toEqual(['b58f62', 'f4f5f2']);
   });
 
   it('양변기의 다중 재질은 도자기와 어두운 부속을 구분하고 원본 자산은 건드리지 않는다', () => {

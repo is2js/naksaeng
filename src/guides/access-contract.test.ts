@@ -28,6 +28,15 @@ describe('guide access contract', () => {
     expect(verificationGuide?.body).toContain('가입요청');
     expect(verificationGuide?.body).toContain('인증명단');
     expect(verificationGuide?.body).toContain('다음 개정 때 확인할 순서');
+    expect(verificationGuide?.body).toContain('backend/apps-script/Code.gs');
+    expect(verificationGuide?.body).toContain('public/config/household-verification.v1.json');
+    expect(verificationGuide?.body).toContain('새 배포');
+    expect(verificationGuide?.body).toContain('배포 ID');
+    expect(verificationGuide?.body).toContain('/exec');
+    expect(verificationGuide?.body).toContain('회원코드 해시');
+    expect(verificationGuide?.body).toContain('선택 회원 코드 발급/재발급');
+    expect(verificationGuide?.body).toContain('선택 회원 코드 폐기');
+    expect(verificationGuide?.body).toContain('F열의 마지막 발급일은 유지');
   });
 
   it('limits the detailed dimension comparison to operators without a broken public link', () => {

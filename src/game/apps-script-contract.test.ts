@@ -106,6 +106,56 @@ function fixture(memberRows: string[][] = [], requestRows: string[][] = []) {
 }
 
 describe('Google Apps Script requests and membership', () => {
+  it('generates operator codes in the bound sheet and stores only a digest after confirmation', () => {
+    const f = fixture([['105', '55A', '운영예시', '운영자']]);
+    f.service.configureOperatorCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    const html = f.modals[0];
+    expect(html).toContain('window.crypto.getRandomValues(bytes)');
+    expect(html).not.toMatch(/Math\.random|localStorage|sessionStorage/);
+    const elements: Record<string, any> = Object.fromEntries(['generate', 'toggle', 'save', 'code', 'message', 'result', 'copy', 'close']
+      .map(id => [id, { value: '', type: id === 'code' ? 'password' : '', textContent: '', hidden: id === 'result', disabled: false }]));
+    let success: (value: unknown) => void = () => {};
+    let rpcPayload: any;
+    const runner = { withSuccessHandler(callback: typeof success) { success = callback; return this; },
+      withFailureHandler() { return this; }, saveOperatorCode(payload: unknown) { rpcPayload = payload; } };
+    runInNewContext(html.match(/<script>([\s\S]*)<\/script>/)![1], {
+      document: { getElementById: (id: string) => elements[id] }, window: { crypto: { getRandomValues: (bytes: Uint8Array) => bytes.fill(42) } },
+      Uint8Array, btoa: (value: string) => Buffer.from(value, 'binary').toString('base64'), navigator: {}, confirm: () => true,
+      google: { script: { run: runner, host: { close() {} } } },
+    });
+    elements.generate.onclick();
+    expect(elements.code.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const generated = elements.code.value;
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(OPERATOR_TEST_CODE).digest('hex'));
+    elements.save.onclick();
+    expect(elements.result.hidden).toBe(true);
+    f.setActiveBook(false);
+    expect(() => f.service.saveOperatorCode(rpcPayload)).toThrow(/인증 Sheet/);
+    f.setActiveBook(true);
+    const result = f.service.saveOperatorCode(rpcPayload);
+    success(result);
+    expect(elements.result.hidden).toBe(false);
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(generated).digest('hex'));
+    expect(JSON.stringify([...f.properties])).not.toContain(generated);
+    expect(f.userProperties.has('BUNFIRVIL_OPERATOR_CODE_DIALOG')).toBe(false);
+    expect(() => f.service.saveOperatorCode(rpcPayload)).toThrow(/인증 Sheet/);
+    const response = f.output(f.service.doPost({ postData: { contents: JSON.stringify({ schemaVersion: 1, action: 'saveOperatorCode', ...descriptor, code: generated }) } }));
+    expect(response).toMatchObject({ ok: false, verified: false, code: 'invalid_request' });
+  });
+
+  it('does not allow old or expired operator dialogs to replace the current credential', () => {
+    const f = fixture();
+    f.service.configureOperatorCode();
+    const old = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    f.service.configureOperatorCode();
+    const current = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(() => f.service.saveOperatorCode({ ...old, code: MEMBER_TEST_CODE })).toThrow();
+    f.userProperties.set('BUNFIRVIL_OPERATOR_CODE_DIALOG', JSON.stringify({ ...current, createdAt: Date.now() - 300001 }));
+    expect(() => f.service.saveOperatorCode({ ...current, code: MEMBER_TEST_CODE })).toThrow();
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(OPERATOR_TEST_CODE).digest('hex'));
+  });
+
   it('requires the operator code even when a public nickname matches globally', () => {
     const f = fixture([['105', '55A', '운영예시', '운영자']]);
     const request = f.request({ buildingId: '112', unitType: '51A', nickname: '운영예시' });

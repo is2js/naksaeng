@@ -4,6 +4,7 @@ var VERIFICATION_HEADERS = ['동', '타입', '닉네임', '상태'];
 var MEMBER_CODE_HEADERS = ['회원코드 해시', '회원코드 발급일', '회원코드 폐기일'];
 var MEMBER_CODE_REVISION = 1;
 var MEMBER_CODE_DIALOG_PROPERTY = 'BUNFIRVIL_MEMBER_CODE_DIALOG';
+var OPERATOR_CODE_DIALOG_PROPERTY = 'BUNFIRVIL_OPERATOR_CODE_DIALOG';
 var VERIFICATION_STATUSES = ['인증됨', '운영자', '중지'];
 var REQUEST_SHEET_NAME = '가입요청';
 var REQUEST_HEADERS = ['요청ID', '요청일시', '동', '타입', '닉네임', '심사결정', '처리결과', '처리일시'];
@@ -67,13 +68,55 @@ function onOpen() {
 }
 
 function configureOperatorCode() {
-  var ui = SpreadsheetApp.getUi();
-  var answer = ui.prompt('운영자 인증코드', '비밀번호 관리자에서 생성한 16~128자 무작위 코드를 입력하세요. 닉네임과 다르게 설정하고 공유 링크·GitHub에는 넣지 마세요. Sheet 운영자들이 이 코드를 사용합니다.', ui.ButtonSet.OK_CANCEL);
-  if (answer.getSelectedButton() !== ui.Button.OK) return;
-  var code = answer.getResponseText().trim();
-  if (code.length < 16 || code.length > 128) throw new Error('인증코드는 16~128자여야 합니다.');
-  PropertiesService.getScriptProperties().setProperty('BUNFIRVIL_OPERATOR_CODE_SHA256', digest_(code));
-  ui.alert('해시만 저장했습니다. 다음 인증부터 새 코드를 사용하세요. 이미 열린 인증 세션은 탭 종료 전까지 유지될 수 있습니다.');
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var id = PropertiesService.getScriptProperties().getProperty('BUNFIRVIL_SPREADSHEET_ID');
+  if (!book || !id || book.getId() !== id) throw new Error('먼저 인증 Sheet에서 초기 설치를 실행하세요.');
+  var descriptor = { bookId: id, createdAt: Date.now(), dialogId: Utilities.getUuid() };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 잠시 후 다시 시도하세요.');
+  try { PropertiesService.getUserProperties().setProperty(OPERATOR_CODE_DIALOG_PROPERTY, JSON.stringify(descriptor)); }
+  finally { lock.releaseLock(); }
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(operatorCodeDialogHtml_(descriptor)).setWidth(500).setHeight(530), '운영자 인증코드 설정');
+}
+
+// Only a fresh dialog opened by the current sheet editor can change the hash.
+// This is not a doPost action; an active bound spreadsheet is required.
+function saveOperatorCode(payload) {
+  var saved = PropertiesService.getUserProperties().getProperty(OPERATOR_CODE_DIALOG_PROPERTY);
+  var target;
+  try { target = JSON.parse(saved || 'null'); } catch (_) { target = null; }
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var id = PropertiesService.getScriptProperties().getProperty('BUNFIRVIL_SPREADSHEET_ID');
+  if (!payload || !target || !book || !id || book.getId() !== id || target.bookId !== id
+    || typeof target.createdAt !== 'number' || Date.now() - target.createdAt < 0 || Date.now() - target.createdAt > 300000
+    || payload.createdAt !== target.createdAt || payload.dialogId !== target.dialogId
+    || !validMemberCode_(payload.code)) throw new Error('설정 창을 닫고 인증 Sheet에서 다시 시작하세요.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 잠시 후 다시 시도하세요.');
+  try {
+    if (PropertiesService.getUserProperties().getProperty(OPERATOR_CODE_DIALOG_PROPERTY) !== saved) throw new Error('설정 창을 닫고 다시 시작하세요.');
+    PropertiesService.getScriptProperties().setProperty('BUNFIRVIL_OPERATOR_CODE_SHA256', digest_(payload.code));
+    PropertiesService.getUserProperties().deleteProperty(OPERATOR_CODE_DIALOG_PROPERTY);
+    return { ok: true };
+  } finally { lock.releaseLock(); }
+}
+
+function operatorCodeDialogHtml_(target) {
+  var data = JSON.stringify({ createdAt: target.createdAt, dialogId: target.dialogId }).replace(/</g, '\\u003c');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base target="_top">'
+    + '<style>body{font:14px/1.6 sans-serif;margin:24px;color:#25313a}button,input{font:inherit}button{padding:8px 14px;margin:8px 4px 0 0}input{box-sizing:border-box;width:100%;padding:8px}small{display:block;color:#59656e}#message{min-height:42px}</style></head><body>'
+    + '<h2>운영자 인증코드 설정</h2><small>새 코드를 저장하면 기존 코드는 다음 인증부터 사용할 수 없습니다. 공개 채팅이나 GitHub에 코드를 올리지 마세요.</small>'
+    + '<button type="button" id="generate">무작위 코드 생성</button><label>운영자 코드 (16~128자)<input id="code" type="password" maxlength="128" autocomplete="new-password" spellcheck="false"></label>'
+    + '<button type="button" id="toggle">코드 보기</button><button type="button" id="save">설정 및 저장</button><p id="message" role="status"></p>'
+    + '<section id="result" hidden><button type="button" id="copy">코드 복사</button><small>해시만 저장됩니다. 코드를 비밀번호 관리자에 보관하세요. 창을 닫으면 다시 볼 수 없습니다.</small></section>'
+    + '<button type="button" id="close">닫기</button><script>"use strict";var target=' + data + ',busy=false,finished=false;var $=function(id){return document.getElementById(id)};'
+    + '$("generate").onclick=function(){if(!window.crypto||typeof window.crypto.getRandomValues!=="function"){$("message").textContent="안전한 자동 생성을 지원하지 않습니다. 다른 브라우저 또는 비밀번호 관리자를 사용하세요.";return;}var bytes=new Uint8Array(32);window.crypto.getRandomValues(bytes);var raw="";bytes.forEach(function(b){raw+=String.fromCharCode(b)});$("code").value=btoa(raw).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");$("message").textContent="무작위 코드가 입력됐습니다. 저장을 누르면 기존 코드가 교체됩니다.";};'
+    + '$("toggle").onclick=function(){var f=$("code");f.type=f.type==="password"?"text":"password";$("toggle").textContent=f.type==="password"?"코드 보기":"코드 숨기기";};'
+    + '$("save").onclick=function(){if(busy||finished)return;var code=$("code").value;if(!/^[\\x21-\\x7e]{16,128}$/.test(code)){$("message").textContent="공백 없는 무작위 16~128자 코드를 입력하세요.";return;}if(!confirm("기존 운영자 코드를 새 코드로 교체할까요?"))return;busy=true;$("generate").disabled=true;$("save").disabled=true;$("message").textContent="해시 저장 확인 중입니다.";'
+    + 'google.script.run.withSuccessHandler(function(result){if(!result||result.ok!==true){failed();return;}finished=true;busy=false;$("code").readOnly=true;$("result").hidden=false;$("message").textContent="저장했습니다. 새 코드를 복사해 안전하게 보관하세요.";code="";}).withFailureHandler(failed).saveOperatorCode({createdAt:target.createdAt,dialogId:target.dialogId,code:code});};'
+    + 'function failed(){busy=false;$("code").value="";$("message").textContent="저장 여부를 확인할 수 없습니다. 코드를 사용하지 말고 창을 닫아 다시 설정하세요.";}'
+    + '$("copy").onclick=function(){var f=$("code");f.type="text";f.focus();f.select();if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(f.value).then(function(){$("message").textContent="복사했습니다. 비밀번호 관리자에 안전하게 보관하세요."},function(){$("message").textContent="직접 선택해 복사하세요."});};'
+    + '$("close").onclick=function(){$("code").value="";google.script.host.close()};</script></body></html>';
 }
 
 function selectedMemberCodeRow_() {

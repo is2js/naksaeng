@@ -18,10 +18,22 @@ const approvedMember = (building = '105', type = '55A', nickname = '이웃') => 
 class FakeSheet {
   writes: unknown[][] = [];
   failWrites = false;
+  failOnceAt = '';
+  failOnValue = '';
+  afterWrite: ((row: number, col: number) => void) | null = null;
+  formulas = new Map<string, string>();
+  protectedCells = new Set<string>();
+  protectedRanges: Array<[number, number, number, number]> = [];
+  protectEntireSheet = false;
+  formats = new Map<string, string>();
   displayOverrides = new Map<string, string>();
   constructor(public data: string[][], public name = '인증명단') {}
   getLastRow() { return this.data.length; }
   getName() { return this.name; }
+  getProtections(kind: string) {
+    if (kind === 'SHEET') return this.protectEntireSheet ? [{}] : [];
+    return this.protectedRanges.map(([row, col, count, width]) => ({ getRange: () => this.getRange(row, col, count, width) }));
+  }
   setFrozenRows() {}
   getRange(rowOrA1: number | string, col = 1, count = 1, width = 1) {
     const row = typeof rowOrA1 === 'number' ? rowOrA1 : 2;
@@ -30,21 +42,29 @@ class FakeSheet {
     return {
       getSheet: () => sheet,
       getRow: () => row,
+      getColumn: () => col,
+      getLastRow: () => row + count - 1,
+      getLastColumn: () => col + width - 1,
       getNumRows: () => count,
       getDisplayValues: () => Array.from({ length: count }, (_, i) => Array.from({ length: width }, (_, j) =>
         sheet.displayOverrides.get(`${row + i}:${col + j}`) ?? sheet.data[row + i - 1]?.[col + j - 1] ?? '')),
+      getValues: () => Array.from({ length: count }, (_, i) => Array.from({ length: width }, (_, j) => sheet.data[row + i - 1]?.[col + j - 1] ?? '')),
+      getFormulas: () => Array.from({ length: count }, (_, i) => Array.from({ length: width }, (_, j) => sheet.formulas.get(`${row + i}:${col + j}`) ?? '')),
+      canEdit: () => Array.from({ length: count }, (_, i) => Array.from({ length: width }, (_, j) => sheet.protectedCells.has(`${row + i}:${col + j}`))).every(values => values.every(value => !value)),
       isBlank: () => Array.from({ length: count }, (_, i) => Array.from({ length: width }, (_, j) => sheet.data[row + i - 1]?.[col + j - 1]))
         .every(values => values.every(value => value === undefined || value === null || value === '')),
-      setNumberFormat() { return this; },
+      getNumberFormat: () => sheet.formats.get(`${row}:${col}`) || 'General',
+      setNumberFormat(format: string) { sheet.formats.set(`${row}:${col}`, format); return this; },
       setDataValidation() { return this; },
       setValues(values: unknown[][]) {
-        if (sheet.failWrites) throw new Error('simulated failure');
+        if (sheet.failWrites || sheet.failOnceAt === `${row}:${col}` || !!sheet.failOnValue && values[0][0] === sheet.failOnValue) { sheet.failOnceAt = ''; throw new Error('simulated failure'); }
         sheet.writes.push(...values);
         values.forEach((valuesRow, i) => valuesRow.forEach((v, j) => {
           sheet.data[row + i - 1] ||= [];
           const text = String(v);
-          sheet.data[row + i - 1][col + j - 1] = text.startsWith("'") ? text.slice(1) : text;
+          sheet.data[row + i - 1][col + j - 1] = text.startsWith("'") && col + j !== 8 ? text.slice(1) : text;
         }));
+        sheet.afterWrite?.(row, col);
         return this;
       },
       setValue(value: unknown) { return this.setValues([[value]]); },
@@ -74,7 +94,8 @@ function fixture(memberRows: string[][] = [], requestRows: string[][] = []) {
   const alerts: string[] = [];
   let lockHeld = false;
   let lockCount = 0;
-  const lock = { tryLock: () => { if (lockHeld) throw new Error('nested lock'); lockHeld = true; lockCount++; return true; }, releaseLock() { lockHeld = false; } };
+  let onLockAcquired: (() => void) | null = null;
+  const lock = { tryLock: () => { if (lockHeld) throw new Error('nested lock'); lockHeld = true; lockCount++; const cb = onLockAcquired; onLockAcquired = null; cb?.(); return true; }, releaseLock() { lockHeld = false; } };
   const propertyStore = (data: Map<string, string>) => ({ getProperty: (key: string) => data.get(key),
     setProperty: (key: string, value: string) => data.set(key, value), deleteProperty: (key: string) => data.delete(key),
     setProperties: (values: Record<string, string>, removeOthers: boolean) => { if (removeOthers) data.clear(); Object.entries(values).forEach(([key, value]) => data.set(key, value)); } });
@@ -89,7 +110,7 @@ function fixture(memberRows: string[][] = [], requestRows: string[][] = []) {
       put: (key: string, value: string) => { if (!lockHeld) throw new Error('unlocked counter write'); cache.set(key, value); }, remove: (key: string) => cache.delete(key) }) },
     LockService: { getScriptLock: () => lock },
     ScriptApp: { getProjectTriggers: () => [], newTrigger: () => ({ forSpreadsheet() { return this; }, onEdit() { return this; }, create() {} }) },
-    SpreadsheetApp: { openById: () => book, getActiveSpreadsheet: () => activeBook ? book : null, flush() {},
+    SpreadsheetApp: { ProtectionType: { SHEET: 'SHEET', RANGE: 'RANGE' }, openById: () => book, getActiveSpreadsheet: () => activeBook ? book : null, flush() {},
       newDataValidation: () => ({ requireValueInList() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }),
       getUi: () => ({ ButtonSet: { YES_NO: 'yes-no' }, Button: { YES: 'yes' }, alert: (...args: string[]) => { alerts.push(...args); return 'yes'; },
         showModalDialog: (html: { source: string }) => modals.push(html.source) }) },
@@ -101,12 +122,203 @@ function fixture(memberRows: string[][] = [], requestRows: string[][] = []) {
   const request = (overrides: Record<string, unknown> = {}) => ({ action: 'verifyHousehold', buildingId: '105', unitType: '55A', nickname: '이웃', memberCode: MEMBER_TEST_CODE, ...overrides });
   const output = (result: { getContent(): string }) => JSON.parse(result.getContent());
   return { service, request, output, members, requests, sheets, properties, userProperties, cache, modals, alerts,
-    lockCount: () => lockCount, setActiveBook: (value: boolean) => { activeBook = value; },
+    lockCount: () => lockCount, setActiveBook: (value: boolean) => { activeBook = value; }, setOnLockAcquired: (cb: () => void) => { onLockAcquired = cb; },
     select: (row: number, count = 1, sheet = members) => { selectedRow = row; selectedCount = count; selectedSheet = sheet; } };
 }
 
 describe('Google Apps Script requests and membership', () => {
-  it('generates operator codes in the bound sheet and stores only a digest after confirmation', () => {
+  it('re-reads the operator hash inside the rotation lock instead of using a stale value', () => {
+    const f = fixture([['105', '55A', '운영가', '운영자']]);
+    f.setOnLockAcquired(() => f.properties.set('BUNFIRVIL_OPERATOR_CODE_SHA256', createHash('sha256').update(MEMBER_TEST_CODE).digest('hex')));
+    const request = f.request({ nickname: '운영가', operatorCode: OPERATOR_TEST_CODE });
+    expect(f.output(f.service.verifyRequest_(f.members, request, f.requests))).toMatchObject({ verified: false, operator: false });
+    expect(f.output(f.service.verifyRequest_(f.members, { ...request, operatorCode: MEMBER_TEST_CODE }, f.requests))).toMatchObject({ verified: true, operator: true });
+  });
+
+  it('writes the same operator code only to every current operator row', () => {
+    const f = fixture([
+      ['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE],
+      ['106', '55A', '일반', '인증됨', '', '', '', 'manual-user-data'],
+      ['107', '51A', '운영나', '운영자', '', '', '', OPERATOR_TEST_CODE],
+      ['108', '51A', '중지', '중지', '', '', '', 'other-user-data'],
+    ]);
+    const otherA = JSON.stringify(f.members.data[2]), otherB = JSON.stringify(f.members.data[4]);
+    f.service.configureOperatorCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(f.service.saveOperatorCode({ ...descriptor, code: MEMBER_TEST_CODE })).toEqual({ ok: true });
+    expect(f.members.data[1][7]).toBe(MEMBER_TEST_CODE);
+    expect(f.members.data[3][7]).toBe(MEMBER_TEST_CODE);
+    expect(JSON.stringify(f.members.data[2])).toBe(otherA);
+    expect(JSON.stringify(f.members.data[4])).toBe(otherB);
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(MEMBER_TEST_CODE).digest('hex'));
+    expect(f.members.writes).toHaveLength(2);
+  });
+
+  it('blocks protected, formula, unknown-header, mismatch and formula-like operator writes without touching codes', () => {
+    for (const failure of ['formula', 'protected', 'header', 'existing-mismatch', 'input-formula']) {
+      const f = fixture([['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE]]);
+      if (failure === 'formula') f.members.formulas.set('2:8', '=IMPORTRANGE("x","y")');
+      if (failure === 'protected') f.members.protectedCells.add('2:8');
+      if (failure === 'header') f.members.data[0][7] = '다른 업무';
+      if (failure === 'existing-mismatch') f.members.data[1][7] = 'unrelated-existing-text';
+      const before = JSON.stringify(f.members.data);
+      f.service.configureOperatorCode();
+      const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+      expect(() => f.service.saveOperatorCode({ ...descriptor, code: failure === 'input-formula' ? '=synthetic-code-12345' : MEMBER_TEST_CODE })).toThrow();
+      expect(JSON.stringify(f.members.data)).toBe(before);
+      expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(OPERATOR_TEST_CODE).digest('hex'));
+      expect(f.members.writes).toHaveLength(0);
+    }
+  });
+
+  it('respects even owner-editable protections while ignoring unrelated protected rows', () => {
+    const op = fixture([['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE]]);
+    op.members.protectedRanges.push([2, 8, 1, 1]); // canEdit is true, as for the Sheet owner.
+    op.service.configureOperatorCode();
+    const descriptor = JSON.parse(op.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(() => op.service.saveOperatorCode({ ...descriptor, code: MEMBER_TEST_CODE })).toThrow(/보호/);
+    expect(op.members.writes).toHaveLength(0);
+    expect(op.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(OPERATOR_TEST_CODE).digest('hex'));
+    const member = fixture([approvedMember(), ['106', '59A', '다른이웃', '인증됨', '', '', '', 'untouched']]);
+    member.members.protectedRanges.push([3, 8, 1, 1]);
+    member.service.issueSelectedMemberCode();
+    const memberDescriptor = JSON.parse(member.userProperties.get('BUNFIRVIL_MEMBER_CODE_DIALOG')!);
+    expect(member.service.saveSelectedMemberCode({ ...memberDescriptor, code: MEMBER_REISSUED_CODE })).toEqual({ ok: true });
+    expect(member.members.data[2][7]).toBe('untouched');
+    const entire = fixture([approvedMember()]);
+    entire.members.protectEntireSheet = true;
+    expect(() => entire.service.issueSelectedMemberCode()).toThrow(/보호/);
+    expect(entire.members.writes).toHaveLength(0);
+  });
+
+  it('rolls back operator cells on partial write failure and restores the old hash', () => {
+    const f = fixture([
+      ['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE],
+      ['106', '55A', '일반', '인증됨', '', '', '', 'untouched-user-code'],
+      ['107', '51A', '운영나', '운영자', '', '', '', OPERATOR_TEST_CODE],
+    ]);
+    const before = JSON.stringify(f.members.data);
+    f.members.failOnceAt = '4:8';
+    f.service.configureOperatorCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(() => f.service.saveOperatorCode({ ...descriptor, code: MEMBER_TEST_CODE })).toThrow(/완료하지 못했습니다/);
+    expect(JSON.stringify(f.members.data)).toBe(before);
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(OPERATOR_TEST_CODE).digest('hex'));
+  });
+
+  it('leaves operator authentication disabled when a partial write cannot be rolled back', () => {
+    const f = fixture([
+      ['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE],
+      ['106', '55A', '일반', '인증됨', '', '', '', 'untouched-user-code'],
+      ['107', '51A', '운영나', '운영자', '', '', '', OPERATOR_TEST_CODE],
+    ]);
+    const other = JSON.stringify(f.members.data[2]);
+    f.members.failOnceAt = '4:8';
+    f.members.failOnValue = OPERATOR_TEST_CODE;
+    f.service.configureOperatorCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(() => f.service.saveOperatorCode({ ...descriptor, code: MEMBER_TEST_CODE })).toThrow(/인증은 중단/);
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe('');
+    expect(JSON.stringify(f.members.data[2])).toBe(other);
+    const request = f.request({ nickname: '운영가', operatorCode: MEMBER_TEST_CODE });
+    expect(f.output(f.service.verifyRequest_(f.members, request, f.requests))).toMatchObject({ verified: false, operator: false, code: 'operator_setup_required' });
+  });
+
+  it('does not re-enable the old operator hash when an untouched operator H cell changes concurrently', () => {
+    const f = fixture([
+      ['105', '55A', '운영가', '운영자', '', '', '', OPERATOR_TEST_CODE],
+      ['106', '55A', '일반', '인증됨', '', '', '', 'untouched-user-code'],
+      ['107', '51A', '운영나', '운영자', '', '', '', OPERATOR_TEST_CODE],
+    ]);
+    f.members.afterWrite = (row, col) => {
+      if (row === 2 && col === 8) { f.members.afterWrite = null; f.members.data[3][7] = 'concurrent-other-code'; }
+    };
+    f.service.configureOperatorCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
+    expect(() => f.service.saveOperatorCode({ ...descriptor, code: MEMBER_TEST_CODE })).toThrow(/인증은 중단/);
+    expect(f.members.data[1][7]).toBe(OPERATOR_TEST_CODE);
+    expect(f.members.data[3][7]).toBe('concurrent-other-code');
+    expect(f.members.data[2][7]).toBe('untouched-user-code');
+    expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe('');
+  });
+
+  it('aborts member issuance if its row changes after the dialog opens', () => {
+    const f = fixture([approvedMember()]);
+    f.service.issueSelectedMemberCode();
+    const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_MEMBER_CODE_DIALOG')!);
+    f.members.data[1][5] = 'changed-by-another-editor';
+    const before = JSON.stringify(f.members.data);
+    expect(() => f.service.saveSelectedMemberCode({ ...descriptor, code: MEMBER_REISSUED_CODE })).toThrow(/바뀌었습니다/);
+    expect(JSON.stringify(f.members.data)).toBe(before);
+  });
+
+  it('refuses to show a generated member code when saving or round-trip verification fails', () => {
+    const f = fixture([approvedMember()]);
+    f.service.issueSelectedMemberCode();
+    const html = f.modals[0];
+    const elements: Record<string, any> = Object.fromEntries(['member', 'generate', 'manual-save', 'manual', 'message', 'result', 'code', 'copy', 'close']
+      .map(id => [id, { value: '', textContent: '', hidden: id === 'result', disabled: false }]));
+    let success: (value: unknown) => void = () => {}, failure: (value: unknown) => void = () => {}, payload: any;
+    const runner = { withSuccessHandler(cb: typeof success) { success = cb; return this; },
+      withFailureHandler(cb: typeof failure) { failure = cb; return this; }, saveSelectedMemberCode(p: unknown) { payload = p; } };
+    runInNewContext(html.match(/<script>([\s\S]*)<\/script>/)![1], {
+      document: { getElementById: (id: string) => elements[id] }, window: { crypto: { getRandomValues: (bytes: Uint8Array) => bytes.fill(23) } },
+      Uint8Array, btoa: (value: string) => Buffer.from(value, 'binary').toString('base64'), navigator: {}, confirm: () => true,
+      google: { script: { run: runner, host: { close() {} } } },
+    });
+    elements.generate.onclick();
+    f.members.displayOverrides.set('2:8', 'mismatched-display');
+    expect(() => f.service.saveSelectedMemberCode(payload)).toThrow(/저장 상태/);
+    failure(new Error('synthetic failure'));
+    expect(elements.result.hidden).toBe(true);
+    expect(elements.code.value).toBe('');
+    expect(elements.message.textContent).toContain('해당 행 E:H를 점검');
+  });
+
+  it('rejects member formula/protected/conflicting H values and failed E:H writes without touching existing values', () => {
+    for (const failure of ['formula', 'protected', 'header', 'existing-mismatch', 'input-formula', 'write-failure']) {
+      const f = fixture([approvedMember(), ['106', '59A', '다른이웃', '인증됨', '', '', '', 'untouched-user-code']]);
+      if (failure === 'formula') f.members.formulas.set('2:8', '=SOME_FORMULA()');
+      if (failure === 'protected') f.members.protectedCells.add('2:8');
+      if (failure === 'header') f.members.data[0][7] = '다른 업무';
+      if (failure === 'existing-mismatch') f.members.data[1][7] = 'unrelated-existing-text';
+      const before = JSON.stringify(f.members.data);
+      if (['formula', 'protected', 'header', 'existing-mismatch'].includes(failure)) {
+        expect(() => f.service.issueSelectedMemberCode()).toThrow();
+      } else {
+        f.service.issueSelectedMemberCode();
+        const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_MEMBER_CODE_DIALOG')!);
+        if (failure === 'write-failure') f.members.failOnceAt = '2:5';
+        expect(() => f.service.saveSelectedMemberCode({ ...descriptor, code: failure === 'input-formula' ? '=synthetic-code-12345' : MEMBER_REISSUED_CODE })).toThrow();
+      }
+      expect(JSON.stringify(f.members.data)).toBe(before);
+    }
+  });
+
+  it('stores hyphen-leading and all-digit synthetic codes as H text and refuses formula/text-marker prefixes', () => {
+    for (const code of ['-synthetic-code-123456789', '1234567890123456789012345678901234567890123']) {
+      const f = fixture([approvedMember()]);
+      f.service.issueSelectedMemberCode();
+      const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_MEMBER_CODE_DIALOG')!);
+      expect(f.service.saveSelectedMemberCode({ ...descriptor, code })).toEqual({ ok: true });
+      expect(f.members.data[1][7]).toBe(code);
+      expect(f.members.data[1][4]).toBe(memberDigest(code));
+      expect(f.members.formulas.get('2:8') || '').toBe('');
+      // Fake records formatting per range; Google Sheets must still be verified
+      // separately with an isolated, non-sensitive test row before production.
+      expect(f.members.formats.get('2:5')).toBe('@');
+    }
+    for (const code of ['=synthetic-code-12345', "'synthetic-code-12345"]) {
+      const f = fixture([approvedMember()]);
+      f.service.issueSelectedMemberCode();
+      const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_MEMBER_CODE_DIALOG')!);
+      const before = JSON.stringify(f.members.data);
+      expect(() => f.service.saveSelectedMemberCode({ ...descriptor, code })).toThrow();
+      expect(JSON.stringify(f.members.data)).toBe(before);
+    }
+  });
+
+  it('generates operator codes in the bound sheet and saves the operator H cell and digest after confirmation', () => {
     const f = fixture([['105', '55A', '운영예시', '운영자']]);
     f.service.configureOperatorCode();
     const descriptor = JSON.parse(f.userProperties.get('BUNFIRVIL_OPERATOR_CODE_DIALOG')!);
@@ -137,6 +349,7 @@ describe('Google Apps Script requests and membership', () => {
     success(result);
     expect(elements.result.hidden).toBe(false);
     expect(f.properties.get('BUNFIRVIL_OPERATOR_CODE_SHA256')).toBe(createHash('sha256').update(generated).digest('hex'));
+    expect(f.members.data[1][7]).toBe(generated);
     expect(JSON.stringify([...f.properties])).not.toContain(generated);
     expect(f.userProperties.has('BUNFIRVIL_OPERATOR_CODE_DIALOG')).toBe(false);
     expect(() => f.service.saveOperatorCode(rpcPayload)).toThrow(/인증 Sheet/);
@@ -275,7 +488,7 @@ describe('Google Apps Script requests and membership', () => {
     }
     const blank = fixture([['105', '55A', '이웃', '인증됨']]);
     blank.members.data[0] = [...HEADERS];
-    blank.members.getRange(1, 5, 2, 3).setNumberFormat(); // Formatting alone contains no raw value/formula.
+    blank.members.getRange(1, 5, 2, 3).setNumberFormat('@'); // Formatting alone contains no raw value/formula.
     blank.service.ensureMemberCodeColumns_(blank.members);
     expect(blank.members.data[0]).toEqual(MEMBER_HEADERS);
     const existing = fixture([['105', '55A', '이웃', '인증됨', '=IF(TRUE,"",42)']]);
@@ -285,7 +498,7 @@ describe('Google Apps Script requests and membership', () => {
     expect(JSON.stringify(existing.members.data)).toBe(before);
   });
 
-  it('issues, reissues and revokes only the selected approved member, retaining hashes only', () => {
+  it('issues, reissues and revokes only the selected approved member and its H cell', () => {
     const f = fixture([['105', '55A', '이웃', '인증됨'], ['106', '59A', '다른이웃', '인증됨', '', '', '']]);
     const identity = { buildingId: '105', unitType: '55A', nickname: '이웃' };
     const untouched = JSON.stringify(f.members.data[2]);
@@ -299,12 +512,14 @@ describe('Google Apps Script requests and membership', () => {
       expect(f.userProperties.size).toBe(0);
     };
     issue(MEMBER_TEST_CODE);
+    expect(f.members.data[1][7]).toBe(MEMBER_TEST_CODE);
     expect(f.members.data[1].slice(0, 4)).toEqual(['105', '55A', '이웃', '인증됨']);
     expect(f.members.data[1][4]).toBe(memberDigest(MEMBER_TEST_CODE));
     expect(f.members.data[1][5]).toMatch(/^\d{4}-\d\d-\d\dT/);
     expect(f.members.data[1][6]).toBe('');
     expect(f.output(f.service.verifyRequest_(f.members, f.request(), f.requests)).verified).toBe(true);
     issue(MEMBER_REISSUED_CODE);
+    expect(f.members.data[1][7]).toBe(MEMBER_REISSUED_CODE);
     expect(f.output(f.service.verifyRequest_(f.members, f.request(), f.requests)).verified).toBe(false);
     expect(f.output(f.service.verifyRequest_(f.members, f.request({ memberCode: MEMBER_REISSUED_CODE }), f.requests)).verified).toBe(true);
     const issuedAt = f.members.data[1][5];
@@ -312,10 +527,11 @@ describe('Google Apps Script requests and membership', () => {
     expect(f.members.data[1][4]).toBe('');
     expect(f.members.data[1][5]).toBe(issuedAt);
     expect(f.members.data[1][6]).toMatch(/^\d{4}-\d\d-\d\dT/);
+    expect(f.members.data[1][7]).toBe('');
     expect(f.output(f.service.verifyRequest_(f.members, f.request({ memberCode: MEMBER_REISSUED_CODE }), f.requests)).verified).toBe(false);
     expect(JSON.stringify(f.members.data[2])).toBe(untouched);
     for (const code of [MEMBER_TEST_CODE, MEMBER_REISSUED_CODE]) {
-      expect(JSON.stringify([f.members.data, f.members.writes, [...f.properties], [...f.userProperties], f.alerts, f.modals])).not.toContain(code);
+      expect(JSON.stringify([f.members.data, [...f.properties], [...f.userProperties], f.alerts, f.modals])).not.toContain(code);
     }
   });
 
@@ -369,6 +585,7 @@ describe('Google Apps Script requests and membership', () => {
     runInNewContext(html.match(/<script>([\s\S]*)<\/script>/)![1], {
       document: { getElementById: (id: string) => elements[id] }, window: { crypto: { getRandomValues: (bytes: Uint8Array) => bytes.fill(23) } },
       Uint8Array, btoa: (value: string) => Buffer.from(value, 'binary').toString('base64'), navigator: {}, google: { script: { run: runner, host: { close() {} } } },
+      confirm: () => true,
     });
     elements.generate.onclick();
     expect(rpcPayload.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -378,7 +595,7 @@ describe('Google Apps Script requests and membership', () => {
     success(result);
     expect(elements.result.hidden).toBe(false);
     expect(elements.code.value).toBe(rpcPayload.code);
-    expect(JSON.stringify(f.members.data)).not.toContain(rpcPayload.code);
+    expect(f.members.data[1][7]).toBe(rpcPayload.code);
     const escaped = f.service.memberCodeDialogHtml_({ row: 2, identity: { buildingId: '105', unitType: '55A', nickname: '</script><b>x' } });
     expect(escaped).not.toContain('"nickname":"</script>');
     expect(escaped).toContain('\\u003c/script\\u003e');

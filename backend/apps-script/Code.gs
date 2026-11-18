@@ -2,6 +2,7 @@ var VERIFICATION_SCHEMA_VERSION = 1;
 var VERIFICATION_SHEET_NAME = '인증명단';
 var VERIFICATION_HEADERS = ['동', '타입', '닉네임', '상태'];
 var MEMBER_CODE_HEADERS = ['회원코드 해시', '회원코드 발급일', '회원코드 폐기일'];
+var MEMBER_CODE_PLAINTEXT_HEADERS = ['', '회원코드 원문', '회원코드', '인증코드', '코드'];
 var MEMBER_CODE_REVISION = 1;
 var MEMBER_CODE_DIALOG_PROPERTY = 'BUNFIRVIL_MEMBER_CODE_DIALOG';
 var OPERATOR_CODE_DIALOG_PROPERTY = 'BUNFIRVIL_OPERATOR_CODE_DIALOG';
@@ -90,31 +91,119 @@ function saveOperatorCode(payload) {
   if (!payload || !target || !book || !id || book.getId() !== id || target.bookId !== id
     || typeof target.createdAt !== 'number' || Date.now() - target.createdAt < 0 || Date.now() - target.createdAt > 300000
     || payload.createdAt !== target.createdAt || payload.dialogId !== target.dialogId
-    || !validMemberCode_(payload.code)) throw new Error('설정 창을 닫고 인증 Sheet에서 다시 시작하세요.');
+    || !validSheetStoredCode_(payload.code)) throw new Error('설정 창을 닫고 인증 Sheet에서 다시 시작하세요. = 또는 작은따옴표로 시작하는 코드는 사용할 수 없습니다.');
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 잠시 후 다시 시도하세요.');
   try {
     if (PropertiesService.getUserProperties().getProperty(OPERATOR_CODE_DIALOG_PROPERTY) !== saved) throw new Error('설정 창을 닫고 다시 시작하세요.');
-    PropertiesService.getScriptProperties().setProperty('BUNFIRVIL_OPERATOR_CODE_SHA256', digest_(payload.code));
+    var sheet = book.getSheetByName(VERIFICATION_SHEET_NAME);
+    if (!sheet || !sameValues_(sheet.getRange(1, 1, 1, 4).getDisplayValues()[0], VERIFICATION_HEADERS)) throw new Error('인증명단 헤더를 확인하세요.');
+    checkCodeColumnHeader_(sheet);
+    var store = PropertiesService.getScriptProperties();
+    var key = 'BUNFIRVIL_OPERATOR_CODE_SHA256';
+    var oldHash = store.getProperty(key) || '';
+    var roster = operatorRoster_(sheet);
+    if (!roster.length) throw new Error('인증명단에 운영자 상태 행이 없습니다.');
+    var snapshots = roster.map(function (item) {
+      var range = sheet.getRange(item.row, 8, 1, 1);
+      if (!range.canEdit() || isProtectedCodeRange_(range) || range.getFormulas()[0][0]) throw new Error('운영자 H열에 수식 또는 보호된 셀이 있어 변경하지 않았습니다.');
+      var value = range.getValues()[0][0];
+      if (value !== '' && value != null && (typeof value !== 'string' || !validSheetStoredCode_(value)
+        || !oldHash || !constantEqual_(digest_(value), oldHash))) {
+        throw new Error('운영자 H열의 기존 내용이 현재 코드와 일치하지 않아 변경하지 않았습니다. 운영자가 직접 확인하세요.');
+      }
+      return { row: item.row, value: value == null ? '' : value, format: range.getNumberFormat() };
+    });
+    // The Sheet and Script Properties are different services and cannot commit
+    // atomically. Fail closed while writing; on failure restore only our own
+    // unchanged cells, and never re-enable authentication if recovery is unsure.
+    if ((store.getProperty(key) || '') !== oldHash) throw new Error('운영자 설정이 변경되어 중단했습니다.');
+    store.setProperty(key, '');
+    if (store.getProperty(key)) throw new Error('운영자 인증 잠시 중단을 확인하지 못해 변경하지 않았습니다.');
+    var touched = [];
+    try {
+      for (var i = 0; i < snapshots.length; i++) {
+        var snapshot = snapshots[i], cell = sheet.getRange(snapshot.row, 8, 1, 1);
+        if (JSON.stringify(operatorRoster_(sheet)) !== JSON.stringify(roster) || !cell.canEdit() || isProtectedCodeRange_(cell)
+          || cell.getFormulas()[0][0] || cell.getValues()[0][0] !== snapshot.value) throw new Error('운영자 행이 변경되었습니다.');
+        touched.push(snapshot); // include writes whose response may be lost
+        cell.setNumberFormat('@').setValue(payload.code);
+      }
+      SpreadsheetApp.flush();
+      if (JSON.stringify(operatorRoster_(sheet)) !== JSON.stringify(roster)) throw new Error('운영자 행이 변경되었습니다.');
+      for (var j = 0; j < snapshots.length; j++) {
+        var check = sheet.getRange(snapshots[j].row, 8, 1, 1);
+        if (check.getFormulas()[0][0] || check.getValues()[0][0] !== payload.code || check.getDisplayValues()[0][0] !== payload.code) throw new Error('운영자 원문 저장을 확인하지 못했습니다.');
+      }
+      var newHash = digest_(payload.code);
+      store.setProperty(key, newHash);
+      if (!constantEqual_(String(store.getProperty(key) || ''), newHash)) throw new Error('운영자 해시 저장을 확인하지 못했습니다.');
+      // Recheck immediately before success; direct sheet edits do not honor
+      // ScriptLock, so detected concurrent changes must fail closed.
+      if (JSON.stringify(operatorRoster_(sheet)) !== JSON.stringify(roster)) throw new Error('운영자 행이 변경되었습니다.');
+      for (var p = 0; p < snapshots.length; p++) {
+        var verified = sheet.getRange(snapshots[p].row, 8, 1, 1);
+        if (verified.getFormulas()[0][0] || verified.getValues()[0][0] !== payload.code || verified.getDisplayValues()[0][0] !== payload.code) {
+          throw new Error('운영자 원문 저장을 확인하지 못했습니다.');
+        }
+      }
+    } catch (_) {
+      var disabled = false, restored = true;
+      try { store.setProperty(key, ''); disabled = !store.getProperty(key); } catch (ignored) { disabled = false; }
+      if (disabled) {
+        for (var n = touched.length - 1; n >= 0; n--) {
+          try {
+            var old = touched[n], restore = sheet.getRange(old.row, 8, 1, 1);
+            var current = restore.getValues()[0][0];
+            if (restore.getFormulas()[0][0] || !restore.canEdit() || isProtectedCodeRange_(restore)) { restored = false; continue; }
+            if (current === payload.code) restore.setValue(old.value);
+            else if (current !== old.value) { restored = false; continue; }
+            restore.setNumberFormat(old.format);
+          } catch (ignored) { restored = false; }
+        }
+        try {
+          SpreadsheetApp.flush();
+          // Another editor may have changed an operator row we never reached.
+          // Do not restore the old digest unless *every* operator value still
+          // matches the snapshot, not just the cells we attempted to write.
+          for (var k = 0; k < snapshots.length; k++) {
+            var restoredCell = sheet.getRange(snapshots[k].row, 8, 1, 1);
+            if (restoredCell.getFormulas()[0][0] || restoredCell.getValues()[0][0] !== snapshots[k].value) restored = false;
+          }
+          if (restored && JSON.stringify(operatorRoster_(sheet)) === JSON.stringify(roster)) {
+            store.setProperty(key, oldHash);
+            if ((store.getProperty(key) || '') !== oldHash) { restored = false; store.setProperty(key, ''); }
+          }
+        } catch (ignored) { restored = false; }
+      }
+      throw new Error('운영자 코드 저장을 완료하지 못했습니다. 시트를 확인하고 재설정하세요. 복구가 불확실하면 운영자 인증은 중단됩니다.');
+    }
     PropertiesService.getUserProperties().deleteProperty(OPERATOR_CODE_DIALOG_PROPERTY);
     return { ok: true };
   } finally { lock.releaseLock(); }
+}
+
+function operatorRoster_(sheet) {
+  return rows_(sheet, 4).map(function (row, index) {
+    return { row: index + 2, buildingId: normalizeBuilding_(row[0]), unitType: normalizeUnitType_(row[1]),
+      nickname: normalizeNickname_(row[2]), status: normalizeStatus_(row[3]) };
+  }).filter(function (row) { return row.status === '운영자'; });
 }
 
 function operatorCodeDialogHtml_(target) {
   var data = JSON.stringify({ createdAt: target.createdAt, dialogId: target.dialogId }).replace(/</g, '\\u003c');
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base target="_top">'
     + '<style>body{font:14px/1.6 sans-serif;margin:24px;color:#25313a}button,input{font:inherit}button{padding:8px 14px;margin:8px 4px 0 0}input{box-sizing:border-box;width:100%;padding:8px}small{display:block;color:#59656e}#message{min-height:42px}</style></head><body>'
-    + '<h2>운영자 인증코드 설정</h2><small>새 코드를 저장하면 기존 코드는 다음 인증부터 사용할 수 없습니다. 공개 채팅이나 GitHub에 코드를 올리지 마세요.</small>'
+    + '<h2>운영자 인증코드 설정</h2><small>모든 운영자 행의 H열에 동일한 코드 원문이 저장됩니다. 시트 조회자·댓글 작성자·편집자 모두 볼 수 있으며 운영자로 인증할 수 있습니다. 교체 후에도 버전 기록·백업에 남을 수 있으니 시트를 공유하지 마세요.</small>'
     + '<button type="button" id="generate">무작위 코드 생성</button><label>운영자 코드 (16~128자)<input id="code" type="password" maxlength="128" autocomplete="new-password" spellcheck="false"></label>'
     + '<button type="button" id="toggle">코드 보기</button><button type="button" id="save">설정 및 저장</button><p id="message" role="status"></p>'
-    + '<section id="result" hidden><button type="button" id="copy">코드 복사</button><small>해시만 저장됩니다. 코드를 비밀번호 관리자에 보관하세요. 창을 닫으면 다시 볼 수 없습니다.</small></section>'
+    + '<section id="result" hidden><button type="button" id="copy">코드 복사</button><small>원문은 각 운영자 행의 H열에 저장됩니다. 공개 채팅·GitHub·공유 링크에 올리지 마세요.</small></section>'
     + '<button type="button" id="close">닫기</button><script>"use strict";var target=' + data + ',busy=false,finished=false;var $=function(id){return document.getElementById(id)};'
     + '$("generate").onclick=function(){if(!window.crypto||typeof window.crypto.getRandomValues!=="function"){$("message").textContent="안전한 자동 생성을 지원하지 않습니다. 다른 브라우저 또는 비밀번호 관리자를 사용하세요.";return;}var bytes=new Uint8Array(32);window.crypto.getRandomValues(bytes);var raw="";bytes.forEach(function(b){raw+=String.fromCharCode(b)});$("code").value=btoa(raw).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");$("message").textContent="무작위 코드가 입력됐습니다. 저장을 누르면 기존 코드가 교체됩니다.";};'
     + '$("toggle").onclick=function(){var f=$("code");f.type=f.type==="password"?"text":"password";$("toggle").textContent=f.type==="password"?"코드 보기":"코드 숨기기";};'
-    + '$("save").onclick=function(){if(busy||finished)return;var code=$("code").value;if(!/^[\\x21-\\x7e]{16,128}$/.test(code)){$("message").textContent="공백 없는 무작위 16~128자 코드를 입력하세요.";return;}if(!confirm("기존 운영자 코드를 새 코드로 교체할까요?"))return;busy=true;$("generate").disabled=true;$("save").disabled=true;$("message").textContent="해시 저장 확인 중입니다.";'
+    + '$("save").onclick=function(){if(busy||finished)return;var code=$("code").value;if(!/^[\\x21-\\x7e]{16,128}$/.test(code)||code.charAt(0)==="="||code.charCodeAt(0)===39){$("message").textContent="공백이 없고 = 또는 작은따옴표로 시작하지 않는 무작위 16~128자 코드를 입력하세요.";return;}if(!confirm("모든 운영자 행 H열의 기존 코드를 교체합니다. Sheet 조회자·편집자 모두 운영자 인증이 가능합니다. 계속할까요?"))return;busy=true;$("generate").disabled=true;$("save").disabled=true;$("message").textContent="원문과 해시 저장을 확인 중입니다. 아직 코드를 사용하지 마세요.";'
     + 'google.script.run.withSuccessHandler(function(result){if(!result||result.ok!==true){failed();return;}finished=true;busy=false;$("code").readOnly=true;$("result").hidden=false;$("message").textContent="저장했습니다. 새 코드를 복사해 안전하게 보관하세요.";code="";}).withFailureHandler(failed).saveOperatorCode({createdAt:target.createdAt,dialogId:target.dialogId,code:code});};'
-    + 'function failed(){busy=false;$("code").value="";$("message").textContent="저장 여부를 확인할 수 없습니다. 코드를 사용하지 말고 창을 닫아 다시 설정하세요.";}'
+    + 'function failed(){busy=false;$("code").value="";$("message").textContent="저장 또는 복구 여부를 확인할 수 없습니다. 코드를 사용하지 말고 각 운영자 행과 설정 상태를 확인하세요. 인증이 중단될 수 있습니다.";}'
     + '$("copy").onclick=function(){var f=$("code");f.type="text";f.focus();f.select();if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(f.value).then(function(){$("message").textContent="복사했습니다. 비밀번호 관리자에 안전하게 보관하세요."},function(){$("message").textContent="직접 선택해 복사하세요."});};'
     + '$("close").onclick=function(){$("code").value="";google.script.host.close()};</script></body></html>';
 }
@@ -145,10 +234,49 @@ function sameMemberTarget_(left, right) {
     && left.identity.buildingId === right.identity.buildingId && left.identity.unitType === right.identity.unitType
     && left.identity.nickname === right.identity.nickname;
 }
+// '=' is a Sheets formula and a leading apostrophe is a Sheets text marker.
+function validSheetStoredCode_(code) { return validMemberCode_(code) && code.charAt(0) !== '=' && code.charAt(0) !== "'"; }
+// canEdit() is true for the owner even on protected cells. Respect protections
+// regardless of who runs the menu; never alter a protected range silently.
+function isProtectedCodeRange_(range) {
+  var sheet = range.getSheet();
+  if (sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).length) return true;
+  return sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).some(function (protection) {
+    var other = protection.getRange();
+    return other.getRow() <= range.getLastRow() && range.getRow() <= other.getLastRow()
+      && other.getColumn() <= range.getLastColumn() && range.getColumn() <= other.getLastColumn();
+  });
+}
+function checkCodeColumnHeader_(sheet) {
+  var cell = sheet.getRange(1, 8, 1, 1);
+  var value = cell.getValues()[0][0];
+  var header = value === '' || value == null ? '' : typeof value === 'string' ? value.trim() : null;
+  if (cell.getFormulas()[0][0] || MEMBER_CODE_PLAINTEXT_HEADERS.indexOf(header) < 0) {
+    throw new Error('인증명단 H1 헤더가 다른 용도로 사용 중입니다. 원본을 확인하고 변경 없이 중단했습니다.');
+  }
+}
+function memberCodeRowSnapshot_(target) {
+  checkCodeColumnHeader_(target.sheet);
+  var range = target.sheet.getRange(target.row, 5, 1, 4);
+  if (!range.canEdit() || isProtectedCodeRange_(range)) throw new Error('선택 행 E:H가 보호되어 변경하지 않았습니다.');
+  var formulas = range.getFormulas()[0];
+  if (formulas.some(function (value) { return !!value; })) throw new Error('선택 행 E:H에 수식이 있어 변경하지 않았습니다.');
+  var values = range.getValues()[0];
+  if (typeof values[1] === 'string' && values[1].charAt(0) === '=') {
+    throw new Error('선택 행 발급일 내용이 수식과 혼동될 수 있어 변경하지 않았습니다.');
+  }
+  var oldHash = String(values[0] || ''), oldCode = values[3];
+  if (oldCode !== '' && oldCode != null && (typeof oldCode !== 'string' || !validSheetStoredCode_(oldCode)
+    || !oldHash || !constantEqual_(oldHash, memberCodeDigest_(oldCode, target.identity)))) {
+    throw new Error('선택 행 H열 기존 내용이 현재 회원 해시와 일치하지 않아 변경하지 않았습니다. 운영자가 직접 확인해 주세요.');
+  }
+  return { values: values, fingerprint: digest_(JSON.stringify(values)) };
+}
 function issueSelectedMemberCode() {
   var target = selectedMemberCodeRow_();
   // UUID distinguishes editor dialogs only; member codes use browser Web Crypto.
-  var descriptor = { row: target.row, identity: target.identity, createdAt: Date.now(), dialogId: Utilities.getUuid() };
+  var descriptor = { row: target.row, identity: target.identity, createdAt: Date.now(), dialogId: Utilities.getUuid(),
+    rowFingerprint: memberCodeRowSnapshot_(target).fingerprint };
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 잠시 후 다시 시도하세요.');
   try { PropertiesService.getUserProperties().setProperty(MEMBER_CODE_DIALOG_PROPERTY, JSON.stringify(descriptor)); }
@@ -163,7 +291,7 @@ function saveSelectedMemberCode(payload) {
   try { target = JSON.parse(saved || 'null'); } catch (_) { target = null; }
   if (!target || typeof target.createdAt !== 'number' || Date.now() - target.createdAt < 0 || Date.now() - target.createdAt > 300000
     || !sameMemberTarget_(target, payload) || target.createdAt !== payload.createdAt || target.dialogId !== payload.dialogId
-    || !validMemberCode_(payload.code)) throw new Error('발급 창을 닫고 회원 행을 다시 선택해 주세요.');
+    || !validSheetStoredCode_(payload.code)) throw new Error('발급 창을 닫고 회원 행을 다시 선택해 주세요. = 또는 작은따옴표로 시작하는 코드는 사용할 수 없습니다.');
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 창을 닫고 다시 발급하세요.');
   try {
@@ -174,15 +302,21 @@ function saveSelectedMemberCode(payload) {
     }
     var selected = selectedMemberCodeRow_();
     if (!sameMemberTarget_(target, selected)) throw new Error('선택 회원이 바뀌었습니다. 다시 발급하세요.');
+    if (memberCodeRowSnapshot_(selected).fingerprint !== target.rowFingerprint) throw new Error('선택 행 코드가 바뀌었습니다. 다시 발급하세요.');
     var hash = memberCodeDigest_(payload.code, selected.identity);
     if (rows_(selected.sheet, 7).some(function (row) { return constantEqual_(String(row[4] || ''), memberCodeDigest_(payload.code, {
       buildingId: row[0], unitType: row[1], nickname: row[2],
     })); })) {
       throw new Error('현재 저장된 코드는 다시 사용할 수 없습니다. 새로운 무작위 코드를 발급하세요.');
     }
-    selected.sheet.getRange(selected.row, 5, 1, 3).setNumberFormat('@')
-      .setValues([[hash, new Date().toISOString(), '']]);
+    var issuedAt = new Date().toISOString();
+    selected.sheet.getRange(selected.row, 5, 1, 4).setNumberFormat('@').setValues([[hash, issuedAt, '', payload.code]]);
     SpreadsheetApp.flush();
+    var verifiedRange = selected.sheet.getRange(selected.row, 5, 1, 4);
+    var written = verifiedRange.getValues()[0];
+    if (verifiedRange.getFormulas()[0].some(function (v) { return !!v; }) || !constantEqual_(String(written[0] || ''), hash) || written[1] !== issuedAt || written[3] !== payload.code || verifiedRange.getDisplayValues()[0][3] !== payload.code || written[2] !== '') {
+      throw new Error('코드 저장 상태를 확인하지 못했습니다. 해당 행을 점검한 뒤 다시 발급하세요.');
+    }
     clearMemberCodeAttempts_(selected.identity);
     PropertiesService.getUserProperties().deleteProperty(MEMBER_CODE_DIALOG_PROPERTY);
     return { ok: true };
@@ -190,16 +324,22 @@ function saveSelectedMemberCode(payload) {
 }
 function revokeSelectedMemberCode() {
   var target = selectedMemberCodeRow_();
+  var original = memberCodeRowSnapshot_(target);
   var ui = SpreadsheetApp.getUi();
-  if (ui.alert('선택 회원 코드 폐기', '선택 회원의 코드를 폐기할까요? 다음 인증부터 사용할 수 없습니다. 이미 열린 탭은 즉시 종료되지 않습니다.', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  if (ui.alert('선택 회원 코드 폐기', '선택 회원의 해시와 H열 원문을 지우고 코드를 폐기할까요? 다음 인증부터 사용할 수 없습니다. 이미 열린 탭은 즉시 종료되지 않습니다.', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error('다른 처리가 진행 중입니다. 잠시 후 다시 시도하세요.');
   try {
     var selected = selectedMemberCodeRow_();
     if (!sameMemberTarget_(target, selected)) throw new Error('선택 회원이 바뀌었습니다. 다시 선택하세요.');
-    selected.sheet.getRange(selected.row, 5).setValue('');
-    selected.sheet.getRange(selected.row, 7).setNumberFormat('@').setValue(new Date().toISOString());
+    var current = memberCodeRowSnapshot_(selected);
+    if (current.fingerprint !== original.fingerprint) throw new Error('선택 행 코드가 바뀌었습니다. 다시 선택하세요.');
+    var revokedAt = new Date().toISOString();
+    selected.sheet.getRange(selected.row, 7, 1, 1).setNumberFormat('@');
+    selected.sheet.getRange(selected.row, 5, 1, 4).setValues([['', current.values[1], revokedAt, '']]);
     SpreadsheetApp.flush();
+    var written = selected.sheet.getRange(selected.row, 5, 1, 4).getValues()[0];
+    if (written[0] !== '' || written[3] !== '' || written[2] !== revokedAt) throw new Error('폐기 상태를 확인하지 못했습니다. 해당 행을 점검하세요.');
     PropertiesService.getUserProperties().deleteProperty(MEMBER_CODE_DIALOG_PROPERTY);
   } finally { lock.releaseLock(); }
   ui.alert('코드를 폐기했습니다. 상태·회원 정보는 그대로 유지합니다. 이미 열린 탭의 권한은 남을 수 있습니다.');
@@ -210,17 +350,17 @@ function memberCodeDialogHtml_(target) {
     .replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base target="_top">'
     + '<style>body{font:14px/1.6 sans-serif;margin:24px;color:#25313a}button,input{font:inherit}button{padding:8px 14px;margin:8px 4px 0 0}input{box-sizing:border-box;width:100%;padding:8px}#message{min-height:48px}#result{margin-top:16px}small{display:block;color:#59656e}</style></head><body>'
-    + '<h2>회원 코드 발급/재발급</h2><p id="member"></p><small>실제 회원임을 확인한 뒤 1:1로 전달하세요. 재발급하면 기존 코드는 다음 인증부터 사용할 수 없습니다.</small>'
+    + '<h2>회원 코드 발급/재발급</h2><p id="member"></p><small>선택 회원의 원문이 인증명단 H열에 저장됩니다. Sheet 조회자·댓글 작성자·편집자 모두 볼 수 있고 폐기 후에도 버전 기록·백업에 남을 수 있습니다.</small>'
     + '<button id="generate" type="button">새 코드 발급</button><details><summary>비밀번호 관리자 코드 사용</summary>'
     + '<label>무작위 16~128자 코드<input id="manual" type="password" maxlength="128" autocomplete="off"></label><button id="manual-save" type="button">입력 코드 발급</button></details>'
-    + '<p id="message" role="status"></p><section id="result" hidden><label>이번에만 표시되는 회원 코드<input id="code" readonly autocomplete="off" spellcheck="false"></label>'
-    + '<button id="copy" type="button">코드 복사</button><small>원문은 시트에 저장되지 않습니다. 창을 닫은 뒤 분실하면 재발급하세요. 공개 채팅·공유 링크에는 넣지 마세요.</small></section>'
+    + '<p id="message" role="status"></p><section id="result" hidden><label>발급된 회원 코드<input id="code" readonly autocomplete="off" spellcheck="false"></label>'
+    + '<button id="copy" type="button">코드 복사</button><small>원문은 비공개 시트 H열에 보관됩니다. 실제 회원에게 1:1로 전달하고 공개 채팅·공유 링크에는 넣지 마세요.</small></section>'
     + '<button type="button" id="close">닫기</button><script>"use strict";var target=' + data + ';'
     + 'var $=function(id){return document.getElementById(id)};var busy=false,finished=false;$("member").textContent=target.identity.buildingId+"동 · "+target.identity.unitType+" · "+target.identity.nickname;'
-    + 'function submit(code){if(busy||finished)return;if(!/^[\\x21-\\x7e]{16,128}$/.test(code)){$("message").textContent="비밀번호 관리자로 만든 공백 없는 무작위 16~128자 코드를 입력하세요.";return;}busy=true;$("generate").disabled=true;$("manual-save").disabled=true;$("message").textContent="해시 저장을 확인하고 있습니다. 아직 코드를 전달하지 마세요.";'
+    + 'function submit(code){if(busy||finished)return;if(!/^[\\x21-\\x7e]{16,128}$/.test(code)||code.charAt(0)==="="||code.charCodeAt(0)===39){$("message").textContent="공백이 없고 = 또는 작은따옴표로 시작하지 않는 무작위 16~128자 코드를 입력하세요.";return;}if(!confirm("선택 회원의 H열에 코드 원문을 저장하고 기존 코드는 교체합니다. 시트 조회자·편집자 모두 볼 수 있습니다. 계속할까요?"))return;busy=true;$("generate").disabled=true;$("manual-save").disabled=true;$("message").textContent="해시와 H열 원문 저장을 확인하고 있습니다. 아직 코드를 전달하지 마세요.";'
     + 'google.script.run.withSuccessHandler(function(result){if(!result||result.ok!==true){failed();return;}finished=true;busy=false;$("manual").value="";$("manual").disabled=true;$("code").value=code;$("result").hidden=false;$("message").textContent="발급 완료. 원문을 복사해 실제 회원에게 1:1로 전달하세요.";code="";})'
     + '.withFailureHandler(failed).saveSelectedMemberCode({row:target.row,identity:target.identity,createdAt:target.createdAt,dialogId:target.dialogId,code:code});}'
-    + 'function failed(){busy=false;$("manual").value="";$("message").textContent="저장 완료를 확인할 수 없습니다. 코드를 전달하지 말고 창을 닫아 다시 발급하세요.";}'
+    + 'function failed(){busy=false;$("manual").value="";$("message").textContent="저장 완료를 확인할 수 없습니다. 코드를 전달하지 말고 해당 행 E:H를 점검한 뒤 다시 발급하세요.";}'
     + '$("generate").onclick=function(){if(!window.crypto||typeof window.crypto.getRandomValues!=="function"){$("message").textContent="이 브라우저에서 안전한 자동 생성을 지원하지 않습니다. 비밀번호 관리자 코드 입력을 사용하세요.";return;}var bytes=new Uint8Array(32);window.crypto.getRandomValues(bytes);var raw="";bytes.forEach(function(b){raw+=String.fromCharCode(b)});submit(btoa(raw).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/, ""));};'
     + '$("manual-save").onclick=function(){submit($("manual").value)};$("copy").onclick=function(){var field=$("code");field.focus();field.select();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(field.value).then(function(){$("message").textContent="복사했습니다. 실제 회원에게만 전달하세요."},function(){$("message").textContent="자동 복사가 제한되었습니다. 선택된 코드를 직접 복사하세요."});}};'
     + '$("close").onclick=function(){$("code").value="";$("manual").value="";google.script.host.close()};</script></body></html>';
@@ -278,9 +418,11 @@ function withCredentialLock_(alreadyLocked, callback) {
   try { return callback(); } finally { lock.releaseLock(); }
 }
 function operatorOutput_(request, alreadyLocked) {
-  var expected = PropertiesService.getScriptProperties().getProperty('BUNFIRVIL_OPERATOR_CODE_SHA256');
-  if (!expected) return verificationOutput_('', request, 'operator_setup_required');
   return withCredentialLock_(alreadyLocked, function () {
+    // Read after acquiring the same lock as operator-code rotation so a request
+    // queued before rotation cannot use a stale hash after rotation completes.
+    var expected = PropertiesService.getScriptProperties().getProperty('BUNFIRVIL_OPERATOR_CODE_SHA256');
+    if (!expected) return verificationOutput_('', request, 'operator_setup_required');
     var cache = CacheService.getScriptCache();
     var key = 'operator-attempt:' + digest_(request.nickname);
     var attempts = Number(cache.get(key) || 0);

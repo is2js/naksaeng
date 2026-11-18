@@ -167,7 +167,8 @@ export const BUNDANG_OPTION_DISPLAY_OVERRIDES: Readonly<Record<string, Partial<P
   }),
   [OPEN_PREMIUM_SHOE_CABINET_OPTION_ID]: Object.freeze({
     label: '오픈형 프리미엄 신발장',
-    description: '오픈형 신발장(PET)과 신발살균기·에어브러시·가구 조명·엔지니어드 스톤 구성입니다.',
+    description: '바닥과 하부장 사이의 신발 공간, 중간 오픈 선반과 상부장을 갖춘 PET 신발장입니다. 신발살균기·에어브러시·가구 조명·엔지니어드 스톤이 포함된 옵션입니다.',
+    previewUrl: 'assets/options/previews/entry-open-premium-shoe-cabinet-v2.webp',
   }),
   [BUNDANG_DESIGN_WALL_OPTION_ID]: Object.freeze({
     label: '디자인 월(거실/복도면)',

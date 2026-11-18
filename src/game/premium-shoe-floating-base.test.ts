@@ -58,8 +58,8 @@ function dispose(group: THREE.Group): void {
   });
 }
 
-describe('fixed premium shoe cabinet suspended base', () => {
-  it.each(UNITS)('%s A–D keeps its footprint/front/top, opens 170 mm below the body and retains solid placement', unit => {
+describe('fixed premium shoe cabinet with open center and floating base', () => {
+  it.each(UNITS)('%s A–D keeps its footprint/front/top and has real openings below and at the center', unit => {
     const sourceBefore = JSON.stringify(sources.get(unit));
     const asset = assets.get(ASSET)!;
     const assetBefore = JSON.stringify(asset);
@@ -91,30 +91,40 @@ describe('fixed premium shoe cabinet suspended base', () => {
 
       const renderer = factory(apartment);
       const group = renderer.proceduralProp(shoe, asset) as THREE.Group;
-      const oldGroup = renderer.proceduralProp(oldPose, asset) as THREE.Group;
       try {
         const cell = Number(apartment.geometry!.cellSizeMeters || .5);
-        group.position.y = oldGroup.position.y = mount / cell;
-        group.rotation.y = oldGroup.rotation.y = apartmentPropPlacement(apartment, shoe).worldYaw;
-        group.updateWorldMatrix(true, true); oldGroup.updateWorldMatrix(true, true);
-        const body = new THREE.Box3().setFromObject(group), old = new THREE.Box3().setFromObject(oldGroup);
+        const body = new THREE.Box3().setFromObject(group);
+        expect(body.max.x * cell).toBeCloseTo(expectedSize[0] / 2, 6);
+        expect(body.min.x * cell).toBeCloseTo(-expectedSize[0] / 2, 6);
+        expect(body.max.z * cell).toBeCloseTo(expectedSize[1] / 2, 6);
+        expect(body.min.z * cell).toBeCloseTo(-expectedSize[1] / 2, 6);
+        expect(body.max.y * cell).toBeCloseTo(expectedSize[2], 6);
+        group.position.y = mount / cell;
+        group.rotation.y = apartmentPropPlacement(apartment, shoe).worldYaw;
+        group.updateWorldMatrix(true, true);
+        body.setFromObject(group);
         expect(body.min.y * cell).toBeCloseTo(mount + .17, 6);
-        expect(body.max.y).toBeCloseTo(old.max.y, 6);
-        for (const axis of ['x', 'z'] as const) {
-          expect(body.min[axis]).toBeCloseTo(old.min[axis], 6);
-          expect(body.max[axis]).toBeCloseTo(old.max[axis], 6);
-        }
-        expect(group.children.filter(child => child.userData.materialRole === 'shoe-wall-mount')).toHaveLength(2);
-        const rayAt = (height: number) => {
-          const from = group.localToWorld(new THREE.Vector3(0, (height - mount) / cell, expectedSize[1] * 2 / cell));
-          const to = group.localToWorld(new THREE.Vector3(0, (height - mount) / cell, -expectedSize[1] / cell));
+        expect(body.max.y * cell).toBeCloseTo(mount + expectedSize[2], 6);
+        const rayAt = (height: number, x = 0) => {
+          const from = group.localToWorld(new THREE.Vector3(x, (height - mount) / cell, expectedSize[1] * 2 / cell));
+          const to = group.localToWorld(new THREE.Vector3(x, (height - mount) / cell, -expectedSize[1] / cell));
           return new THREE.Raycaster(from, to.sub(from).normalize(), 0, expectedSize[1] * 4 / cell).intersectObject(group, true);
         };
         expect(rayAt(.13)).toHaveLength(0);
-        expect(rayAt(.25).length).toBeGreaterThan(0);
+        const lower = rayAt(.25)[0];
+        const upper = rayAt(mount + expectedSize[2] * .82)[0];
+        for (const hit of [lower, upper]) {
+          expect(hit?.object.userData.materialRole).toBe('secondary');
+          expect(group.worldToLocal(hit.point.clone()).z * cell).toBeCloseTo(expectedSize[1] / 2, 6);
+        }
+        for (const x of [-.3, 0, .3]) {
+          const middle = rayAt(mount + expectedSize[2] * .55, expectedSize[0] * x / cell)[0];
+          expect(middle?.object.userData.materialRole).toBe('shoe-niche-back');
+          expect(group.worldToLocal(middle.point.clone()).z * cell).toBeCloseTo(-.42 * expectedSize[1], 6);
+        }
         expect(istarparkLaserObstacles({ geometry: {}, props: [shoe], laserHeightMeters: .13 }).some(row => row.id === shoe.id)).toBe(false);
         expect(istarparkLaserObstacles({ geometry: {}, props: [shoe], laserHeightMeters: .25 }).some(row => row.id === shoe.id)).toBe(true);
-      } finally { dispose(group); dispose(oldGroup); }
+      } finally { dispose(group); }
 
       // Even an object shorter than the visible gap cannot be newly placed
       // inside the cabinet's unchanged solid authoring footprint.

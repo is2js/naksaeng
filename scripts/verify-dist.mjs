@@ -607,6 +607,14 @@ async function main() {
     || entryPreview.sha256 !== await sha256File(entryPreviewPath).catch(() => "")) {
     failures.push("검은 프레임 중문 미리보기의 provenance·크기·해시가 일치하지 않습니다.");
   }
+  const shoePreviewFile = "assets/options/previews/entry-open-premium-shoe-cabinet-v2.webp";
+  const shoePreview = previewProvenance?.files?.find(row => row.file === shoePreviewFile);
+  const shoePreviewBytes = await readFile(path.join(appRoot, shoePreviewFile)).catch(() => null);
+  if (!shoePreview || shoePreview.width !== 512 || shoePreview.height !== 512 || !shoePreviewBytes
+    || shoePreview.bytes !== shoePreviewBytes.length || shoePreview.bytes >= 25 * 1024
+    || shoePreview.sha256 !== await sha256File(path.join(appRoot, shoePreviewFile)).catch(() => "")) {
+    failures.push("오픈형 프리미엄 신발장 미리보기의 provenance·크기·해시가 일치하지 않습니다.");
+  }
   const portalHtml = await readFile(path.join(distRoot, "index.html"), "utf8").catch(() => "");
   if (!portalHtml.includes("https://is2js.github.io/naksaeng/")) failures.push("district portal: canonical 낙생지구 URL이 없습니다.");
   const appHtml = await readFile(path.join(appRoot, "index.html"), "utf8").catch(() => "");

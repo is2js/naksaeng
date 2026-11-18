@@ -626,8 +626,8 @@ export const STRUCTURAL_PROP_ASSETS: RuntimeAsset[] = [
   },
 ];
 
-/** Same catalog asset, but only the fixed paid option gets a suspended base. */
-function isFloatingPremiumShoeCabinet(prop: ApartmentInteriorProp): boolean {
+/** The fixed paid option has different joinery from the shared basic asset. */
+function isFixedPremiumShoeCabinet(prop: ApartmentInteriorProp): boolean {
   return prop.assetId === 'entry-shoe-cabinet-tall'
     && prop.sourceOptionId === 'entry-open-premium-shoe-cabinet'
     && prop.fixedOptionLayout === true && prop.shoeCabinetFloatingRevision === 'suspended-base-v1'
@@ -635,23 +635,31 @@ function isFloatingPremiumShoeCabinet(prop: ApartmentInteriorProp): boolean {
     && !prop.sourcePropId && !String(prop.id || '').startsWith('local-');
 }
 
-function floatingPremiumShoeCabinetParts(prop: ApartmentInteriorProp, parts: RuntimePart[]): RuntimePart[] {
-  if (!isFloatingPremiumShoeCabinet(prop)) return parts;
-  const height = dimensions(prop)[2];
-  const ratio = Math.max(0, Math.min(.3, finite(prop.shoeCabinetFloatingGapMeters, .17) / height));
-  const bodyHeight = 1 - ratio;
-  const body = parts.filter(part => !(part.materialRole === 'accent'
-    && finite(part.scale?.[0]) > .5 && finite(part.scale?.[1]) > .5
-    && finite(part.scale?.[2]) < .08 && finite(part.offset?.[2]) < .2))
-    .map(part => ({ ...part,
-      scale: [finite(part.scale?.[0], 1), finite(part.scale?.[1], 1), finite(part.scale?.[2], 1) * bodyHeight],
-      offset: [finite(part.offset?.[0]), finite(part.offset?.[1]), ratio + finite(part.offset?.[2], .5) * bodyHeight],
-    }));
-  // Recessed wall cleats stay above the same open base, never forming a plinth
-  // across the front or an invisible 13 cm laser obstruction below the body.
-  body.push(...[.18, .82].map(height => ({ shape: 'box', materialRole: 'shoe-wall-mount',
-    scale: [.82, .07, .035 * bodyHeight], offset: [0, -.445, ratio + height * bodyHeight] })));
-  return body;
+function premiumShoeCabinetParts(gapMeters: number, heightMeters: number): RuntimePart[] {
+  const bottom = Math.max(0, Math.min(.3, gapMeters / heightMeters));
+  // Local recipe axes are width, depth (front = +.5), and height. The recess
+  // has a real opening with a set-back backboard, not a stripe over a solid box.
+  const sill = .46, lintel = .68;
+  const box = (x: number, width: number, back: number, front: number, low: number, high: number, materialRole: string): RuntimePart => ({
+    shape: 'box', scale: [width, front - back, high - low],
+    offset: [x, (back + front) / 2, (low + high) / 2], materialRole,
+  });
+  const parts = [
+    box(0, 1, -.5, .435, bottom, sill - .016, 'primary'),
+    box(0, 1, -.5, .435, lintel + .012, 1, 'primary'),
+    box(0, 1, -.5, .5, sill - .016, sill, 'shoe-niche-sill'),
+    box(0, 1, -.5, .5, lintel, lintel + .012, 'primary'),
+    box(0, .92, -.5, -.42, sill, lintel, 'shoe-niche-back'),
+    ...[-.48, .48].map(x => box(x, .04, -.5, .5, sill, lintel, 'primary')),
+    box(0, .89, .454, .498, sill - .027, sill - .016, 'furniture-edge'),
+    box(0, .84, -.39, -.25, lintel - .006, lintel, 'shoe-niche-light'),
+  ];
+  for (const [low, high] of [[bottom + .004, sill - .029], [lintel + .016, .99]]) {
+    // The dark recessed reveal shows between the separate ivory door leaves.
+    parts.push(box(0, .979, .435, .452, low, high, 'shoe-door-reveal'));
+    for (const x of [-.327, 0, .327]) parts.push(box(x, .316, .452, .5, low, high, 'secondary'));
+  }
+  return parts;
 }
 
 /** 카탈로그 메타데이터는 보존하되 Bunfirvil 정밀 recipe가 같은 ID의 fallback을 덮어쓴다. */
@@ -752,7 +760,7 @@ export function mergeEditorPropsWithBase(
     // Old editable-option saves must not put fixed pantry/entry joinery back
     // on its former wall or into the clear passage. Stored/user rows stay intact.
     if (isBundangKitchenWallFinishSelectionProxy(base)
-      || isFloatingPremiumShoeCabinet(base)
+      || isFixedPremiumShoeCabinet(base)
       || base.fixedOptionLayout === true && ['entry-pantry-system-shelf', 'entry-sliding-partition-door'].includes(String(base.sourceOptionId))) return [base];
     if (override.localDeleted === true) return [];
     const yawDeg = Number(override.yawDeg);
@@ -2416,8 +2424,12 @@ export class ThreeWorldRenderer {
         materialRole: finite(part.scale?.[2], 1) < .2 ? 'desk-worktop' : 'desk-leg',
       }));
     }
-    if (isFloatingPremiumShoeCabinet(prop)) group.userData.shoeCabinetFloatingGapMeters = finite(prop.shoeCabinetFloatingGapMeters, .17);
-    for (const part of floatingPremiumShoeCabinetParts(prop, sourceParts)) {
+    if (isFixedPremiumShoeCabinet(prop)) {
+      const gap = finite(prop.shoeCabinetFloatingGapMeters, .17);
+      group.userData.shoeCabinetFloatingGapMeters = gap;
+      sourceParts = premiumShoeCabinetParts(gap, size[2]);
+    }
+    for (const part of sourceParts) {
       const width = size[0] * finite(part.scale?.[0], 1) / cellSize;
       const depth = size[1] * finite(part.scale?.[1], 1) / cellSize;
       const height = size[2] * finite(part.scale?.[2], 1) / cellSize;
@@ -2464,8 +2476,10 @@ export class ThreeWorldRenderer {
         ? this.material('#c7d0cb', { roughness: .72 })
         : role === 'furniture-edge'
         ? this.material('#9fa9a3', { roughness: .72 })
-        : role === 'shoe-wall-mount'
-        ? this.material(palette.accent, { roughness: .7, metalness: .12 })
+        : role === 'shoe-niche-back' || role === 'shoe-niche-sill' || role === 'shoe-door-reveal'
+        ? this.material(role === 'shoe-niche-back' ? '#b4beb7' : role === 'shoe-niche-sill' ? '#deded5' : '#8a9690', { roughness: .8 })
+        : role === 'shoe-niche-light'
+        ? new THREE.MeshStandardMaterial({ color: '#fff5df', emissive: '#fff1ce', emissiveIntensity: .20, roughness: .45 })
         : infinityBody
         ? createBundangWallpaperMaterial(this.wallpaperTextures.bedroom, 'bedroom', 1, cellSize)
         : role === 'glass'

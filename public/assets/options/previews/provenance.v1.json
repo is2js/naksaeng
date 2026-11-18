@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bunfirvil-local-preview-provenance-v1",
-  "reviewedAt": "2026-11-15",
+  "reviewedAt": "2026-11-18",
   "legalRightsProof": false,
   "files": [
     {
@@ -60,6 +60,23 @@
       "height": 512,
       "bytes": 3276,
       "sha256": "4d22fa69725a93b155e9d13b44140f9cff34eed4acf219a199ce1c8f37ff23bd",
+      "rightsClass": "maintainer-reviewed-project-asset",
+      "publicationApprovalCategory": "site-generated-procedural-preview"
+    },
+    {
+      "file": "assets/options/previews/entry-open-premium-shoe-cabinet-v2.webp",
+      "sourceScript": "scripts/render-shoe-cabinet-preview.mjs",
+      "sourceRuntime": "src/game/three-world.ts",
+      "optionId": "entry-open-premium-shoe-cabinet",
+      "width": 512,
+      "height": 512,
+      "bytes": 2876,
+      "sha256": "3d10127be13aad0c644903b59e25dc1109a50eb3635580387a65e4db98ce870e",
+      "designReference": {
+        "kind": "user-supplied-photo",
+        "sha256": "c1292fb8ca1ed79a5823b38f3a438d69322e07b896ca92be29e90c38d9cd78ef",
+        "published": false
+      },
       "rightsClass": "maintainer-reviewed-project-asset",
       "publicationApprovalCategory": "site-generated-procedural-preview"
     }

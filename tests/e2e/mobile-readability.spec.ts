@@ -30,10 +30,21 @@ for (const width of [320, 390]) {
     expect(lowestUnit.y + lowestUnit.height).toBeLessThanOrEqual(detailDock.y);
     await household.tap();
     const input = page.locator('#household-nickname');
+    const enter = page.locator('.household-nickname-controls #household-enter');
+    const verify = page.locator('#household-verify-nickname');
     await expect(input).toBeVisible();
     await expect(input).toBeFocused();
     expect(await page.evaluate(() => (window as any).__nicknameFocusedDuringClick)).toBe(true);
+    await expect(enter).toHaveText('입장');
+    await expect(enter).toBeDisabled();
+    await input.fill('한');
+    await expect(enter).toBeDisabled();
+    await input.fill('한글');
+    await expect(enter).toBeEnabled();
+    await input.fill('한');
+    await expect(enter).toBeDisabled();
     await input.fill('모바일테스트');
+    await expect(enter).toBeEnabled();
     await expect(page.locator('#household-selection-summary')).toContainText('모바일테스트');
     await input.blur();
     await input.tap();
@@ -44,14 +55,28 @@ for (const width of [320, 390]) {
     await expect(page.locator('#household-selection-dock')).toHaveCSS('position', 'static');
     await expect.poll(async () => input.evaluate(element => {
       const bounds = element.getBoundingClientRect();
+      const entryBounds = element.closest('.household-nickname-controls')!.querySelector('#household-enter')!.getBoundingClientRect();
       const viewport = window.visualViewport;
       const top = viewport?.offsetTop || 0;
-      return bounds.top >= top && bounds.bottom <= top + (viewport?.height || innerHeight);
+      return [bounds, entryBounds].every(box => box.top >= top && box.bottom <= top + (viewport?.height || innerHeight));
     })).toBe(true);
     await expect(input).toBeFocused();
+    const inputBox = (await input.boundingBox())!;
+    const entryBox = (await enter.boundingBox())!;
+    expect(entryBox.x - inputBox.x - inputBox.width).toBeCloseTo(6, 0);
+    expect(entryBox.y).toBeCloseTo(inputBox.y, 0);
+    expect(entryBox.height).toBeGreaterThanOrEqual(44);
     await page.setViewportSize({ width, height: 844 });
     expect(await input.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
-    expect((await page.locator('#household-verify-nickname').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const back = (await page.locator('#household-unit-back').boundingBox())!;
+    const badge = (await page.locator('#household-nickname-building').boundingBox())!;
+    const auth = (await verify.boundingBox())!;
+    const center = (bounds: typeof back): number => bounds.y + bounds.height * .5;
+    expect(badge.x).toBeGreaterThan(back.x + back.width);
+    expect(auth.x).toBeGreaterThan(badge.x + badge.width);
+    expect(center(auth)).toBeCloseTo(center(back), 0);
+    expect(center(badge)).toBeCloseTo(center(back), 0);
+    expect(auth.height).toBeGreaterThanOrEqual(44);
     // Chromium may report 44 CSS pixels as 43.99997 after fractional transforms.
     expect((await page.locator('#household-request-verification').boundingBox())!.height).toBeGreaterThanOrEqual(43.99);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -59,6 +84,14 @@ for (const width of [320, 390]) {
     const request = (await page.locator('#household-request-verification').boundingBox())!;
     const nicknameDock = (await page.locator('#household-selection-dock').boundingBox())!;
     expect(request.y + request.height).toBeLessThanOrEqual(nicknameDock.y);
+    if (width === 390) {
+      // Tap from the short viewport without dismissing the input first.
+      await page.setViewportSize({ width, height: 420 });
+      await input.tap();
+      await expect(input).toBeFocused();
+      await enter.tap();
+      await expect(page).toHaveURL(/\?map=bundang-first-village-51a-prototype&variant=/);
+    }
   });
 }
 

@@ -35,6 +35,7 @@ class SelectorElement {
     },
   };
   focus = vi.fn();
+  append = vi.fn();
   private listeners = new Map<string, Array<(event: any) => void>>();
   private children = new Map<string, SelectorElement>();
   addEventListener(type: string, listener: (event: any) => void): void {
@@ -45,6 +46,7 @@ class SelectorElement {
   }
   click(): void { if (!this.disabled) this.emit('click'); }
   setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
+  getAttribute(name: string): string | null { return this.attributes.get(name) ?? null; }
   removeAttribute(name: string): void { this.attributes.delete(name); }
   querySelector(selector: string): SelectorElement {
     if (!this.children.has(selector)) this.children.set(selector, new SelectorElement());
@@ -79,12 +81,14 @@ function selectorFixture(shareAuthentication = false, enabled = true) {
   return { mount, node, result, inputNickname };
 }
 
-function stubBrowser(): void {
+function stubBrowser(mobile = false): void {
   vi.stubGlobal('window', {
     location: { href: 'https://example.test/naksaeng/bunfirvil/', pathname: '/naksaeng/bunfirvil/', search: '', hash: '' },
     addEventListener: vi.fn(), removeEventListener: vi.fn(), visualViewport: null,
+    matchMedia: () => ({ matches: mobile, addEventListener: vi.fn() }),
     sessionStorage: { getItem: () => null },
   });
+  vi.stubGlobal('document', { activeElement: null });
   vi.stubGlobal('history', { pushState: vi.fn() });
   vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
@@ -132,6 +136,35 @@ describe('public-first nickname entry UI', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])('uses the same inline button for mobile entry and never submits Korean IME confirmation (share=%s)', async share => {
+    stubBrowser(true);
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const { node, result, inputNickname } = selectorFixture(share);
+    const enter = node('#household-enter');
+    const input = node('#household-nickname');
+    expect(node('.household-selector-shell').classes.has('has-inline-entry')).toBe(true);
+    expect(node('.household-nickname-controls').append).toHaveBeenCalledExactlyOnceWith(enter);
+    expect(enter.textContent).toBe(share ? '열람' : '입장');
+    expect(enter.disabled).toBe(true);
+    expect(input.attributes.get('enterkeyhint')).toBe('go');
+    inputNickname('한');
+    expect(enter.disabled).toBe(true);
+    inputNickname('한글');
+    expect(enter.disabled).toBe(false);
+    expect(enter.classes.has('is-entry-revealing')).toBe(true);
+    const click = vi.spyOn(enter, 'click');
+    const preventDefault = vi.fn();
+    input.emit('keydown', { key: 'Enter', keyCode: 229, isComposing: false, preventDefault });
+    input.emit('keydown', { key: 'Enter', keyCode: 13, isComposing: true, preventDefault });
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+    input.emit('keydown', { key: 'Enter', isComposing: false, preventDefault });
+    expect(click).toHaveBeenCalledOnce();
+    await expect(result).resolves.toMatchObject({ role: 'public', nickname: '한글' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])('only binds local reset in ordinary entry, never in share entry (share=%s)', share => {
     stubBrowser();
     const confirm = vi.fn(() => false);
@@ -156,7 +189,6 @@ describe('public-first nickname entry UI', () => {
     expect(readyAnimations()).toBe(1);
     expect(dock.classes.has('is-entry-ready')).toBe(true);
     expect(dock.dataset.entryRole).toBe('public');
-    expect(node('.household-selector-shell').classes.has('is-nickname-editing')).toBe(true);
     inputNickname('가나다');
     inputNickname('가나다라');
     expect(readyAnimations()).toBe(1);
@@ -193,7 +225,6 @@ describe('public-first nickname entry UI', () => {
     expect(dock.classes.has('is-authenticated')).toBe(true);
     expect(dock.classes.has('is-auth-revealing')).toBe(true);
     expect(dock.classes.has('is-entry-revealing')).toBe(false);
-    expect(node('.household-selector-shell').classes.has('is-nickname-editing')).toBe(false);
     expect(add.mock.calls.filter(args => args.includes('is-entry-revealing'))).toHaveLength(1);
     expect(add.mock.calls.filter(args => args.includes('is-auth-revealing'))).toHaveLength(1);
     node('#household-verify-nickname').click();
@@ -251,10 +282,10 @@ describe('public-first nickname entry UI', () => {
     expect(node('#household-verify-nickname').textContent).not.toBe('인증 완료');
   });
 
-  it('keeps a static mobile editing dock and disables the reveal motion for reduced-motion users', () => {
+  it('keeps a static mobile selection summary and disables reveal motion for reduced-motion users', () => {
     const css = readFileSync(new URL('../styles/household-input.css', import.meta.url), 'utf8');
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important/);
-    expect(css).toMatch(/\.household-selector-shell\.is-nickname-editing \.household-selection-dock\s*\{[^}]*position: static;/);
+    expect(css).toMatch(/\.household-selector-shell\.has-inline-entry \.household-selection-dock\s*\{[^}]*position: static;/);
     expect(css).toContain('.household-selection-dock.is-entry-ready:not(.is-authenticated)');
     expect(css).toContain('.household-selection-dock.is-entry-ready.is-authenticated[data-entry-role]');
   });

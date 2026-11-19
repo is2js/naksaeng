@@ -140,37 +140,107 @@
 
 @media (prefers-reduced-motion: reduce) {
   .household-selector-shell .household-selection-dock,
-  .household-selector-shell .household-selection-dock button {
+  .household-selector-shell .household-selection-dock button,
+  .household-nickname-controls #household-enter {
     animation: none !important;
     transition: none !important;
   }
 }
 
-/* Keep the real selection summary below the form while the mobile keyboard is
-   in use. It returns to the existing raised/fixed dock after verification. */
+/* Keep the entry action next to the active field; the summary never overlays
+   the form, even while the mobile keyboard reduces the visible viewport. */
 @media (pointer: coarse), (max-width: 760px) {
   .household-nickname-stage-head {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .household-nickname-stage-head .household-building-back {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding-inline: 7px;
+    font-size: 10px;
+    white-space: nowrap;
   }
 
   .household-nickname-selection {
-    width: 100%;
+    flex: 1;
+    gap: 5px;
   }
 
-  .household-nickname-selection .household-selected-building,
+  .household-nickname-selection .household-selected-building {
+    display: block;
+    min-height: 0;
+    padding: 5px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: clamp(9px, 2.6vw, 11px);
+    white-space: nowrap;
+  }
+
   .household-verification-button {
+    min-width: 44px;
     min-height: 44px;
+    padding-inline: 7px;
+    font-size: 10px;
+    white-space: nowrap;
   }
 
-  .household-selector-shell.is-nickname-editing {
+  .household-selector-shell.has-inline-entry {
     padding-bottom: 24px;
   }
 
-  .household-selector-shell.is-nickname-editing .household-selection-dock {
+  .household-selector-shell.has-inline-entry .household-selection-dock {
     position: static;
     inset: auto;
     width: 100%;
+    min-height: 0;
     margin-top: 12px;
+    padding: 10px 14px;
+  }
+
+  .household-selector-shell.has-inline-entry .household-nickname-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .household-nickname-controls #household-nickname,
+  .household-nickname-controls #household-enter {
+    height: 48px;
+  }
+
+  .household-nickname-controls #household-nickname {
+    font-size: 16px;
+  }
+
+  .household-nickname-controls #household-enter {
+    min-width: 58px;
+    font-size: 13px;
+    border-radius: 6px;
+  }
+
+  .household-nickname-controls #household-enter:focus-visible {
+    outline: 2px solid #a4e8f7;
+    outline-offset: 2px;
+  }
+
+  .household-nickname-controls #household-enter[data-entry-role="public"]:enabled {
+    border-color: #75c8df;
+    color: #11283d;
+    background: #86d9ed;
+    box-shadow: 0 0 18px rgba(117, 200, 223, .24);
+  }
+
+  .household-nickname-controls #household-enter:not([data-entry-role="public"]):enabled {
+    border-color: #ffd0c1;
+    color: #4b211e;
+    background: linear-gradient(110deg, #f6afa0, #f6c4a9);
+    box-shadow: 0 0 20px rgba(239, 138, 117, .23);
+  }
+
+  .household-nickname-controls #household-enter.is-entry-revealing,
+  .household-nickname-controls #household-enter.is-auth-revealing {
+    animation: household-entry-ready-shine 540ms ease-out both;
   }
 
   .household-nickname-stage input {

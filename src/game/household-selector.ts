@@ -228,7 +228,7 @@ export function waitForHouseholdSelection(
       </main>
       <aside class="household-selection-dock" id="household-selection-dock" aria-live="polite" hidden>
         <div><small>${shareAuthentication ? '공유 놀이터 열람' : '선택 세대'}</small><b id="household-selection-summary">${shareAuthentication ? '동과 닉네임을 확인해 주세요.' : '동·층·호를 선택해 주세요.'}</b></div>
-        <button type="button" id="household-enter" disabled>${shareAuthentication ? '공유 놀이터 열람' : '놀이터 입장'}</button>
+        <button type="button" id="household-enter" aria-label="${shareAuthentication ? '공유 놀이터 열람' : '놀이터 입장'}" disabled>${shareAuthentication ? '공유 놀이터 열람' : '놀이터 입장'}</button>
       </aside>
       ${shareAuthentication ? '' : householdStorageDialogMarkup()}
     </div>`;
@@ -237,6 +237,7 @@ export function waitForHouseholdSelection(
     const picker = mount.querySelector<HTMLElement>('#household-building-picker');
     const detail = mount.querySelector<HTMLElement>('#household-building-detail');
     const nicknameStage = mount.querySelector<HTMLElement>('#household-nickname-stage');
+    const nicknameControls = mount.querySelector<HTMLElement>('.household-nickname-controls');
     const rows = mount.querySelector<HTMLElement>('#household-building-rows');
     const title = mount.querySelector<HTMLElement>('#household-selector-title');
     const description = mount.querySelector<HTMLElement>('#household-selector-description');
@@ -256,7 +257,7 @@ export function waitForHouseholdSelection(
     const operatorGroup = mount.querySelector<HTMLElement>('#household-operator-code-group')!;
     const operatorInput = mount.querySelector<HTMLInputElement>('#household-operator-code')!;
     const operatorLabel = operatorGroup.querySelector<HTMLLabelElement>('label')!;
-    if (!picker || !detail || !nicknameStage || !rows || !title || !description || !legend || !buildingStep || (!shareAuthentication && !unitStep) || !nicknameStep || !selectedBuilding || !nicknameBuilding || !dock || !summary || !enter || !nicknameInput || !verifyNickname || !requestVerification || !nicknameStatus) throw new Error('세대 선택 화면을 구성하지 못했습니다.');
+    if (!picker || !detail || !nicknameStage || !nicknameControls || !rows || !title || !description || !legend || !buildingStep || (!shareAuthentication && !unitStep) || !nicknameStep || !selectedBuilding || !nicknameBuilding || !dock || !summary || !enter || !nicknameInput || !verifyNickname || !requestVerification || !nicknameStatus) throw new Error('세대 선택 화면을 구성하지 못했습니다.');
     let chosenBuildingId: string | null = null;
     let nickname = '';
     let nicknameVerified = false;
@@ -264,11 +265,28 @@ export function waitForHouseholdSelection(
     let entryRole: HouseholdVerificationRole = 'public';
     let verificationAttempt = 0;
     let verificationController: AbortController | null = null;
+    const mobileEntryMedia = window.matchMedia('(pointer: coarse), (max-width: 760px)');
     const inputViewportEvents = new AbortController();
+    let inlineEntry = false;
+    const revealStates = ['is-entry-revealing', 'is-auth-revealing'] as const;
+    const syncEntryPlacement = (): void => {
+      const useInlineEntry = mobileEntryMedia.matches && !nicknameStage.hidden;
+      if (useInlineEntry === inlineEntry) return;
+      inlineEntry = useInlineEntry;
+      shell.classList.toggle('has-inline-entry', inlineEntry);
+      const keepFocus = document.activeElement === enter;
+      (inlineEntry ? nicknameControls : dock).append(enter);
+      enter.textContent = inlineEntry ? (shareAuthentication ? '열람' : '입장') : enter.getAttribute('aria-label');
+      if (inlineEntry) nicknameInput.setAttribute('enterkeyhint', 'go');
+      else nicknameInput.removeAttribute('enterkeyhint');
+      dock.classList.remove(...revealStates);
+      enter.classList.remove(...revealStates);
+      if (keepFocus) enter.focus({ preventScroll: true });
+    };
     let inputViewportFrame = 0;
     const fitActiveNicknameInput = (): void => {
       inputViewportFrame = 0;
-      if (nicknameStage.hidden || !window.matchMedia('(pointer: coarse), (max-width: 760px)').matches) return;
+      if (nicknameStage.hidden || !mobileEntryMedia.matches) return;
       const input = document.activeElement;
       if (!(input instanceof HTMLInputElement) || !nicknameStage.contains(input)) return;
       const viewport = window.visualViewport;
@@ -283,6 +301,7 @@ export function waitForHouseholdSelection(
       inputViewportFrame = requestAnimationFrame(fitActiveNicknameInput);
     };
     nicknameStage.addEventListener('focusin', scheduleInputVisibility, { signal: inputViewportEvents.signal });
+    mobileEntryMedia.addEventListener('change', syncEntryPlacement, { signal: inputViewportEvents.signal });
     window.addEventListener('resize', scheduleInputVisibility, { signal: inputViewportEvents.signal });
     window.visualViewport?.addEventListener('resize', scheduleInputVisibility, { signal: inputViewportEvents.signal });
 
@@ -310,15 +329,15 @@ export function waitForHouseholdSelection(
       requestAnimationFrame(() => panel.classList.add('is-entering'));
     };
 
-    const animateEntryDock = (state: 'is-entry-revealing' | 'is-auth-revealing'): void => {
-      dock.classList.remove('is-entry-revealing', 'is-auth-revealing');
-      void dock.offsetWidth;
-      dock.classList.add(state);
+    const animateEntry = (state: typeof revealStates[number]): void => {
+      const target = inlineEntry ? enter : dock;
+      target.classList.remove(...revealStates);
+      void target.offsetWidth;
+      target.classList.add(state);
     };
 
     const revealVerifiedDock = (): void => {
       if (!nicknameVerified) return;
-      shell.classList.remove('is-nickname-editing');
       nicknameInput.disabled = true;
       operatorInput.value = '';
       operatorInput.disabled = true;
@@ -327,7 +346,7 @@ export function waitForHouseholdSelection(
       nicknameStep.classList.add('is-complete');
       dock.hidden = false;
       dock.classList.add('is-authenticated');
-      animateEntryDock('is-auth-revealing');
+      animateEntry('is-auth-revealing');
     };
 
     const publicEntryHint = '공개 권한으로 입장할 수 있습니다. 회원 기능은 인증 후 사용할 수 있습니다.';
@@ -337,10 +356,13 @@ export function waitForHouseholdSelection(
       entryReady = householdEntryNicknameIsValid(nickname) && Boolean(chosenBuildingId)
         && (shareAuthentication || Boolean(selected));
       enter.disabled = !entryReady;
+      enter.dataset.entryRole = entryRole;
       dock.dataset.entryRole = entryRole;
       dock.classList.toggle('is-entry-ready', entryReady);
-      if (!entryReady) dock.classList.remove('is-entry-revealing', 'is-auth-revealing');
-      else if (!wasEntryReady && !nicknameVerified) animateEntryDock('is-entry-revealing');
+      if (!entryReady) {
+        dock.classList.remove(...revealStates);
+        enter.classList.remove(...revealStates);
+      } else if (!wasEntryReady && !nicknameVerified) animateEntry('is-entry-revealing');
       if (shareAuthentication) {
         const nicknameText = nickname.trim() ? ` · ${nickname.trim()}` : '';
         summary.textContent = chosenBuildingId
@@ -380,6 +402,7 @@ export function waitForHouseholdSelection(
       verifyNickname.removeAttribute('aria-busy');
       requestVerification.removeAttribute('aria-busy');
       dock.classList.remove('is-authenticated', 'is-auth-revealing');
+      enter.classList.remove('is-auth-revealing');
       nicknameStatus.textContent = !nickname.trim() ? '' : !householdEntryNicknameIsValid(nickname)
         ? '닉네임은 제어문자 없이 2~20자로 입력해 주세요.'
         : householdVerificationConfigured(verificationConfig)
@@ -402,12 +425,12 @@ export function waitForHouseholdSelection(
     };
 
     const showBuildingPicker = (): void => {
-      shell.classList.remove('is-nickname-editing');
       selected = null;
       resetNicknameVerification(true);
       picker.hidden = false;
       detail.hidden = true;
       nicknameStage.hidden = true;
+      syncEntryPlacement();
       dock.hidden = true;
       legend.hidden = true;
       title.textContent = '분당퍼스트빌리지 동 선택';
@@ -432,7 +455,6 @@ export function waitForHouseholdSelection(
     const showBuilding = (buildingId: string, pushHistory: boolean): void => {
       const building = BUNDANG_HOUSEHOLD_CATALOG.buildings.find((entry) => entry.buildingId === buildingId);
       if (!building) return;
-      shell.classList.remove('is-nickname-editing');
       chosenBuildingId = buildingId;
       selected = null;
       resetNicknameVerification(true);
@@ -444,6 +466,7 @@ export function waitForHouseholdSelection(
       picker.hidden = true;
       detail.hidden = false;
       nicknameStage.hidden = true;
+      syncEntryPlacement();
       dock.hidden = false;
       legend.hidden = false;
       rows.innerHTML = `<section class="household-building-row is-single" data-line-count="${building.lines.length}" style="--building-count:1" aria-label="${building.buildingId}동 세대">${floorRail()}${householdBuildingCard(building)}</section>`;
@@ -472,7 +495,7 @@ export function waitForHouseholdSelection(
       picker.hidden = true;
       detail.hidden = true;
       nicknameStage.hidden = false;
-      shell.classList.toggle('is-nickname-editing', !nicknameVerified);
+      syncEntryPlacement();
       dock.hidden = false;
       dock.classList.toggle('is-authenticated', nicknameVerified);
       legend.hidden = true;
@@ -627,9 +650,10 @@ export function waitForHouseholdSelection(
     });
     for (const input of [nicknameInput, operatorInput]) {
       input.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' || event.isComposing) return;
+        if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
         event.preventDefault();
-        if (!verifyNickname.disabled) verifyNickname.click();
+        const action = input === nicknameInput && inlineEntry ? enter : verifyNickname;
+        if (!action.disabled) action.click();
       });
     }
 

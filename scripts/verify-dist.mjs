@@ -9,6 +9,13 @@ import { verifyDocumentArchive } from "./document-archive-policy.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_DIST_BYTES = 50 * 1024 * 1024;
+const MAX_SITE_PICKER_BYTES = 1.2 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+const SITE_PICKER_BINARIES = [
+  ["3D 단지 모형", /^bunfirvil\/assets\/bunfirvil-site-v9-[\w-]+\.glb$/, "044d2d672c7fa77b789ad94c50ffd638e51fb5869916c084ea12ee3600b247ce"],
+  ["Draco WASM", /^bunfirvil\/assets\/draco_decoder-[\w-]+\.wasm$/],
+  ["Draco WASM wrapper", /^bunfirvil\/assets\/draco_wasm_wrapper-[\w-]+\.js$/],
+];
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".map", ".mjs", ".svg", ".txt", ".xml"]);
 const EXPECTED_MAP_IDS = new Set([
   "bundang-first-village-51a-prototype",
@@ -569,10 +576,22 @@ async function main() {
   const documentArchive = await verifyDocumentArchive(appRoot);
   failures.push(...documentArchive.failures);
   let totalBytes = 0;
+  let sitePickerBytes = 0;
+  const pickerMatches = new Map(SITE_PICKER_BINARIES.map(([label]) => [label, 0]));
   for (const file of files) {
     const relative = slash(path.relative(distRoot, file));
     const fileInfo = await stat(file);
     totalBytes += fileInfo.size;
+    const pickerAsset = SITE_PICKER_BINARIES.find(([, pattern]) => pattern.test(relative));
+    if (pickerAsset) {
+      const [label, , digest] = pickerAsset;
+      pickerMatches.set(label, pickerMatches.get(label) + 1);
+      sitePickerBytes += fileInfo.size;
+      if (digest && await sha256File(file) !== digest) failures.push(`${relative}: 승인된 3D 단지 모형 해시가 아닙니다.`);
+    }
+    if (/\.blend(?:\d+)?$/iu.test(relative) || relative.includes('/site-preview/')) {
+      failures.push(`${relative}: Blender 원본 및 로컬 시안 페이지는 배포할 수 없습니다.`);
+    }
     if (path.extname(file).toLowerCase() === ".pdf" && !documentArchive.files.has(file)) {
       failures.push(`${relative}: 공개 PDF는 검토된 문서 자료실에만 둘 수 있습니다.`);
     }
@@ -583,9 +602,16 @@ async function main() {
     if (violation) failures.push(violation);
   }
 
-  const applicationBytes = totalBytes - documentArchive.bytes;
+  for (const [label, count] of pickerMatches) {
+    if (count !== 1) failures.push(`${label}: 배포 파일은 정확히 한 개여야 합니다 (actual=${count}).`);
+  }
+  if (sitePickerBytes > MAX_SITE_PICKER_BYTES) failures.push("3D 단지 모형과 디코더가 1.2 MiB 제한을 초과했습니다.");
+  if (totalBytes > MAX_TOTAL_BYTES) failures.push("전체 배포 파일이 100 MiB 제한을 초과했습니다.");
+  // Count only the allowlisted lazy model and decoder separately. Their
+  // viewer JS/CSS still count against the existing app budget.
+  const applicationBytes = totalBytes - documentArchive.bytes - sitePickerBytes;
   if (applicationBytes > MAX_DIST_BYTES) {
-    failures.push(`문서 PDF를 제외한 앱 크기 ${(applicationBytes / 1024 / 1024).toFixed(2)} MiB가 50 MiB 제한을 초과했습니다.`);
+    failures.push(`별도 예산 파일을 제외한 앱 크기 ${(applicationBytes / 1024 / 1024).toFixed(2)} MiB가 50 MiB 제한을 초과했습니다.`);
   }
   // The portal owns the root; the existing, single-copy app export stays nested.
   await requireFile(path.join(distRoot, "index.html"), "district portal", failures);
@@ -629,6 +655,8 @@ async function main() {
     mebibytes: Number((totalBytes / 1024 / 1024).toFixed(2)),
     applicationMebibytes: Number((applicationBytes / 1024 / 1024).toFixed(2)),
     applicationLimitMebibytes: 50,
+    sitePickerMebibytes: Number((sitePickerBytes / 1024 / 1024).toFixed(2)),
+    sitePickerLimitMebibytes: 1.2,
     documentMebibytes: Number((documentArchive.bytes / 1024 / 1024).toFixed(2)),
     documentLimitMebibytes: 50,
     limitMebibytes: 100,

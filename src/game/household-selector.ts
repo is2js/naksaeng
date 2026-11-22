@@ -20,7 +20,9 @@ import {
   type HouseholdVerificationRole,
 } from './household-verification';
 import { resetAllBunfirvilLocalData } from '../shared/storage';
+import type { BuildingMap } from '../site-preview/building-map';
 import '../styles/household-input.css';
+import '../styles/household-building-map.css';
 
 export const HOUSEHOLD_FLOORS = Array.from({ length: 25 }, (_, index) => 25 - index);
 
@@ -86,6 +88,28 @@ function buildingPicker(): string {
       <span class="household-building-number"><b>${building.buildingId}</b><small>동</small></span>
     </button>`;
   }).join('');
+}
+
+const selectableBuildingIds = new Set(BUNDANG_HOUSEHOLD_CATALOG.buildings.map(({ buildingId }) => buildingId));
+
+function buildingFromHash(hash: string): string | null {
+  const id = new URLSearchParams(hash.slice(1)).get('building');
+  return id && selectableBuildingIds.has(id) ? id : null;
+}
+
+function buildingMapPicker(): string {
+  const choices = [...selectableBuildingIds].map((id) =>
+    `<button type="button" data-map-building="${id}" aria-pressed="false">${id}동</button>`).join('');
+  return `<div id="household-building-map-stage" class="household-building-map-stage" hidden>
+    <div id="household-building-map-host" tabindex="-1"></div>
+    <aside class="household-building-map-list" aria-labelledby="household-building-map-list-title">
+      <h2 id="household-building-map-list-title">동 목록</h2>
+      <div class="household-building-map-choices" role="group" aria-label="단지 지도에서 고를 동">${choices}</div>
+    </aside>
+  </div>
+  <p id="household-building-map-fallback-notice" class="household-building-map-fallback-notice" role="status" hidden>
+    3D 단지 모형을 불러오지 못했습니다. 아래에서 동을 선택해 주세요.
+  </p>`;
 }
 
 export function householdStorageDialogMarkup(): string {
@@ -168,6 +192,9 @@ export function waitForHouseholdSelection(
 ): Promise<HouseholdSelectionResultV1> {
   return new Promise((resolve) => {
     let selected: HouseholdSelectionV1 | null = null;
+    const useBuildingMap = !shareAuthentication && new URLSearchParams(window.location.search).get('buildingPicker') !== 'cards';
+    const cardDescription = '먼저 확인할 동을 선택해 주세요. 다음 화면에서 해당 동의 세대를 선택할 수 있습니다.';
+    const mapDescription = '단지 모형에서 동을 누르고, 세대 선택 버튼을 눌러 다음 단계로 이동하세요.';
     mount.innerHTML = `<div class="household-selector-shell app-shell ${shareAuthentication ? 'is-share-authentication' : ''}">
       ${householdShellHeader(catalog.exportId, fallback, false, !shareAuthentication)}
       <main class="household-selector-main">
@@ -189,8 +216,9 @@ export function waitForHouseholdSelection(
             <span class="unit-51a"><i></i>51A</span><span class="unit-55a"><i></i>55A</span><span class="unit-55b"><i></i>55B</span><span class="unit-59a"><i></i>59A</span><span class="is-pilotis"><i>×</i>필로티</span>
           </div>
         </section>
-        <section id="household-building-picker" class="household-building-picker-panel">
-          <div class="household-building-picker">${buildingPicker()}</div>
+        <section id="household-building-picker" class="household-building-picker-panel ${useBuildingMap ? 'has-building-map-slot' : ''}">
+          ${useBuildingMap ? buildingMapPicker() : ''}
+          <div id="household-building-fallback" class="household-building-picker">${buildingPicker()}</div>
         </section>
         <section id="household-building-detail" class="household-building-detail" hidden>
           <header class="household-building-detail-head">
@@ -265,6 +293,90 @@ export function waitForHouseholdSelection(
     let entryRole: HouseholdVerificationRole = 'public';
     let verificationAttempt = 0;
     let verificationController: AbortController | null = null;
+    const cardPicker = mount.querySelector<HTMLElement>('#household-building-fallback')!;
+    const mapStage = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-stage') : null;
+    const mapHost = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-host') : null;
+    const fallbackNotice = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-fallback-notice') : null;
+    let buildingMap: BuildingMap | null = null;
+    let buildingMapEvents: AbortController | null = null;
+    let mapCandidateId: string | null = null;
+    let mapFailed = false;
+
+    const paintMapChoice = (): void => {
+      mapStage?.querySelectorAll<HTMLButtonElement>('[data-map-building]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.mapBuilding === mapCandidateId));
+      });
+    };
+
+    const selectMapCandidate = (id: string | null): void => {
+      if (id !== null && !selectableBuildingIds.has(id)) return;
+      mapCandidateId = id;
+      paintMapChoice();
+      buildingMap?.select(id);
+    };
+
+    const releaseBuildingMap = (): void => {
+      buildingMapEvents?.abort();
+      buildingMapEvents = null;
+      buildingMap?.dispose();
+      buildingMap = null;
+      if (mapStage) {
+        mapStage.hidden = true;
+        mapStage.classList.remove('is-preparing');
+      }
+      cardPicker.hidden = false;
+    };
+
+    const startBuildingMap = (): void => {
+      if (!mapHost?.isConnected || !mapStage || mapFailed || buildingMapEvents) return;
+      const events = new AbortController();
+      buildingMapEvents = events;
+      mapStage.inert = true;
+      mapStage.classList.add('is-preparing');
+      mapStage.hidden = false;
+      const onError = (): void => {
+        if (events.signal.aborted || picker.hidden) return;
+        const focusedMap = mapStage.contains(document.activeElement);
+        mapFailed = true;
+        releaseBuildingMap();
+        if (fallbackNotice) fallbackNotice.hidden = false;
+        description.textContent = cardDescription;
+        if (focusedMap) cardPicker.querySelector<HTMLButtonElement>(mapCandidateId
+          ? `[data-choose-building="${mapCandidateId}"]` : '[data-choose-building]')?.focus({ preventScroll: true });
+      };
+      void import('../site-preview/building-map').then(({ mountBuildingMap }) => {
+        if (events.signal.aborted) return;
+        const map = mountBuildingMap(mapHost, {
+          buildingIds: selectableBuildingIds,
+          selectedId: mapCandidateId,
+          signal: events.signal,
+          onSelect: selectMapCandidate,
+          onConfirm: (id) => { if (id === mapCandidateId) showBuilding(id, true); },
+          onReset: () => { mapCandidateId = null; paintMapChoice(); },
+          onReady: () => {
+            if (events.signal.aborted || picker.hidden) return;
+            const focusedCard = cardPicker.contains(document.activeElement);
+            mapStage.classList.remove('is-preparing');
+            mapStage.inert = false;
+            cardPicker.hidden = true;
+            description.textContent = mapDescription;
+            paintMapChoice();
+            if (focusedCard) mapHost.focus({ preventScroll: true });
+          },
+          onError,
+        });
+        if (events.signal.aborted) map.dispose();
+        else buildingMap = map;
+      }).catch(onError);
+    };
+
+    mapStage?.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-map-building]');
+      if (!button?.dataset.mapBuilding || !buildingMap) return;
+      selectMapCandidate(button.dataset.mapBuilding);
+      if (event.detail === 0) mapHost?.querySelector<HTMLButtonElement>('[data-site-confirm]')?.focus({ preventScroll: true });
+    });
+
     const mobileEntryMedia = window.matchMedia('(pointer: coarse), (max-width: 760px)');
     const inputViewportEvents = new AbortController();
     let inlineEntry = false;
@@ -436,7 +548,7 @@ export function waitForHouseholdSelection(
       title.textContent = '분당퍼스트빌리지 동 선택';
       description.textContent = shareAuthentication
         ? '공유 놀이터에서 사용할 동을 선택해 주세요. 세대 선택은 필요하지 않습니다.'
-        : '먼저 확인할 동을 선택해 주세요. 다음 화면에서 해당 동의 세대를 선택할 수 있습니다.';
+        : cardDescription;
       buildingStep.classList.add('is-current');
       buildingStep.classList.toggle('is-complete', Boolean(chosenBuildingId));
       buildingStep.setAttribute('aria-current', 'step');
@@ -449,6 +561,7 @@ export function waitForHouseholdSelection(
       nicknameStep.disabled = true;
       paintBuildingChoice();
       animatePanel(picker);
+      startBuildingMap();
       enter.disabled = true;
     };
 
@@ -456,6 +569,8 @@ export function waitForHouseholdSelection(
       const building = BUNDANG_HOUSEHOLD_CATALOG.buildings.find((entry) => entry.buildingId === buildingId);
       if (!building) return;
       chosenBuildingId = buildingId;
+      mapCandidateId = buildingId;
+      releaseBuildingMap();
       selected = null;
       resetNicknameVerification(true);
       if (shareAuthentication) {
@@ -662,14 +777,21 @@ export function waitForHouseholdSelection(
         showBuildingPicker();
         return;
       }
-      const buildingId = new URLSearchParams(window.location.hash.slice(1)).get('building');
+      const buildingId = buildingFromHash(window.location.hash);
       if (buildingId) showBuilding(buildingId, false);
       else showBuildingPicker();
     };
     window.addEventListener('popstate', onPopState);
     mount.querySelector<HTMLButtonElement>('#household-building-back')?.addEventListener('click', () => {
-      if (window.location.hash.startsWith('#building=')) history.back();
-      else showBuildingPicker();
+      if (history.state?.householdBuilding && history.state.householdBuilding === buildingFromHash(window.location.hash)) {
+        history.back();
+        return;
+      }
+      // A fresh #building link has no wizard stage in this tab's history.
+      if (buildingFromHash(window.location.hash)) {
+        history.replaceState({ householdStep: 'building' }, '', `${window.location.pathname}${window.location.search}`);
+      }
+      showBuildingPicker();
     });
     mount.querySelector<HTMLButtonElement>('#household-unit-back')?.addEventListener('click', () => {
       if (shareAuthentication) showBuildingPicker();
@@ -680,6 +802,7 @@ export function waitForHouseholdSelection(
       if ((!selected && !shareAuthentication) || !entryReady || !householdEntryNicknameIsValid(nickname)) return;
       invalidateVerification();
       operatorInput.value = '';
+      releaseBuildingMap();
       window.removeEventListener('popstate', onPopState);
       inputViewportEvents.abort();
       if (inputViewportFrame) cancelAnimationFrame(inputViewportFrame);
@@ -688,7 +811,7 @@ export function waitForHouseholdSelection(
 
     if (!shareAuthentication) bindHouseholdStorageControls(mount);
 
-    const initialBuilding = new URLSearchParams(window.location.hash.slice(1)).get('building');
+    const initialBuilding = buildingFromHash(window.location.hash);
     if (initialBuilding) showBuilding(initialBuilding, false);
     else showBuildingPicker();
   });

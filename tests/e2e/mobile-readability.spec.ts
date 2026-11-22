@@ -15,7 +15,8 @@ for (const width of [320, 390]) {
         }
       });
     });
-    await page.goto('./');
+    // The map gesture/layout itself is covered by household-building-map.spec.ts.
+    await page.goto('./?buildingPicker=cards');
     await page.locator('[data-choose-building="105"]').tap();
     const household = page.locator('.household-cell[data-building="105"][data-floor="25"][data-line="1"]');
     await expect(household).toBeVisible();

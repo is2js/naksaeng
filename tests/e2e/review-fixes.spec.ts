@@ -20,7 +20,7 @@ test('operator code, cross-type share membership and modal keyboard regression s
       status: operator ? 'operator' : member ? 'verified' : 'not_found', scope: input.action === 'verifyShareViewer' ? 'share' : 'playground',
       code: input.nickname === '운영테스트' && !operator ? 'operator_code_required' : memberIdentity && !member ? 'member_code_required' : undefined } });
   });
-  await page.goto('./?map=bundang-first-village-51a-prototype&variant=D');
+  await page.goto('./?map=bundang-first-village-51a-prototype&variant=D&buildingPicker=cards');
   await page.locator('[data-choose-building="105"]').click();
   await page.locator('[data-floor="25"][data-line="1"]').click();
   await page.locator('#household-nickname').fill('운영테스트');
@@ -66,7 +66,7 @@ test('operator code, cross-type share membership and modal keyboard regression s
   await expect(page.locator('#map-title')).toHaveText('운영테스트님의 51A타입 공유 놀이터');
   await expect(page.locator('.share-readonly-banner')).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('bunfirvil:household-verification:v1') || '{}').scope)).toBe('share');
-  await page.goto('./?map=bundang-first-village-51a-prototype&variant=D');
+  await page.goto('./?map=bundang-first-village-51a-prototype&variant=D&buildingPicker=cards');
   await expect(page.locator('[data-choose-building="105"]')).toBeVisible();
   expect(errors).toEqual([]);
 });

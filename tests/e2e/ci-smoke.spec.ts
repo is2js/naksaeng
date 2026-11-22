@@ -62,7 +62,8 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
-  await page.goto('./');
+  // Keep the legacy card UX covered alongside the production 3D picker spec.
+  await page.goto('./?buildingPicker=cards');
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://is2js.github.io/naksaeng/bunfirvil/og-playground-v3.jpg');
   const previewResponse = await page.request.get('og-playground-v3.jpg');
   expect(previewResponse.ok()).toBe(true);
@@ -103,7 +104,7 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('.household-building-row').first().locator('.household-building-card')).toHaveCount(3);
   await page.evaluate(() => sessionStorage.removeItem('bunfirvil:household-verification:v1'));
-  await page.goto('./');
+  await page.goto('./?buildingPicker=cards');
   await page.locator('[data-choose-building="105"]').click();
   await expect(page.getByRole('heading', { name: '105동 세대 선택' })).toBeVisible();
   await expect(page.locator('#household-step-unit')).toHaveAttribute('aria-current', 'step');
@@ -166,7 +167,7 @@ test('smokes household selection, deployed maps, read-only sharing, living-room 
   })).toEqual({ keys: ['authRevision', 'nickname', 'provider', 'role', 'schemaVersion', 'scope', 'verifiedAt'], schemaVersion: 1, provider: 'google-apps-script' });
 
   await page.evaluate(() => sessionStorage.removeItem('bunfirvil:household-verification:v1'));
-  await page.goto('./?map=bundang-first-village-55b-prototype&actor=200&variant=B');
+  await page.goto('./?map=bundang-first-village-55b-prototype&actor=200&variant=B&buildingPicker=cards');
   await expect(page.getByRole('heading', { name: '분당퍼스트빌리지 동 선택' })).toBeVisible();
   await page.locator('[data-choose-building="105"]').click();
   await page.locator('.household-cell[data-building="105"][data-floor="25"][data-line="1"]').click();

@@ -34,7 +34,7 @@ test('공개 입장 색상과 공개 공유·가이드·읽기전용 저장 보�
     } });
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('./');
+  await page.goto('./?buildingPicker=cards');
   await page.locator('[data-choose-building="105"]').click();
   await page.locator('.household-cell[data-building="105"][data-floor="19"][data-line="4"]').click();
   const nickname = page.locator('#household-nickname'), enter = page.locator('#household-enter');

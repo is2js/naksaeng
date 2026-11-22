@@ -1,0 +1,88 @@
+.household-building-picker-panel.has-building-map-slot { position: relative; }
+
+.household-building-map-stage {
+  --building-map-height: clamp(340px, 54svh, 500px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 142px);
+  align-items: start;
+  gap: 11px;
+  min-width: 0;
+}
+
+/* Keep dimensions measurable by WebGL without displacing the usable cards. */
+.household-building-map-stage.is-preparing {
+  position: absolute;
+  inset: 18px 18px auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#household-building-map-host { min-width: 0; }
+
+.household-building-map-list {
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(6, 17, 21, .68);
+}
+
+.household-building-map-list h2 {
+  margin: 1px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.household-building-map-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.household-building-map-choices button {
+  min-width: 0;
+  min-height: 37px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #10252a;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.household-building-map-choices button:hover,
+.household-building-map-choices button:focus-visible {
+  border-color: var(--mint);
+  outline: none;
+  color: var(--mint-bright);
+}
+
+.household-building-map-choices button[aria-pressed="true"] {
+  border-color: var(--mint);
+  color: #102d26;
+  background: #a8e9d1;
+}
+
+.household-building-map-fallback-notice {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  .household-building-map-stage {
+    --building-map-height: clamp(310px, 53svh, 460px);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .household-building-map-list { display: none; }
+}
+
+@media (max-width: 719px) {
+  .household-building-map-stage.is-preparing { inset: 12px 12px auto; }
+}

@@ -47,7 +47,7 @@ test('공개 입장과 회원 전용 기능·체험 평면 안내·공유 제한
   });
 
   await test.step('실제 위저드에서 미등록·통신 장애에도 공개 입장하며 입력을 잠그지 않는다', async () => {
-    await page.goto('./');
+    await page.goto('./?buildingPicker=cards');
     await page.locator('[data-choose-building="105"]').click();
     await page.locator('.household-cell[data-building="105"][data-floor="19"][data-line="3"]').click();
     const nickname = page.locator('#household-nickname');

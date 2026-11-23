@@ -1,0 +1,133 @@
+.site-facility-annotations, .site-facility-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.site-facility-leaders line { stroke-width: 1; opacity: .82; }
+.site-facility-label {
+  position: absolute;
+  display: inline-flex;
+  min-height: 21px;
+  align-items: center;
+  padding: 1px 5px;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--facility-neon) 67%, #172925);
+  border-inline-start-width: 2px;
+  border-radius: 5px;
+  background: #0b1517f4;
+  color: #f6fffb;
+  font: 760 10px/1.25 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 1px 5px #061214b8, 0 0 6px color-mix(in srgb, var(--facility-neon) 25%, transparent);
+  user-select: none;
+  pointer-events: none;
+}
+.site-facility-controls {
+  position: absolute;
+  z-index: 2;
+  top: 57px;
+  left: 9px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  max-width: calc(100% - 18px);
+  color: #e5f6ed;
+  font: 720 11px/1.25 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  pointer-events: none;
+}
+.preview-stage .site-facility-controls { top: 73px; left: 14px; }
+.site-facility-controls button:focus-visible { outline: 2px solid #adf5dc; outline-offset: 2px; }
+.site-facility-controls button {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+.site-facility-trigger, .site-facility-panel {
+  border: 1px solid #9dc6b188;
+  border-radius: 8px;
+  background: #102825f5;
+  color: inherit;
+  box-shadow: 0 2px 8px #071c18ae;
+  pointer-events: auto;
+}
+.site-facility-controls .site-facility-trigger {
+  --facility-neon: #d5e5f9;
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+.site-facility-trigger:hover, .site-facility-trigger[aria-expanded='true'], .site-facility-controls[data-filtered='true'] .site-facility-trigger {
+  border-color: #d2f5e5;
+  background: #28463d;
+}
+.site-facility-controls[data-filtered='true'] .site-facility-trigger { --facility-neon: #71f5c3; }
+.site-facility-caret {
+  width: 5px;
+  height: 5px;
+  margin: -2px 1px 0 2px;
+  transform: rotate(45deg);
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+}
+.site-facility-trigger[aria-expanded='true'] .site-facility-caret { transform: translateY(2px) rotate(225deg); }
+.site-facility-panel { max-width: 100%; padding: 6px; }
+.site-facility-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 5px;
+  padding-inline: 2px;
+  color: #b7cfc5;
+  font-size: 10px;
+}
+.site-facility-panel-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+.site-facility-panel button {
+  --facility-neon: #b7f6db;
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: #19312d;
+  color: #f1fff7;
+  text-align: left;
+}
+.site-facility-panel-head button { min-height: 23px; }
+.site-facility-panel button:hover, .site-facility-panel button[aria-pressed='true'] {
+  border-color: var(--facility-neon);
+  background: color-mix(in srgb, var(--facility-neon) 14%, #172825);
+}
+.site-facility-controls svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--facility-neon);
+}
+.site-facility-controls path {
+  fill: currentColor;
+  fill-opacity: .32;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .site-facility-label { min-height: 19px; font-size: 9px; }
+  .site-facility-controls .site-facility-trigger { min-height: 37px; }
+  .site-facility-panel-list { font-size: 10px; }
+  .site-facility-panel-list button { min-height: 31px; }
+}
+@media (max-width: 585px) {
+  .preview-stage .site-facility-controls { top: 60px; left: 9px; }
+}

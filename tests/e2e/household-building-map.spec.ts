@@ -147,6 +147,40 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
   await expect(page).toHaveURL(/#building=105$/);
 });
 
+test('facility legend works on a touch viewport without moving the camera or selecting a building', async ({ browser }, testInfo) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  try {
+    await page.goto('./');
+    await expect(map(page)).toBeVisible({ timeout: 30_000 });
+    await expectOverview(page);
+    const legend = map(page).getByRole('button', { name: '시설 범례' });
+    await expect(legend).toHaveAttribute('aria-expanded', 'false');
+    await expect(map(page).locator('[data-site-facility-label]')).toHaveCount(35);
+    await page.screenshot({ path: testInfo.outputPath('mobile-facilities.png'), animations: 'disabled' });
+    await legend.tap();
+    const panel = map(page).locator('[data-site-facility-panel]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button')).toHaveCount(12);
+    const elevator = panel.getByRole('button', { name: '외부 E/V' });
+    await elevator.tap();
+    await expect(panel).toBeHidden();
+    await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(map(page).locator('[data-site-facility-label]:visible:not([data-facility-kind="elevator"])')).toHaveCount(0);
+    await expect.poll(() => map(page).locator('[data-facility-kind="elevator"]:visible').count()).toBeGreaterThan(0);
+    await expectOverview(page);
+    await expect(action(page)).toBeHidden();
+    await legend.tap();
+    await panel.getByRole('button', { name: '전체 보기' }).tap();
+    await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(panel).toBeHidden();
+    await marker(page, '105').tap();
+    await expectFocusedBuilding(page, '105');
+  } finally {
+    await context.close();
+  }
+});
+
 async function pinchFromOpenCanvas(page: Page) {
   const bounds = await canvas(page).boundingBox();
   expect(bounds).not.toBeNull();

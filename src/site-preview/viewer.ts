@@ -10,6 +10,9 @@ import dracoWasm from 'three/addons/libs/draco/gltf/draco_decoder.wasm?url';
 import dracoWasmWrapper from 'three/addons/libs/draco/gltf/draco_wasm_wrapper.js?url';
 import modelUrl from './assets/bunfirvil-site-v9.glb?url';
 import { createBuildingOutline } from './building-outline';
+import { createGroundFacilities } from './facility-ground';
+import { SITE_FACILITIES } from './facility-markers';
+import { createFacilityOverlay } from './facility-overlay';
 
 const decoderUrls: Record<string, string> = {
   'draco_decoder.wasm': dracoWasm,
@@ -95,6 +98,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
   const events = new AbortController();
   const signal = events.signal;
   let renderer: WebGLRenderer | undefined;
+  let destroyFacilities: (() => void) | undefined;
   try {
     options.signal.throwIfAborted();
     renderer = new WebGLRenderer({ antialias: true, alpha: true });
@@ -221,6 +225,10 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     const motionOffset = new Vector3();
     const motionTarget = new Vector3();
     const motionOrbit = new Spherical();
+    const groundFacilities = createGroundFacilities(model, owners);
+    destroyFacilities = () => groundFacilities.dispose();
+    const facilityOverlay = createFacilityOverlay(options.viewport, SITE_FACILITIES, { onVisibilityChange: queueRender });
+    destroyFacilities = () => { facilityOverlay.dispose(); groundFacilities.dispose(); };
 
     function queueRender(): void {
       if (!disposed && !paused && !document.hidden && !renderFrame) renderFrame = requestAnimationFrame(render);
@@ -322,6 +330,8 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       } else {
         delete canvas.dataset.outlineBuilding;
       }
+      const facilityPoints = groundFacilities.draw(gpu, camera, w, h, camera.zoom > initialPose.zoom * 1.5,
+        facilityOverlay.isKindVisible);
       canvas.dataset.cameraPhase = cameraMove ? 'transition' : cameraPhase;
       canvas.dataset.zoom = camera.zoom.toFixed(3);
       options.onZoom?.(camera.zoom, initialPose.zoom);
@@ -332,6 +342,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       options.compass.dataset.bearing = String(bearing);
       options.compass.setAttribute('aria-label', bearing ? `나침반: 북쪽 방향 ${bearing}도` : '나침반: 북쪽 위');
       placeMarkers();
+      facilityOverlay.update(facilityPoints, w, h);
       if (cameraMove) queueRender();
     }
 
@@ -420,6 +431,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let suppressClick = false;
     const capture = { capture: true, signal };
     options.viewport.addEventListener('pointerdown', (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-site-facility-controls]')) return;
       if (!activePointers.size) {
         suppressClick = false;
         const marker = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-building-marker]') : null;
@@ -538,6 +550,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         controls.removeEventListener('start', stopCameraMove);
         controls.removeEventListener('change', queueRender);
         controls.dispose();
+        destroyFacilities?.();
         outline?.dispose();
         releaseModel(model);
         sun.shadow.dispose();
@@ -548,6 +561,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     };
   } catch (error) {
     events.abort();
+    destroyFacilities?.();
     renderer?.dispose();
     releaseModel(model);
     throw error;

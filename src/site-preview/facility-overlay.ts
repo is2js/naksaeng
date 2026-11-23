@@ -196,8 +196,16 @@ export function createFacilityOverlay(
 
   function isKindVisible(kind: FacilityKind): boolean { return filter === null || filter === kind; }
 
-  function update(points: readonly FacilityScreenPoint[], width: number, height: number): void {
+  function update(points: readonly FacilityScreenPoint[], width: number, height: number, selectionActive = false): void {
     leaders.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const compact = width < 520;
+    const quiet = selectionActive && filter === null;
+    const fontSize = quiet ? (compact ? 8 : 8.5) : (compact ? 8.5 : 9.5);
+    annotations.toggleAttribute('data-map-focus', quiet);
+    const fontValue = `${fontSize}px`;
+    if (annotations.style.getPropertyValue('--facility-label-size') !== fontValue) {
+      annotations.style.setProperty('--facility-label-size', fontValue);
+    }
     const byId = new Map(points.map((point) => [point.id, point]));
     const occupied: Rect[] = [
       { x: 0, y: 0, w: 74, h: 72 },
@@ -211,8 +219,7 @@ export function createFacilityOverlay(
       const x = parseFloat(badge.style.left), y = parseFloat(badge.style.top);
       if (Number.isFinite(x) && Number.isFinite(y)) occupied.push({ x: x - 27, y: y - 15, w: 54, h: 30 });
     }
-    const compact = width < 520;
-    const labelHeight = compact ? 19 : 21;
+    const labelHeight = Math.ceil(fontSize * 1.3);
 
     for (const { id, kind, label } of ordered) {
       const { tag, line } = labels.get(id)!;
@@ -221,10 +228,13 @@ export function createFacilityOverlay(
       // Long legend names are already visible in the key. Shorten their repeat
       // labels on narrow maps so their anchors stay legible around tower badges.
       const text = compact && UTILITY.has(kind) ? FACILITY_STYLES[kind].shortLabel : label;
-      if (point?.visible && isKindVisible(kind) && (!UTILITY.has(kind) || point.emphasized || filter === kind)) {
+      // Keep utility symbols, but remove their repeated text when focusing a
+      // building unless the visitor explicitly asked for that facility kind.
+      const nameVisible = !UTILITY.has(kind) || filter === kind || (!quiet && point?.emphasized);
+      if (point?.visible && isKindVisible(kind) && nameVisible) {
         const { screenX: x, screenY: y } = point;
         if (x >= 3 && y >= 3 && x <= width - 3 && y <= height - 3) {
-          const labelWidth = 14 + [...text].reduce((sum, letter) => sum + (letter.charCodeAt(0) > 127 ? (compact ? 9.7 : 10.8) : 6.3), 0);
+          const labelWidth = 6 + [...text].reduce((sum, letter) => sum + fontSize * (letter.charCodeAt(0) > 127 ? 1.04 : .66), 0);
           const centered = x - labelWidth / 2;
           // Try the shortest leaders first. Leave unplaceable labels as ground symbols.
           const candidates = [[centered, y - labelHeight - 7], [centered, y + 8], [x + 9, y - labelHeight / 2],

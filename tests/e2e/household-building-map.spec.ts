@@ -115,6 +115,11 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
 
   await marker(page, '105').click();
   await expectFocusedBuilding(page, '105');
+  await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2 daycare-104');
+  const facilityName = map(page).locator('[data-site-facility-label]:visible').first();
+  await expect(facilityName).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(facilityName).toHaveCSS('font-size', '8.5px');
+  await expect(map(page).locator('[data-facility-kind="elevator"]:visible')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('desktop-105-outline.png'), animations: 'disabled' });
   await expect(step(page, 'building')).toHaveAttribute('aria-current', 'step');
   await expect(page.locator('#household-building-detail')).toBeHidden();
@@ -157,6 +162,7 @@ test('facility legend works on a touch viewport without moving the camera or sel
     const legend = map(page).getByRole('button', { name: '시설 범례' });
     await expect(legend).toHaveAttribute('aria-expanded', 'false');
     await expect(map(page).locator('[data-site-facility-label]')).toHaveCount(35);
+    await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2 daycare-104');
     await page.screenshot({ path: testInfo.outputPath('mobile-facilities.png'), animations: 'disabled' });
     await legend.tap();
     const panel = map(page).locator('[data-site-facility-panel]');
@@ -166,10 +172,17 @@ test('facility legend works on a touch viewport without moving the camera or sel
     await elevator.tap();
     await expect(panel).toBeHidden();
     await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(canvas(page)).toHaveAttribute('data-facility-areas', '');
     await expect(map(page).locator('[data-site-facility-label]:visible:not([data-facility-kind="elevator"])')).toHaveCount(0);
     await expect.poll(() => map(page).locator('[data-facility-kind="elevator"]:visible').count()).toBeGreaterThan(0);
     await expectOverview(page);
     await expect(action(page)).toBeHidden();
+    await legend.tap();
+    await panel.getByRole('button', { name: '커뮤니티센터' }).tap();
+    await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2');
+    await legend.tap();
+    await panel.getByRole('button', { name: /어린이집/ }).tap();
+    await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'daycare-104');
     await legend.tap();
     await panel.getByRole('button', { name: '전체 보기' }).tap();
     await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'false');

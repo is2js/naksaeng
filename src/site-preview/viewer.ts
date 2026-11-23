@@ -330,8 +330,9 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       } else {
         delete canvas.dataset.outlineBuilding;
       }
-      const facilityPoints = groundFacilities.draw(gpu, camera, w, h, camera.zoom > initialPose.zoom * 1.5,
+      const { points: facilityPoints, areaIds } = groundFacilities.draw(gpu, camera, w, h, camera.zoom > initialPose.zoom * 1.5,
         facilityOverlay.isKindVisible);
+      canvas.dataset.facilityAreas = areaIds.join(' ');
       canvas.dataset.cameraPhase = cameraMove ? 'transition' : cameraPhase;
       canvas.dataset.zoom = camera.zoom.toFixed(3);
       options.onZoom?.(camera.zoom, initialPose.zoom);
@@ -342,7 +343,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       options.compass.dataset.bearing = String(bearing);
       options.compass.setAttribute('aria-label', bearing ? `나침반: 북쪽 방향 ${bearing}도` : '나침반: 북쪽 위');
       placeMarkers();
-      facilityOverlay.update(facilityPoints, w, h);
+      facilityOverlay.update(facilityPoints, w, h, selectedId !== null);
       if (cameraMove) queueRender();
     }
 

@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { FACILITY_STYLES, type FacilityScreenPoint } from './facility-overlay';
 import { SITE_FACILITIES } from './facility-markers';
+import { createFacilityFootprint } from './facility-footprints';
 
 type Facility = typeof SITE_FACILITIES[number];
 type Shape = typeof FACILITY_STYLES[Facility['kind']]['shape'];
@@ -59,6 +60,7 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   const terraces = surfaceMeshes(model, TERRACE);
   const entrances = surfaceMeshes(model, ENTRANCE);
   const daycare = surfaceMeshes(model, DAYCARE);
+  const siteSurfaces = [...terraces, ...ground];
   const down = new Raycaster(new Vector3(), new Vector3(0, -1, 0), 0, 210);
   const anchors = SITE_FACILITIES.map((facility) => {
     const { x, z, kind } = facility;
@@ -66,19 +68,27 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
     const meshes = kind === 'daycare' ? [...daycare, ...ground]
       : kind === 'security' ? [...entrances, ...ground]
         : kind === 'guesthouse' || kind === 'community' || kind === 'senior' || kind === 'elevator'
-          ? [...terraces, ...ground] : ground;
+          ? siteSurfaces : ground;
     const surfaceY = ('y' in facility ? facility.y : undefined) ?? down.intersectObjects(meshes, false)[0]?.point.y ?? .48;
     return { facility, xyz: new Vector3(x, surfaceY + .16, z) };
   });
+  const areas = new Map(anchors.flatMap(({ facility }) => {
+    const mesh = createFacilityFootprint(facility, siteSurfaces, daycare);
+    if (!mesh) return [];
+    scene.add(mesh);
+    return [[facility.id, { kind: facility.kind, mesh }]] as const;
+  }));
+  const pinAnchors = anchors.filter(({ facility }) => !areas.has(facility.id));
   const batches = new Map<Facility['kind'], { mesh: InstancedMesh; sites: typeof anchors }>();
   const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide, forceSinglePass: true });
-  for (const anchor of anchors) {
+  for (const anchor of pinAnchors) {
     const kind = anchor.facility.kind;
     let batch = batches.get(kind);
     if (!batch) {
       const style = FACILITY_STYLES[kind];
-      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color), material, anchors.filter((item) => item.facility.kind === kind).length);
+      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color), material, pinAnchors.filter((item) => item.facility.kind === kind).length);
       mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
       scene.add(mesh);
       batch = { mesh, sites: [] };
       batches.set(kind, batch);
@@ -107,24 +117,30 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
       kindVisible: (kind: Facility['kind']) => boolean,
     ) {
       const points: FacilityScreenPoint[] = [];
-      let hasMarks = false;
+      const areaIds: string[] = [];
       const metersPerCssPixel = (camera.top - camera.bottom) / (camera.zoom * height);
       const radius = Math.max(1.1, Math.min(8.5, metersPerCssPixel * (width <= 520 ? 5.9 : 6.8)));
+      for (const [id, { mesh, kind }] of areas) {
+        mesh.visible = kindVisible(kind);
+        if (mesh.visible) areaIds.push(id);
+      }
+      let hasMarks = areaIds.length > 0;
       for (const [kind, { mesh, sites }] of batches) {
         mesh.visible = kindVisible(kind);
         if (!mesh.visible) continue;
         hasMarks = true;
-        sites.forEach(({ xyz, facility }, index) => {
-          const scale = radius * (kind === 'main-entrance' || kind === 'community' || kind === 'daycare' ? 1.13 : 1);
-          mesh.setMatrixAt(index, matrix.makeScale(scale, 1, scale).setPosition(xyz));
-          label.copy(xyz).y += .42;
-          projected.copy(label).project(camera);
-          const screenX = (projected.x * .5 + .5) * width, screenY = (.5 - projected.y * .5) * height;
-          const visible = Math.abs(projected.z) <= 1 && screenX >= 4 && screenX <= width - 4
-            && screenY >= 4 && screenY <= height - 4 && !isOccluded(label, camera);
-          points.push({ id: facility.id, screenX, screenY, visible, emphasized });
-        });
+        const scale = radius * (kind === 'main-entrance' ? 1.13 : 1);
+        sites.forEach(({ xyz }, index) => mesh.setMatrixAt(index, matrix.makeScale(scale, 1, scale).setPosition(xyz)));
         mesh.instanceMatrix.needsUpdate = true;
+      }
+      for (const { xyz, facility } of anchors) {
+        if (!kindVisible(facility.kind)) continue;
+        label.copy(xyz).y += .42;
+        projected.copy(label).project(camera);
+        const screenX = (projected.x * .5 + .5) * width, screenY = (.5 - projected.y * .5) * height;
+        const visible = Math.abs(projected.z) <= 1 && screenX >= 4 && screenX <= width - 4
+          && screenY >= 4 && screenY <= height - 4 && !isOccluded(label, camera);
+        points.push({ id: facility.id, screenX, screenY, visible, emphasized });
       }
       if (hasMarks) {
         const autoClear = renderer.autoClear;
@@ -133,10 +149,11 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
           renderer.render(scene, camera);
         } finally { renderer.autoClear = autoClear; }
       }
-      return points;
+      return { points, areaIds };
     },
     dispose() {
       for (const { mesh } of batches.values()) { mesh.dispose(); mesh.geometry.dispose(); }
+      for (const { mesh } of areas.values()) { mesh.geometry.dispose(); mesh.material.dispose(); }
       material.dispose();
     },
   };

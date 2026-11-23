@@ -75,6 +75,29 @@ describe('page 5 facility plans', () => {
     expect(byId(first,'entry').center[0]).toBeGreaterThan(byId(first,'nursery-sw').center[0]);
   });
 
+  it('opens the 1F daycare directly from its east porch into the vestibule and then into the central hall', () => {
+    const [first, second] = FACILITY_DETAIL_PLANS['daycare-104'].floors;
+    const vestibule = byId(first, 'entry');
+    const hall = byId(first, 'hall-1');
+    const midpoint = (a: FacilityPoint, b: FacilityPoint): FacilityPoint => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const exteriorIds = new Set(first.walls.filter(wall => wall.exterior).map(wall => wall.id));
+    const doors = first.openings.filter(door => door.kind === 'door' && exteriorIds.has(door.wallId));
+    expect(doors).toHaveLength(1);
+    const [door] = doors;
+    const width = distance(door.start, door.end);
+    const [x, z] = midpoint(door.start, door.end);
+    // +X is real east and -Z north for both the district and the cutaway.
+    expect((door.end[1] - door.start[1]) / width).toBeCloseTo(1, 7);
+    expect((door.end[0] - door.start[0]) / width).toBeCloseTo(0, 7);
+    expect(contains([x - .3, z], vestibule.polygon)).toBe(true);
+    expect(contains([x + .3, z], first.outline)).toBe(false);
+    expect(first.openings.some(opening => {
+      const passage = midpoint(opening.start, opening.end);
+      return opening.kind === 'passage' && contains(passage, vestibule.polygon) && contains(passage, hall.polygon);
+    })).toBe(true);
+    for (const core of ['stairs', 'elevator']) expect(distance(byId(first, core).center, byId(second, core).center)).toBeLessThan(.35);
+  });
+
   it('keeps label anchors inside each space and windows and doors collinear and within their wall', () => {
     for (const { floors } of Object.values(FACILITY_DETAIL_PLANS)) for (const floor of floors) {
       expect(new Set(floor.rooms.map(({ id }) => id)).size).toBe(floor.rooms.length);

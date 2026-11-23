@@ -311,6 +311,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
 
     function returnFromFacility(visit: FacilityVisit, failed = false): void {
       if (disposed || facilityVisit !== visit || visit.returning) return;
+      const explored = Boolean(visit.detail) && !failed;
       visit.returning = true;
       visit.failed = failed;
       visit.trigger.removeAttribute('aria-busy');
@@ -318,7 +319,13 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       visit.detail = undefined;
       facilityStatus.hidden = true;
       setFacilityMode('returning');
-      tweenTo(visit.before, visit.previousPhase);
+      if (explored) {
+        // Keep the district camera at the zoomed facility approach. The
+        // cutaway has its own camera; orbit/dolly inside shouldn't move the map.
+        stopCameraMove();
+      } else {
+        tweenTo(visit.before, visit.previousPhase);
+      }
     }
 
     function finishFacilityMove(): void {

@@ -70,6 +70,8 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
   const wallCap = material('#a6967f');
   const trim = material('#8d7966');
   const metal = material('#5f7470');
+  const porchThreshold = material('#928777');
+  const porchFrame = material('#4b4c44');
   const glass = material('#7cadb3');
   glass.transparent = true;
   glass.opacity = .58;
@@ -241,7 +243,8 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
       paint.set(room.kind, pattern);
       textures.add(pattern);
     }
-    const color = room.id === 'sports-court' ? '#548e6c' : room.label.includes('보육실') ? '#b6c8ad' : palette[room.kind];
+    const color = room.id === 'sports-court' ? '#548e6c' : room.id === 'entry' ? '#b8b2a3'
+      : room.label.includes('보육실') ? '#b6c8ad' : palette[room.kind];
     const mat = new MeshStandardMaterial({ color, map: pattern, roughness: .85, side: DoubleSide });
     materials.add(mat);
     const surface = addMesh(new ShapeGeometry(shapeOf(room.polygon)).rotateX(-Math.PI / 2), mat);
@@ -301,6 +304,11 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
         box(mid, top - .027, 0, length, .054, thickness * .86, metal, group);
         const divisions = Math.max(1, Math.round(length / 1.55));
         for (let i = 0; i <= divisions; i++) box(a + length * i / divisions, (sill + top) / 2, 0, .05, top - sill, thickness * .84, metal, group);
+      } else if (floor.id === '1f' && wall.exterior && opening.kind === 'door') {
+        // The daycare portico is roofless in the cutaway: show its stone sill
+        // and dark sides, but keep the doorway itself visibly passable.
+        box(mid, .04, 0, length, .052, thickness * 2.25, porchThreshold, group);
+        for (const x of [a + .042, b - .042]) box(x, height / 2, 0, .084, height, thickness * 1.22, porchFrame, group);
       } else {
         box(mid, .035, 0, length, .042, thickness * 1.05, trim, group);
         if (opening.kind === 'door') for (const x of [a + .028, b - .028]) box(x, height / 2, 0, .058, height, thickness * 1.07, trim, group);

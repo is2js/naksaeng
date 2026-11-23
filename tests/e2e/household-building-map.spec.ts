@@ -78,6 +78,20 @@ async function zoom(page: Page): Promise<number> {
   return Number(await canvas(page).getAttribute('data-zoom'));
 }
 
+async function readFacilityApproach(page: Page) {
+  return {
+    target: (await canvas(page).getAttribute('data-camera-target'))!,
+    zoom: await zoom(page),
+  };
+}
+
+async function expectFacilityApproach(page: Page, approach: Awaited<ReturnType<typeof readFacilityApproach>>) {
+  await expect(canvas(page)).toHaveAttribute('data-camera-phase', 'manual');
+  await expect(canvas(page)).toHaveAttribute('data-camera-target', approach.target);
+  await expect.poll(() => zoom(page)).toBeCloseTo(approach.zoom, 3);
+  await expect(reset(page)).toBeVisible();
+}
+
 async function expectOverview(page: Page) {
   await expect(canvas(page)).toHaveAttribute('data-camera-phase', 'overview');
   await expect(map(page).locator('[data-site-compass]')).toHaveAttribute('data-bearing', '0');
@@ -219,6 +233,7 @@ test('facility legend works on a touch viewport without moving the camera or sel
     await communityTwo.tap();
     const detail = await expectInlineFacility(page, 'community-2', 'b1', before);
     const room = detail.locator('button[data-facility-room]:visible:not([data-unplaced])').first();
+    const communityApproach = await readFacilityApproach(page);
     const name = (await room.textContent())!.trim();
     expect(name).not.toHaveLength(0);
     await room.tap();
@@ -227,15 +242,22 @@ test('facility legend works on a touch viewport without moving the camera or sel
     await detail.locator('[data-facility-return]').tap();
     await expect(detail).toHaveCount(0);
     await expect(page).toHaveURL(before);
+    await expectFacilityApproach(page, communityApproach);
+    await map(page).locator('[data-site-zoom="out"]').tap();
+    await expect.poll(() => zoom(page)).toBeLessThan(communityApproach.zoom);
+    await reset(page).tap();
     await expectOverview(page);
 
     // The third detail is also reachable directly from the unzoomed 390px overview.
     await facilityTrigger(page, 'daycare-104').tap();
     const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+    const schoolApproach = await readFacilityApproach(page);
     await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).tap();
     await expect(school).toHaveAttribute('data-active-facility-floor', '2f');
     await school.locator('[data-facility-return]').tap();
     await expect(school).toHaveCount(0);
+    await expectFacilityApproach(page, schoolApproach);
+    await reset(page).tap();
     await expectOverview(page);
     await marker(page, '105').tap();
     await expectFocusedBuilding(page, '105');
@@ -267,7 +289,7 @@ test('desktop site right click keeps the selection, right drag pans, and the res
   await expectOverview(page);
 });
 
-test('all three facilities open in the same map; daycare stairs change floors and returning keeps the site pose', async ({ page }, testInfo) => {
+test('all three facilities open in the same map; daycare stairs change floors and returning keeps the facility zoom', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto('./');
   await expectOverview(page);
@@ -277,21 +299,27 @@ test('all three facilities open in the same map; daycare stairs change floors an
   await communityOne.click();
   const one = await expectInlineFacility(page, 'community-1', 'b1', before);
   await expect.poll(() => zoom(page)).toBeGreaterThan(overviewZoom * 1.5);
+  const firstApproach = await readFacilityApproach(page);
   await one.locator('button[data-facility-room="fitness"]').click();
   await expect(one.locator('.facility-detail-current-name')).toHaveText('피트니스');
   await one.screenshot({ path: testInfo.outputPath('community-1-detail.png'), animations: 'disabled' });
   await one.locator('[data-facility-return]').click();
   await expect(one).toHaveCount(0);
+  await expectFacilityApproach(page, firstApproach);
+  await reset(page).click();
   await expectOverview(page);
   const communityTwo = facilityTrigger(page, 'community-2');
   await communityTwo.click();
   const two = await expectInlineFacility(page, 'community-2', 'b1', before);
+  const secondApproach = await readFacilityApproach(page);
   await two.locator('button[data-facility-room="sports-court"]').click();
   await expect(two.locator('.facility-detail-current-name')).toHaveText('스포츠코트');
   await two.screenshot({ path: testInfo.outputPath('community-2-detail.png'), animations: 'disabled' });
   await page.keyboard.press('Escape');
   await expect(two).toHaveCount(0);
   await expect(communityTwo).toBeFocused();
+  await expectFacilityApproach(page, secondApproach);
+  await reset(page).click();
   await expectOverview(page);
 
   await page.locator('[data-map-building="109"]').click();
@@ -308,10 +336,11 @@ test('all three facilities open in the same map; daycare stairs change floors an
   const daycare = facilityTrigger(page, 'daycare-104');
   await expect(daycare).toBeVisible();
   await map(page).screenshot({ path: testInfo.outputPath('daycare-exterior.png'), animations: 'disabled' });
-  const previousTarget = (await canvas(page).getAttribute('data-camera-target'))!;
-  const previousZoom = await zoom(page);
+  const previousTarget = await canvas(page).getAttribute('data-camera-target');
   await daycare.click();
   const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+  const schoolApproach = await readFacilityApproach(page);
+  expect(schoolApproach.target).not.toBe(previousTarget);
   await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).click();
   await expect(school).toHaveAttribute('data-active-facility-floor', '2f');
   await school.getByRole('button', { name: /^교사실$/ }).click();
@@ -322,8 +351,7 @@ test('all three facilities open in the same map; daycare stairs change floors an
   await school.locator('[data-facility-return]').click();
   await expect(school).toHaveCount(0);
   await expect(canvas(page)).toHaveAttribute('data-outline-building', '104');
-  await expect(canvas(page)).toHaveAttribute('data-camera-target', previousTarget);
-  await expect.poll(() => zoom(page)).toBeCloseTo(previousZoom, 3);
+  await expectFacilityApproach(page, schoolApproach);
   await expect(action(page)).toHaveText(/104동 세대 선택/);
   await expect(page).toHaveURL(before);
 });

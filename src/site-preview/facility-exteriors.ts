@@ -340,19 +340,22 @@ function daycareEntrance(model: Object3D): void {
   if (!original) return;
   const mid = plan(428, 581);
   const angle = 46 * Math.PI / 180;
-  const across: XZ = [Math.cos(angle), -Math.sin(angle)];
-  const outward: XZ = [Math.sin(angle), Math.cos(angle)];
-  const at = (x: number, z: number): XZ => add(add(mid, across, x), outward, z);
+  const longSide: XZ = [Math.cos(angle), -Math.sin(angle)];
+  const southFace: XZ = [Math.sin(angle), Math.cos(angle)];
+  const halfWidth = 53 * .52 / 2, halfDepth = 30 * .52 / 2;
   original.traverse(object => {
     if (!isMesh(object)) return;
     const name = finishName(object);
     if (/Gable_Cladding|Deep_Frames/.test(name)) object.visible = false;
     if (/Amenity_Limestone/.test(name)) {
-      // The baked shallow flat canopy alone occupies this narrow height/projecting band.
+      // Suppress only the old south-side flat canopy. The solid stone body
+      // behind it and the complete two-floor roof remain as baked.
       keepTriangles(object, (...points) => !points.every(p => {
         const x = p.x - mid[0], z = p.z - mid[1];
-        const depth = x * outward[0] + z * outward[1];
-        return p.y >= 4.60 && p.y <= 4.94 && depth >= 6.3 && depth <= 12.1;
+        const depth = x * southFace[0] + z * southFace[1];
+        const along = x * longSide[0] + z * longSide[1];
+        return p.y >= 4.60 && p.y <= 4.94 && depth >= 5.42 && depth <= 11.82
+          && along >= -7.22 && along <= -3.24;
       }));
     }
   });
@@ -360,27 +363,58 @@ function daycareEntrance(model: Object3D): void {
   group.name = DAYCARE;
   group.userData.castsSiteShadow = true;
   const batch = new SurfaceBatch();
-  const center = -5.1, x0 = center - 4.20, x1 = center + 4.20;
-  const front = 10.62, rear = 6.35, eave = 5.49, ridge = 6.9, ground = 1.65;
-  const level = (x: number): number => eave + (ridge - eave) * (1 - Math.abs(x - center) / (x1 - center));
-  batch.prism('limestone', 'path', rectangular(at, x0 - .20, rear, x1 + .20, front + 1.08), ground, ground + .14);
-  const sill = ground + .15;
-  // Projecting charcoal standing-seam gable. The two-storey limestone body stays intact.
-  for (const x of [x0, x1]) batch.wall('zinc', at(x, rear), at(x, front), sill, eave);
-  const portalLeft = center - 1.67, portalRight = center + 1.67, lintel = 4.09;
+  // In north-up coordinates X is east and Z is south. Chamfer the junction
+  // into the diagonal limestone body, but set the entry/front span along
+  // north–south so the actual threshold faces +X, not the old south wing.
+  const east = add(add(mid, longSide, halfWidth), southFace, halfDepth);
+  const at = (offset: number, depth: number): XZ => [east[0] + depth, east[1] + offset];
+  const rear = (offset: number): number => Math.min(
+    -offset * longSide[1] / longSide[0], -offset * southFace[1] / southFace[0],
+  ) - .24;
+  const center = 0, x0 = -3.10, x1 = 3.10;
+  const front = 2.74, eave = 5.22, ridge = 6.63;
+  const sill = terrainAt(model, mid, 1.63) + .27;
+  const level = (x: number): number => eave + (ridge - eave) * (1 - Math.abs(x) / x1);
+  const landing: XZ[] = [at(x0 - .18, rear(x0 - .18)), at(center, rear(center)), at(x1 + .18, rear(x1 + .18)),
+    at(x1 + .18, front + .21), at(x0 - .18, front + .21)];
+  batch.prism('limestone', 'path', landing, sill - .28, sill);
+  // The existing graded promenade skirts the toddler playground. Tie into
+  // that promenade without putting a separate path through the play surface.
+  const pathEnd = plan(467, 574);
+  const promenade = model.getObjectByName('SM_Graded_Pedestrian_Routes');
+  const down = new Raycaster(new Vector3(pathEnd[0], 25, pathEnd[1]), new Vector3(0, -1, 0));
+  const join = (promenade && down.intersectObject(promenade, true)[0]?.point.y)
+    || terrainAt(model, pathEnd, sill) + .13;
+  const walk: { center: XZ; half: number; y: number }[] = [
+    {center: at(0, front + .20), half: 1.45, y: sill + .008},
+    {center: mix(at(0, front + .20), pathEnd, .52), half: 1.22, y: (sill + join) * .5 + .009},
+    {center: pathEnd, half: 1.38, y: join - .008},
+  ];
+  for (let i = 1; i < walk.length; i++) {
+    const a = walk[i - 1], b = walk[i];
+    batch.quad('path', groundPoint(add(a.center, [0, -1], a.half), a.y),
+      groundPoint(add(a.center, [0, 1], a.half), a.y), groundPoint(add(b.center, [0, 1], b.half), b.y),
+      groundPoint(add(b.center, [0, -1], b.half), b.y));
+  }
+  for (const x of [x0, x1]) batch.wall('zinc', at(x, rear(x)), at(x, front), sill, eave);
+  const portalLeft = -1.43, portalRight = 1.43, lintel = sill + 2.38;
   batch.wall('zinc', at(x0, front), at(portalLeft, front), sill, eave);
   batch.wall('zinc', at(portalRight, front), at(x1, front), sill, eave);
   batch.wall('zinc', at(portalLeft, front), at(portalRight, front), lintel, eave);
   batch.tri('zinc', groundPoint(at(x0, front), eave),
     groundPoint(at(center, front), ridge), groundPoint(at(x1, front), eave));
   for (const [a, b] of [[x0, center], [center, x1]]) {
-    batch.quad('zinc', groundPoint(at(a, rear - .12), level(a) + .072),
+    batch.quad('zinc', groundPoint(at(a, rear(a) - .13), level(a) + .072),
       groundPoint(at(a, front + .19), level(a) + .072),
       groundPoint(at(b, front + .19), level(b) + .072),
-      groundPoint(at(b, rear - .12), level(b) + .072));
+      groundPoint(at(b, rear(b) - .13), level(b) + .072));
     batch.quad('door', groundPoint(at(a, front + .19), level(a) - .05),
       groundPoint(at(b, front + .19), level(b) - .05), groundPoint(at(b, front + .19), level(b) + .09),
       groundPoint(at(a, front + .19), level(a) + .09));
+  }
+  // Dark reveals and retained glass outline are visible at ground level.
+  for (const jamb of [portalLeft, portalRight]) {
+    batch.wall('door', at(jamb, front - .64), at(jamb, front), sill, lintel);
   }
   batch.wall('door', at(portalLeft, front - .65), at(portalRight, front - .65), sill, lintel);
   for (const [a, b] of [[portalLeft + .12, center - .042], [center + .042, portalRight - .12]]) {

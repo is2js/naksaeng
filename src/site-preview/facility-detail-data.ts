@@ -221,15 +221,22 @@ const stair = (a: number, b: number, c: number, d: number) =>
 const lift = (a: number, b: number, c: number, d: number) =>
   room('elevator', '승강기', 'circulation', '계단 옆의 수직 이동 코어로 판독한 구간입니다.', [a,b,c,d]);
 
-// The same shaft/stair core aligns both storeys. Their long +v axis runs SW;
-// its NE end and entry face towards the playground, corroborated by p.4/p.6.
+// The same shaft/stair core aligns both storeys. Keep the diagonal building
+// and the p.5 vestibule between the director's room and the first nursery.
+// The east-facing porch return is reconstructed on that recess from the
+// playground-facing exterior reference; its exact wall/door size is unknown.
+const daycareBearing = 46;
+const porchTop = 679 - 40 / Math.tan(daycareBearing * Math.PI / 180);
+const daycareVestibule: readonly FacilityPoint[] = [
+  [321,porchTop],[361,porchTop],[401,679],[401,746],[321,746],
+];
 const daycareOneOutline: readonly FacilityPoint[] = [
-  [243,657],[321,657],[321,679],[401,679],[401,660],[544,660],[544,1017],[595,1017],[595,1048],
+  [243,657],[321,657],...daycareVestibule.slice(0,3),[401,660],[544,660],[544,1017],[595,1017],[595,1048],
   [591,1048],[591,1090],[698,1090],[698,1179],[521,1179],[521,1170],[243,1170],
 ];
 const daycareOneRooms: readonly DraftRoom[] = [
   room('director','원장실','program','현관 바로 옆의 원장실입니다.',[243,657,321,732]),
-  room('entry','어린이집 입구','circulation','유아놀이터에서 들어오는 현관입니다. 박공 포치는 외관 참고 그림에 보입니다.',[321,679,401,746]),
+  room('entry','어린이집 입구','circulation','동쪽 유아놀이터 쪽에서 들어와 중앙 복도로 이어지는 현관입니다.',daycareVestibule,[361,707]),
   room('hall-1','중앙 복도','circulation','현관에서 양편의 보육실과 계단, 식당으로 이어지는 공용 복도입니다.',[[243,732],[321,732],[321,746],[401,746],[401,1017],[544,1017],[544,1048],[294,1048],[294,1005],[359,1005],[359,798],[243,798]],[379,1009]),
   childRoom('nursery-west',[243,798,359,911]), childWc('child-wc-west',243,911,323,954), adultWc('adult-wc-west',323,911,359,954),
   stair(243,954,359,1005), lift(243,1005,294,1048),
@@ -241,7 +248,8 @@ const daycareOneRooms: readonly DraftRoom[] = [
   room('kitchen','조리실','service','식당 옆으로 돌출된 별도 조리 공간입니다.',[[521,1048],[591,1048],[591,1090],[698,1090],[698,1179],[521,1179]],[611,1129]),
 ];
 const daycareOneWalls: readonly DraftWall[] = [
-  [[243,732],[321,732],[door(.66,.94)]], [[321,679],[321,732]], [[401,679],[401,775],[door(.45,.63)]],
+  [[243,732],[321,732],[door(.66,.94)]], [[321,657],[321,732]], [[401,679],[401,775],[door(.45,.63)]],
+  [[321,746],[401,746],[gap(.21,.79)]],
   [[243,798],[359,798]], [[359,798],[359,911],[door(.74,.90)]],
   [[243,911],[359,911],[door(.39,.57),door(.78,.94)]], [[323,911],[323,954]],
   [[243,954],[359,954]], [[359,911],[359,1005],[door(.11,.31),gap(.77,.97)]], [[243,1005],[359,1005]], [[294,1005],[294,1048],[door(.16,.75)]],
@@ -277,14 +285,14 @@ const daycareTwoWalls: readonly DraftWall[] = [
   [[871,596],[871,723],[door(.62,.76)]], [[821,636],[871,636]],
 ];
 
-const daycareOne = makeFloor('1f','1층',[397,913],[.052,.052],46,daycareOneOutline,daycareOneRooms,daycareOneWalls,[
-  { segment: 0, openings: [win(.14,.43),win(.58,.85)] }, { segment: 2, openings: [door(.25,.75)] },
-  { segment: 4, openings: [win(.11,.29),win(.39,.57),win(.66,.86)] },
-  { segment: 5, openings: [win(.05,.13),win(.22,.35),win(.40,.51),win(.55,.68),win(.85,.96)] },
-  { segment: 12, openings: [win(.32,.47),win(.54,.73)] }, { segment: 14, openings: [win(.05,.14),win(.29,.47),win(.75,.94)] },
-  { segment: 15, openings: [win(.05,.18),win(.21,.33),win(.59,.71),win(.75,.83),win(.87,.93)] },
+const daycareOne = makeFloor('1f','1층',[397,913],[.052,.052],daycareBearing,daycareOneOutline,daycareOneRooms,daycareOneWalls,[
+  { segment: 0, openings: [win(.14,.43),win(.58,.85)] }, { segment: 3, openings: [door(.15,.85)] },
+  { segment: 5, openings: [win(.11,.29),win(.39,.57),win(.66,.86)] },
+  { segment: 6, openings: [win(.05,.13),win(.22,.35),win(.40,.51),win(.55,.68),win(.85,.96)] },
+  { segment: 13, openings: [win(.32,.47),win(.54,.73)] }, { segment: 15, openings: [win(.05,.14),win(.29,.47),win(.75,.94)] },
+  { segment: 16, openings: [win(.05,.18),win(.21,.33),win(.59,.71),win(.75,.83),win(.87,.93)] },
 ]);
-const daycareTwo = makeFloor('2f','2층',[885,466],[.052,.052],46,daycareTwoOutline,daycareTwoRooms,daycareTwoWalls,[
+const daycareTwo = makeFloor('2f','2층',[885,466],[.052,.052],daycareBearing,daycareTwoOutline,daycareTwoRooms,daycareTwoWalls,[
   { segment: 3, openings: [win(.23,.33),win(.37,.47),win(.52,.57),win(.77,.86)] },
   { segment: 6, openings: [win(.17,.30),win(.72,.91)] },
   { segment: 7, openings: [win(.08,.17),win(.20,.30),win(.59,.68),win(.73,.83),win(.89,.95)] },
@@ -306,6 +314,6 @@ export const FACILITY_DETAIL_PLANS: Readonly<Record<FacilityDetailId, FacilityDe
   'daycare-104': {
     id: 'daycare-104', label: '국공립어린이집', floors: [daycareOne, daycareTwo],
     description: '104동 옆 어린이집의 두 층입니다. 유아놀이터 쪽 현관과 중앙 복도에서 보육실, 교사 공간과 지원 시설이 갈라집니다.',
-    sourceNote: `${scaleDisclaimer} 두 층은 같은 계단·승강기 코어에 맞췄으며, 방향은 4쪽 노란 영역과 6쪽 놀이터·입구 그림을 대조해 추정했습니다.`,
+    sourceNote: `${scaleDisclaimer} 두 층의 계단·승강기 코어를 맞췄습니다. 1층 현관은 유아놀이터 쪽 외관에 맞춰 동향으로 표현했으며 포치·문의 구체적인 치수는 추정입니다.`,
   },
 };

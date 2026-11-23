@@ -1,0 +1,176 @@
+.facility-detail-dialog {
+  --facility-accent: #f3a7ad;
+  box-sizing: border-box;
+  width: min(1140px, calc(100vw - 32px));
+  max-height: min(820px, calc(100dvh - 32px));
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: #e8eee5;
+  color-scheme: dark;
+  background: #13211e;
+  border: 1px solid #456057;
+  border-radius: 17px;
+  box-shadow: 0 24px 90px #0a1110c2;
+  font: 14px/1.45 system-ui, 'Malgun Gothic', sans-serif;
+}
+.facility-detail-dialog[data-accent='daycare'] { --facility-accent: #f7d779; }
+.facility-detail-dialog::backdrop { background: #0a1010b8; }
+.facility-detail-dialog [hidden] { display: none !important; }
+.facility-detail-dialog button { font: inherit; cursor: pointer; }
+.facility-detail-dialog button:focus-visible { outline: 2px solid #aeebd8; outline-offset: 2px; }
+.facility-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 20px 23px 16px;
+  border-bottom: 1px solid #364b45;
+  background: linear-gradient(115deg, color-mix(in srgb, var(--facility-accent) 9%, #172622) 0%, #172622 54%);
+}
+.facility-detail-heading { min-width: 0; }
+.facility-detail-heading p, .facility-detail-heading h2 { margin: 0; }
+.facility-detail-kicker { color: var(--facility-accent); display: flex; align-items: center; gap: 7px; letter-spacing: .06em; font-size: 11px; font-weight: 750; }
+.facility-detail-kicker span { width: 7px; height: 7px; background: currentColor; border-radius: 2px; transform: rotate(45deg); }
+.facility-detail-heading h2 { margin-block: 3px 4px; font-size: clamp(19px, 3vw, 29px); font-weight: 760; line-height: 1.18; color: #f5f5e8; }
+.facility-detail-summary { color: #baccc3; font-size: 12px; word-break: keep-all; }
+.facility-detail-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  padding: 0;
+  border: 1px solid #486158;
+  border-radius: 9px;
+  background: #20322d;
+  color: #eff7f2;
+  font-size: 25px !important;
+  line-height: 1 !important;
+}
+.facility-detail-close:hover { background: #355147; }
+.facility-detail-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 18px; padding: 16px 23px 7px; }
+.facility-detail-main, .facility-detail-sidebar { min-width: 0; }
+.facility-detail-floor-row { display: flex; gap: 8px; margin-block-end: 9px; justify-content: space-between; align-items: center; }
+.facility-detail-floors { display: flex; flex-wrap: wrap; gap: 5px; }
+.facility-detail-floors button, .facility-detail-stage-tools button {
+  border: 1px solid #50645d;
+  border-radius: 6px;
+  color: #edf1e5;
+  background: #233530;
+  min-height: 34px;
+  padding: 2px 11px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.facility-detail-floors button:hover, .facility-detail-stage-tools button:hover { background: #344e43; }
+.facility-detail-floors button[aria-pressed='true'], .facility-detail-stage-tools button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--facility-accent) 20%, #263931);
+  border-color: color-mix(in srgb, var(--facility-accent) 68%, #53675d);
+  color: #fff6da;
+}
+.facility-detail-floor-hint { color: #a9bcb4; font-size: 11px; white-space: nowrap; }
+.facility-detail-stage {
+  position: relative;
+  height: min(48vh, 484px);
+  min-height: 265px;
+  overflow: hidden;
+  isolation: isolate;
+  background: radial-gradient(ellipse at 52% 36%, #526456 0%, #31453a 58%, #22362c 100%);
+  border: 1px solid #4d6257;
+  border-radius: 10px;
+}
+.facility-detail-stage canvas, .facility-detail-labels { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
+.facility-detail-stage canvas { cursor: grab; touch-action: none; }
+.facility-detail-stage canvas:active { cursor: grabbing; }
+.facility-detail-labels { pointer-events: none; }
+.facility-detail-labels span {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fffdf2;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #29392fe8;
+  line-height: 1.2;
+}
+.facility-detail-labels .is-chosen { background: var(--facility-accent); color: #202320; }
+.facility-detail-compass {
+  position: absolute;
+  width: 49px;
+  height: 49px;
+  top: 9px;
+  left: 9px;
+  border-radius: 100%;
+  background: #20392eea;
+  border: 1px solid #9eb5a881;
+  pointer-events: none;
+}
+.facility-detail-compass::before { content: ''; position: absolute; inset: 20px; rotate: 45deg; border: 1px solid #aec3ad68; }
+.facility-detail-compass i { position: absolute; top: 50%; left: 50%; font: 650 10px/1 system-ui, sans-serif; color: #d1e0d0; }
+.facility-detail-compass i:first-child { color: #9df0cc; }
+.facility-detail-stage-tools { position: absolute; bottom: 9px; right: 9px; display: flex; gap: 4px; }
+.facility-detail-stage-tools button { min-height: 32px; padding-inline: 8px; background: #20372eed; }
+.facility-detail-stage-tools button:disabled { opacity: .46; cursor: default; }
+.facility-detail-stage-tools button[data-detail-view='plus'], .facility-detail-stage-tools button[data-detail-view='minus'] { min-width: 30px; font-size: 16px; }
+.facility-detail-stage-message { position: absolute; inset: 40% 24px auto; text-align: center; color: #f3e8de; }
+.facility-detail-controls-help { margin: 8px 0 0; color: #abbbb2; font-size: 11px; }
+.facility-detail-sidebar { display: flex; flex-direction: column; min-height: 0; }
+.facility-detail-current { background: #1b2d26; border-left: 2px solid var(--facility-accent); border-radius: 6px; padding: 11px 12px; min-height: 98px; }
+.facility-detail-current p, .facility-detail-current h3 { margin: 0; }
+.facility-detail-current p.facility-detail-current-tag { color: var(--facility-accent); font-size: 10px; font-weight: 700; }
+.facility-detail-current h3.facility-detail-current-name { font-size: 17px; font-weight: 720; color: #fbf3e3; margin-block: 4px 3px; }
+.facility-detail-current p.facility-detail-current-description { font-size: 12px; color: #c5d3c9; overflow-wrap: anywhere; word-break: keep-all; }
+.facility-detail-room-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-block: 13px 6px; padding-inline: 2px; }
+.facility-detail-room-head strong { font-size: 13px; font-weight: 720; }
+.facility-detail-room-count { color: #a8bdb0; font-size: 11px; }
+.facility-detail-rooms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; overflow: auto; overscroll-behavior: contain; max-height: min(37vh, 362px); padding: 2px; }
+.facility-detail-rooms .facility-detail-room {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  min-width: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  text-align: left;
+  color: #e0e9df;
+  background: #1b2a25;
+  border: 1px solid #3b5147;
+  font-size: 11px;
+  line-height: 1.22;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.facility-detail-room::before { content: ''; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 2px; background: #c6a574; }
+.facility-detail-room[data-kind='service']::before { background: #9ab6b4; }
+.facility-detail-room[data-kind='circulation']::before { background: #d6d6b6; }
+.facility-detail-room[data-kind='outdoor']::before { background: #9aae7f; }
+.facility-detail-room:hover, .facility-detail-rooms .facility-detail-room[aria-pressed='true'] { border-color: var(--facility-accent); color: #fff6e7; background: color-mix(in srgb, var(--facility-accent) 12%, #22332d); }
+.facility-detail-source { margin: 3px 23px 12px; padding-block-start: 7px; border-top: 1px solid #33473e; color: #aabeb1; font-size: 11px; word-break: keep-all; }
+@media (max-width: 700px) {
+  .facility-detail-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 17px); border-radius: 12px; }
+  .facility-detail-header { padding: 12px 12px 9px; }
+  .facility-detail-heading h2 { margin-block: 3px; }
+  .facility-detail-summary { font-size: 11px; }
+  .facility-detail-body { grid-template-columns: minmax(0, 1fr); gap: 9px; padding: 9px 10px 6px; }
+  .facility-detail-stage { height: clamp(250px, 42dvh, 365px); min-height: 0; }
+  .facility-detail-labels span { font-size: 8.5px; padding: 2px 3px; }
+  .facility-detail-stage-tools button { min-height: 38px; }
+  .facility-detail-controls-help { margin-block-start: 5px; }
+  .facility-detail-current { min-height: 0; padding: 7px 9px; }
+  .facility-detail-current h3.facility-detail-current-name { font-size: 14px; margin-block: 2px; }
+  .facility-detail-current p.facility-detail-current-description { font-size: 11px; }
+  .facility-detail-room-head { margin-block: 7px 3px; }
+  .facility-detail-rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: none; }
+  .facility-detail-rooms .facility-detail-room { min-height: 36px; font-size: 10.5px; }
+  .facility-detail-source { margin: 0 10px 8px; font-size: 10px; }
+}

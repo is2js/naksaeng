@@ -153,11 +153,10 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
         viewport, compass, markerLayer, markers, buildingIds: options.buildingIds,
         selectionOverlay, signal: attempt.signal,
         onSelect: options.onSelect,
-        onReset: activateReset,
         onLost: () => showError(attempt),
-        onZoom: (zoom, overview) => {
+        onViewChange: (canReset) => {
           if (attempt.signal.aborted) return;
-          const hidden = zoom <= overview + .001;
+          const hidden = !canReset;
           if (hidden !== resetButton.hidden) {
             if (hidden && document.activeElement === resetButton) {
               // A keyboard reset must not drop focus to the document body.

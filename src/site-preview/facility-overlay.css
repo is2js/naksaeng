@@ -18,20 +18,39 @@
 }
 .site-facility-annotations[data-map-focus] .site-facility-label { opacity: .86; }
 .site-facility-annotations[data-map-focus] .site-facility-leaders line { opacity: .34; }
+.site-facility-annotations .site-facility-label[data-site-facility-detail] {
+  appearance: none;
+  min-height: 24px;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--facility-neon) 53%, #22312c);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--facility-neon) 15%, #152623ee);
+  font-size: max(9px, var(--facility-label-size, 9.5px));
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  z-index: 1;
+}
+.site-facility-label[data-site-facility-detail]::after { content: "›"; margin-inline-start: 3px; }
+.site-facility-annotations .site-facility-label[data-site-facility-detail]:is(:hover,:focus-visible) {
+  border-color: var(--facility-neon);
+  color: #fff;
+  opacity: 1;
+}
 .site-facility-controls {
   position: absolute;
-  z-index: 2;
-  top: 57px;
-  left: 9px;
+  z-index: 3;
+  top: 48px;
+  right: 9px;
   display: grid;
-  justify-items: start;
+  justify-items: end;
   gap: 4px;
   max-width: calc(100% - 18px);
   color: #e5f6ed;
   font: 720 11px/1.25 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   pointer-events: none;
 }
-.preview-stage .site-facility-controls { top: 73px; left: 14px; }
+.preview-stage .site-facility-controls { top: 66px; right: 14px; }
 .site-facility-controls button:focus-visible { outline: 2px solid #adf5dc; outline-offset: 2px; }
 .site-facility-controls button {
   appearance: none;
@@ -51,11 +70,11 @@
 .site-facility-controls .site-facility-trigger {
   --facility-neon: #d5e5f9;
   display: flex;
-  min-height: 34px;
+  min-height: 25px;
   align-items: center;
-  gap: 5px;
-  padding: 0 7px;
-  font-size: 10px;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 9px;
 }
 .site-facility-trigger:hover, .site-facility-trigger[aria-expanded='true'], .site-facility-controls[data-filtered='true'] .site-facility-trigger {
   border-color: #d2f5e5;
@@ -117,10 +136,10 @@
   stroke-linejoin: round;
 }
 @media (max-width: 640px), (pointer: coarse) {
-  .site-facility-controls .site-facility-trigger { min-height: 37px; }
+  .site-facility-controls .site-facility-trigger { min-height: 29px; }
   .site-facility-panel-list { font-size: 10px; }
   .site-facility-panel-list button { min-height: 31px; }
 }
 @media (max-width: 585px) {
-  .preview-stage .site-facility-controls { top: 60px; left: 9px; }
+  .preview-stage .site-facility-controls { top: 50px; right: 9px; }
 }

@@ -13,6 +13,7 @@ import { createBuildingOutline } from './building-outline';
 import { createGroundFacilities } from './facility-ground';
 import { SITE_FACILITIES } from './facility-markers';
 import { createFacilityOverlay } from './facility-overlay';
+import { refineFacilityExteriors } from './facility-exteriors';
 
 const decoderUrls: Record<string, string> = {
   'draco_decoder.wasm': dracoWasm,
@@ -37,9 +38,8 @@ interface Options {
   selectionOverlay: HTMLElement;
   signal: AbortSignal;
   onSelect(id: string): void;
-  onReset(): void;
   onLost(): void;
-  onZoom?(zoom: number, overviewZoom: number): void;
+  onViewChange?(canReset: boolean): void;
 }
 
 type CameraPhase = 'overview' | 'building' | 'manual';
@@ -107,11 +107,13 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     const world = new Scene();
     world.add(model);
     world.updateMatrixWorld(true);
+    refineFacilityExteriors(model);
+    world.updateMatrixWorld(true);
 
     const groups = new Map<string, Object3D>();
     const pickables: Mesh[] = [];
     const owners = new Map<Mesh, string>();
-    model.traverse((node) => {
+    model.traverseVisible((node) => {
       if (node instanceof Mesh) pickables.push(node);
       const { buildingId } = node.userData;
       if (typeof buildingId !== 'string' || !options.buildingIds.has(buildingId)) return;
@@ -188,7 +190,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     controls.maxZoom = 5.0;
     controls.maxTargetRadius = Math.max(size.x, size.z) * .78;
     controls.cursor.copy(center);
-    controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: null };
+    controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
     controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
     controls.update();
     const initialPose: CameraPose = {
@@ -227,7 +229,22 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     const motionOrbit = new Spherical();
     const groundFacilities = createGroundFacilities(model, owners);
     destroyFacilities = () => groundFacilities.dispose();
-    const facilityOverlay = createFacilityOverlay(options.viewport, SITE_FACILITIES, { onVisibilityChange: queueRender });
+    const facilityOverlay = createFacilityOverlay(options.viewport, SITE_FACILITIES, {
+      onVisibilityChange: queueRender,
+      onOpenDetail(id, trigger) {
+        if (trigger.getAttribute('aria-busy') === 'true') return;
+        const normalLabel = `${trigger.textContent} 3D 공간 보기`;
+        trigger.setAttribute('aria-busy', 'true');
+        void import('./facility-detail').then(({ openFacilityDetail }) => {
+          if (!signal.aborted) {
+            trigger.setAttribute('aria-label', normalLabel);
+            openFacilityDetail(id, trigger);
+          }
+        }).catch(() => {
+          if (!signal.aborted) trigger.setAttribute('aria-label', '시설 상세를 불러오지 못했습니다. 다시 눌러 주세요.');
+        }).finally(() => trigger.removeAttribute('aria-busy'));
+      },
+    });
     destroyFacilities = () => { facilityOverlay.dispose(); groundFacilities.dispose(); };
 
     function queueRender(): void {
@@ -330,12 +347,16 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       } else {
         delete canvas.dataset.outlineBuilding;
       }
-      const { points: facilityPoints, areaIds } = groundFacilities.draw(gpu, camera, w, h, camera.zoom > initialPose.zoom * 1.5,
+      const { points: facilityPoints, areaIds } = groundFacilities.draw(gpu, camera, w, h, camera.zoom >= initialPose.zoom * 1.45,
         facilityOverlay.isKindVisible);
       canvas.dataset.facilityAreas = areaIds.join(' ');
       canvas.dataset.cameraPhase = cameraMove ? 'transition' : cameraPhase;
+      canvas.dataset.cameraTarget = `${controls.target.x.toFixed(2)},${controls.target.z.toFixed(2)}`;
       canvas.dataset.zoom = camera.zoom.toFixed(3);
-      options.onZoom?.(camera.zoom, initialPose.zoom);
+      const azimuthChanged = Math.abs(shortestAngle(controls.getAzimuthalAngle(), initialPose.orbit.theta)) > .008;
+      const pitchChanged = Math.abs(controls.getPolarAngle() - initialPose.orbit.phi) > .008;
+      options.onViewChange?.(Math.abs(camera.zoom - initialPose.zoom) > .001 || azimuthChanged || pitchChanged
+        || controls.target.distanceToSquared(initialPose.target) > .05);
       const projectedNorth = vector.copy(NORTH).transformDirection(camera.matrixWorldInverse);
       const angle = Math.atan2(projectedNorth.x, projectedNorth.y) * 180 / Math.PI;
       const bearing = (Math.round(angle) + 360) % 360;
@@ -432,7 +453,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let suppressClick = false;
     const capture = { capture: true, signal };
     options.viewport.addEventListener('pointerdown', (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-site-facility-controls]')) return;
+      if (event.target instanceof Element && event.target.closest('[data-site-facility-controls],[data-site-facility-detail]')) return;
       if (!activePointers.size) {
         suppressClick = false;
         const marker = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-building-marker]') : null;
@@ -479,17 +500,6 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         event.stopPropagation();
       }
     }, capture);
-    options.viewport.addEventListener('contextmenu', (event) => {
-      // OrbitControls handles context menus on its container. On labels keep
-      // the browser default; only a menu originating at the canvas resets.
-      if (event.target !== canvas) {
-        event.stopPropagation();
-        return;
-      }
-      event.preventDefault();
-      options.onReset();
-    }, capture);
-
     function select(id: string | null, animate = true, focus = true): void {
       const changed = id !== selectedId;
       selectedId = id;

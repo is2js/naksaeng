@@ -12,10 +12,11 @@ type Shape = typeof FACILITY_STYLES[Facility['kind']]['shape'];
 
 // Surface batches from the approved model. Foliage and occupied tower roofs
 // are never eligible height samples for public-space and basement facilities.
-const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach)$/;
-const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Main_Gate_Life_Support_Terrace)$/;
-const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Seam_North_Covered_Parking_Ramp|Northwest_Entry_Portals_And_Guardhouses)$/;
+const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach|Rebuilt_Upper_Open_Entry)$/;
+const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Main_Gate_Life_Support_Terrace|Rebuilt_Community_Terraces)$/;
+const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Northwest_Entry_Portals_And_Guardhouses|Rebuilt_Upper_Guardhouse)$/;
 const DAYCARE = /^SM_Public_Daycare_2F$/;
+const DAYCARE_STRUCTURE = /^SM_(?:Public_Daycare_2F|Rebuilt_Daycare_Pavilion)$/;
 
 function symbolGeometry(shape: Shape, color: string): BufferGeometry {
   const count = shape === 'pentagon' ? 5 : shape === 'triangle' ? 3 : shape === 'circle' ? 24 : 4;
@@ -48,8 +49,8 @@ function symbolGeometry(shape: Shape, color: string): BufferGeometry {
 
 function surfaceMeshes(model: Object3D, pattern: RegExp): Mesh[] {
   const meshes: Mesh[] = [];
-  model.traverse((node) => {
-    if (pattern.test(node.name)) node.traverse((child) => { if (child instanceof Mesh) meshes.push(child); });
+  model.traverseVisible((node) => {
+    if (pattern.test(node.name)) node.traverseVisible((child) => { if (child instanceof Mesh) meshes.push(child); });
   });
   return meshes;
 }
@@ -60,12 +61,13 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   const terraces = surfaceMeshes(model, TERRACE);
   const entrances = surfaceMeshes(model, ENTRANCE);
   const daycare = surfaceMeshes(model, DAYCARE);
+  const daycareStructure = surfaceMeshes(model, DAYCARE_STRUCTURE);
   const siteSurfaces = [...terraces, ...ground];
   const down = new Raycaster(new Vector3(), new Vector3(0, -1, 0), 0, 210);
   const anchors = SITE_FACILITIES.map((facility) => {
     const { x, z, kind } = facility;
     down.ray.origin.set(x, 100, z);
-    const meshes = kind === 'daycare' ? [...daycare, ...ground]
+    const meshes = kind === 'daycare' ? [...daycareStructure, ...ground]
       : kind === 'security' ? [...entrances, ...ground]
         : kind === 'guesthouse' || kind === 'community' || kind === 'senior' || kind === 'elevator'
           ? siteSurfaces : ground;
@@ -96,7 +98,7 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
     batch.sites.push(anchor);
   }
 
-  const occluders = [...buildingMeshes.keys(), ...daycare].map((mesh) => ({ mesh, box: new Box3().setFromObject(mesh) }));
+  const occluders = [...buildingMeshes.keys(), ...daycareStructure].map((mesh) => ({ mesh, box: new Box3().setFromObject(mesh) }));
   const matrix = new Matrix4(), projected = new Vector3(), label = new Vector3(), delta = new Vector3(), slabHit = new Vector3();
   const ndc = new Vector2(), sight = new Raycaster(), hits: Intersection[] = [];
 

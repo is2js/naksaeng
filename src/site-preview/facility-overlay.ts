@@ -1,4 +1,5 @@
 import type { SiteFacility, SiteFacilityKind as FacilityKind } from './facility-markers';
+import type { FacilityDetailId } from './facility-detail-data';
 import './facility-overlay.css';
 
 type FacilityShape = 'triangle' | 'pentagon' | 'circle' | 'diamond' | 'square';
@@ -25,7 +26,9 @@ export const FACILITY_STYLES = {
 } as const satisfies Record<FacilityKind, FacilityStyle>;
 
 const KINDS = Object.keys(FACILITY_STYLES) as FacilityKind[];
+const OVERVIEW_NAMES = new Set<FacilityKind>(['main-entrance', 'sub-entrance', 'community']);
 const UTILITY = new Set<FacilityKind>(['recycling', 'elevator', 'stairs']);
+const isDetail = (id: string): id is FacilityDetailId => id === 'community-2' || id === 'daycare-104';
 const PRIORITY: Record<FacilityKind, number> = {
   daycare: 0, community: 1, 'main-entrance': 2, 'sub-entrance': 3, guesthouse: 4,
   'kids-station': 5, senior: 6, security: 7, elevator: 8, stairs: 9, recycling: 10,
@@ -67,16 +70,16 @@ function symbol(shape: FacilityShape): SVGSVGElement {
 export function createFacilityOverlay(
   stage: HTMLElement,
   facilities: readonly SiteFacility[],
-  { onVisibilityChange }: { onVisibilityChange(): void },
+  { onVisibilityChange, onOpenDetail }: { onVisibilityChange(): void; onOpenDetail(id: FacilityDetailId, trigger: HTMLButtonElement): void },
 ) {
   const events = new AbortController();
   const listeners = { signal: events.signal };
   const annotations = document.createElement('div');
   annotations.className = 'site-facility-annotations';
-  // Screen annotations duplicate the map legend and must never capture a drag or building tap.
-  annotations.setAttribute('aria-hidden', 'true');
+  // Only the two detail buttons are interactive; their siblings remain passive annotations.
   const leaders = document.createElementNS(SVG_NS, 'svg');
   leaders.classList.add('site-facility-leaders');
+  leaders.setAttribute('aria-hidden', 'true');
   annotations.append(leaders);
 
   const controls = document.createElement('div');
@@ -109,7 +112,7 @@ export function createFacilityOverlay(
   const header = document.createElement('div');
   header.className = 'site-facility-panel-head';
   const hint = document.createElement('span');
-  hint.textContent = '누른 종류만 표시';
+  hint.textContent = '시설을 확대하면 이름 표시';
   const all = document.createElement('button');
   all.type = 'button';
   all.dataset.siteFacilityFilter = 'all';
@@ -175,13 +178,24 @@ export function createFacilityOverlay(
 
   const ordered = [...facilities].sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind]);
   const labels = new Map(ordered.map((facility) => {
-    const tag = document.createElement('span');
+    const tag = isDetail(facility.id) ? document.createElement('button') : document.createElement('span');
     tag.className = 'site-facility-label';
     tag.dataset.siteFacilityLabel = facility.id;
     tag.dataset.facilityKind = facility.kind;
     tag.hidden = true;
     tag.style.setProperty('--facility-neon', FACILITY_STYLES[facility.kind].color);
     tag.textContent = facility.label;
+    if (tag instanceof HTMLButtonElement && isDetail(facility.id)) {
+      const id = facility.id;
+      tag.type = 'button';
+      tag.dataset.siteFacilityDetail = id;
+      tag.setAttribute('aria-haspopup', 'dialog');
+      tag.setAttribute('aria-label', `${facility.label} 3D 공간 보기`);
+      for (const type of ['pointerdown', 'pointerup', 'wheel', 'contextmenu'] as const) {
+        tag.addEventListener(type, (event) => { event.stopPropagation(); if (type === 'contextmenu') event.preventDefault(); }, listeners);
+      }
+      tag.addEventListener('click', () => onOpenDetail(id, tag), listeners);
+    } else tag.setAttribute('aria-hidden', 'true');
     annotations.append(tag);
     const line = document.createElementNS(SVG_NS, 'line');
     line.setAttribute('stroke', FACILITY_STYLES[facility.kind].color);
@@ -192,7 +206,7 @@ export function createFacilityOverlay(
   const buildingMarkers = [...stage.querySelectorAll<HTMLElement>('[data-building-marker]')];
   const context = stage.closest('.building-map, .preview-stage');
   const confirm = context?.querySelector<HTMLElement>('[data-site-selection-overlay]');
-  const reset = context?.querySelector<HTMLElement>('[data-site-reset]');
+  const reset = context?.querySelector<HTMLButtonElement>('[data-site-reset]');
 
   function isKindVisible(kind: FacilityKind): boolean { return filter === null || filter === kind; }
 
@@ -212,7 +226,7 @@ export function createFacilityOverlay(
       { x: width - 59, y: height - 118, w: 59, h: 118 },
       { x: controls.offsetLeft - 4, y: controls.offsetTop - 4, w: controls.offsetWidth + 8, h: controls.offsetHeight + 8 },
     ];
-    if (reset && !reset.hidden) occupied.push({ x: width - 143, y: 0, w: 143, h: 51 });
+    if (reset && !reset.hidden && !reset.disabled) occupied.push({ x: width - 143, y: 0, w: 143, h: 48 });
     if (confirm && !confirm.hidden) occupied.push({ x: 0, y: height - confirm.offsetHeight - 20, w: confirm.offsetWidth + 23, h: confirm.offsetHeight + 20 });
     for (const badge of buildingMarkers) {
       if (badge.hidden) continue;
@@ -228,22 +242,24 @@ export function createFacilityOverlay(
       // Long legend names are already visible in the key. Shorten their repeat
       // labels on narrow maps so their anchors stay legible around tower badges.
       const text = compact && UTILITY.has(kind) ? FACILITY_STYLES[kind].shortLabel : label;
-      // Keep utility symbols, but remove their repeated text when focusing a
-      // building unless the visitor explicitly asked for that facility kind.
-      const nameVisible = !UTILITY.has(kind) || filter === kind || (!quiet && point?.emphasized);
+      // Symbols and the key stay available at every zoom. Only arrivals and
+      // community centers carry names in the unzoomed whole-site view.
+      const nameVisible = OVERVIEW_NAMES.has(kind) || point?.emphasized;
       if (point?.visible && isKindVisible(kind) && nameVisible) {
         const { screenX: x, screenY: y } = point;
         if (x >= 3 && y >= 3 && x <= width - 3 && y <= height - 3) {
-          const labelWidth = 6 + [...text].reduce((sum, letter) => sum + fontSize * (letter.charCodeAt(0) > 127 ? 1.04 : .66), 0);
+          const isButton = tag instanceof HTMLButtonElement;
+          const labelWidth = (isButton ? 17 : 6) + [...text].reduce((sum, letter) => sum + (isButton ? Math.max(9, fontSize) : fontSize) * (letter.charCodeAt(0) > 127 ? 1.04 : .66), 0);
+          const usedHeight = isButton ? 24 : labelHeight;
           const centered = x - labelWidth / 2;
           // Try the shortest leaders first. Leave unplaceable labels as ground symbols.
-          const candidates = [[centered, y - labelHeight - 7], [centered, y + 8], [x + 9, y - labelHeight / 2],
-            [x - labelWidth - 9, y - labelHeight / 2], [centered - 16, y - labelHeight - 13],
-            [centered + 16, y + 13], [centered, y - labelHeight - 22], [x + 19, y - labelHeight - 13],
-            [x - labelWidth - 19, y - labelHeight - 13], [x + 19, y + 12], [x - labelWidth - 19, y + 12],
-            [centered, y + 27], [centered - 31, y - labelHeight - 28], [centered + 31, y - labelHeight - 28],
+          const candidates = [[centered, y - usedHeight - 7], [centered, y + 8], [x + 9, y - usedHeight / 2],
+            [x - labelWidth - 9, y - usedHeight / 2], [centered - 16, y - usedHeight - 13],
+            [centered + 16, y + 13], [centered, y - usedHeight - 22], [x + 19, y - usedHeight - 13],
+            [x - labelWidth - 19, y - usedHeight - 13], [x + 19, y + 12], [x - labelWidth - 19, y + 12],
+            [centered, y + 27], [centered - 31, y - usedHeight - 28], [centered + 31, y - usedHeight - 28],
             [centered - 31, y + 27], [centered + 31, y + 27]];
-          rect = candidates.map(([cx, cy]) => ({ x: cx, y: cy, w: labelWidth, h: labelHeight })).find((trial) =>
+          rect = candidates.map(([cx, cy]) => ({ x: cx, y: cy, w: labelWidth, h: usedHeight })).find((trial) =>
             trial.x >= 4 && trial.y >= 4 && trial.x + trial.w <= width - 4 && trial.y + trial.h <= height - 4
               && occupied.every((other) => !overlap({ x: trial.x - 3, y: trial.y - 3, w: trial.w + 6, h: trial.h + 6 }, other)));
         }

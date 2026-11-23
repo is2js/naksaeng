@@ -1,4 +1,4 @@
-export type FacilityDetailId = 'community-2' | 'daycare-104';
+export type FacilityDetailId = 'community-1' | 'community-2' | 'daycare-104';
 export type FacilityFloorId = 'b1' | '1f' | '2f';
 export type FacilityPoint = readonly [x: number, z: number];
 export type FacilityRoomKind = 'program' | 'service' | 'circulation' | 'outdoor';
@@ -98,6 +98,69 @@ function makeFloor(id: FacilityFloorId, label: string, origin: FacilityPoint, sc
   return { id, label, outline: outline.map(toWorld), rooms: rooms.map((r) => ({ ...r, polygon: r.polygon.map(toWorld), center: toWorld(r.center) })), walls, openings };
 }
 
+// The p.5 upper-left cutaway has two perpendicular wings. Fit the long
+// fitness/library wing towards the NE from the SW cap; the golf/office wing
+// then runs SE from the corner, as in the p.4 footprint and p.5 location key.
+// The drawing breaks between golf and offices; retain the connecting strip
+// shown on the site outline without assigning it an unprinted room program.
+const communityOneOutline: readonly FacilityPoint[] = [
+  [0,-8],[32,-8],[32,0],[424,0],[424,14],[453,14],[453,-8],[970,-8],
+  [982,266],[973,282],[996,282],[996,497],[985,517],[810,517],[798,510],
+  [792,282],[804,266],[790,266],[790,135],[490,135],[490,142],[55,142],
+  [27,139],[10,129],[0,113],
+];
+
+const communityOneRooms: readonly DraftRoom[] = [
+  room('fitness','피트니스','program','긴 날개 끝의 체력단련 공간입니다. 안내도에는 운동기구 구역과 유리 입면 쪽 운동 구역이 이어져 있습니다.',
+    [[0,0],[198,0],[198,61],[245,61],[245,133],[60,133],[30,131],[15,124],[9,112],[0,109]],[136,94]),
+  room('group-exercise','G.X룸','program','피트니스 안쪽에 접한 그룹 운동 공간입니다.',[198,0,323,61]),
+  room('body-check','바디체크룸','program','피트니스와 인포메이션 사이, 유리 입면 쪽의 체력 측정 공간입니다.',[248,88,307,137]),
+  room('information','인포메이션','program','운동 시설과 커뮤니티라운지를 잇는 안내 공간입니다.',[349,22,425,84]),
+  room('community-lounge','커뮤니티라운지','program','인포메이션과 라운지카페 사이에 접한 휴게 공간입니다.',[374,84,452,137]),
+  room('lockers','라커룸','service','긴 연결 복도 안쪽에 표시된 라커룸입니다.',[453,-8,535,40]),
+  room('wc-long-wing','화장실(남/여) · 라커룸 옆','service','라커룸과 샤워룸 사이의 공용 화장실입니다.',[535,-8,612,40]),
+  room('lounge-library','라운지카페(작은도서관)','program','긴 날개의 유리 입면을 따라 테이블과 작은도서관이 이어지는 공간입니다.',[492,59,730,135]),
+  room('showers','샤워룸(남/여)','service','화장실 이후, 골프 시설 쪽까지 이어지는 샤워 공간입니다.',[612,-8,871,40]),
+  room('screen-golf','스크린골프룸','program','두 날개가 꺾이는 끝의 스크린골프 공간입니다.',[871,-8,970,47]),
+  room('mini-gym','미니짐','program','작은도서관과 실내골프연습장 사이의 소규모 운동 공간입니다.',[730,58,790,135]),
+  room('indoor-driving-range','실내골프연습장','program','꺾인 날개의 안쪽에 연습 타석이 길게 이어지는 공간입니다.',
+    [[854,47],[970,47],[982,266],[804,266],[804,204],[854,204]],[914,155]),
+  room('meeting','멀티룸(주민회의실)','program','골프 구역을 지난 날개 끝, 생활지원 구역 맞은편의 주민회의 공간입니다.',[898,331,996,373]),
+  room('life-support','생활지원센터','service','날개 끝의 내측 면에 놓인 단지 생활지원 공간입니다.',[810,404,886,473]),
+  room('housing-welfare','생애안심주거복지센터','service','생활지원센터와 같은 날개 안쪽에 이어지는 주거복지 공간입니다.',[798,306,886,391]),
+  room('staff-break','근로자휴게실(남/여)','service','생활지원 구역 맨 끝에 표시된 근로자 휴게 공간입니다.',
+    [[887,475],[994,475],[994,497],[985,517],[887,517]],[941,499]),
+  room('wc-office-wing','화장실(남/여) · 주민회의실 옆','service','주민회의실 위쪽에 별도로 표시된 공용 화장실입니다.',[898,283,994,331]),
+  room('long-passage','연결 복도','circulation','라커룸·샤워룸과 라운지카페 사이를 지나 골프 시설 쪽으로 이어지는 동선입니다.',[453,40,854,58]),
+];
+
+const communityOneWalls: readonly DraftWall[] = [
+  [[198,0],[198,61]], [[198,61],[323,61],[door(.74,.93)]], [[323,0],[323,61]],
+  [[248,88],[307,88],[door(.66,.91)]], [[248,88],[248,137]], [[307,88],[307,137]],
+  [[307,109],[349,109]], [[349,22],[424,22],[door(.10,.30)]], [[349,22],[349,83],[gap(.57,.91)]],
+  [[374,84],[452,84],[gap(.27,.77)]], [[374,84],[374,134]], [[452,84],[452,136]],
+  [[453,14],[453,40]], [[453,40],[871,40],[door(.07,.11),door(.24,.28),door(.42,.46),door(.68,.72),door(.89,.93)]],
+  [[535,-8],[535,40]], [[612,-8],[612,40]], [[674,-8],[674,40],[gap(.58,.89)]], [[783,-8],[783,40],[gap(.57,.86)]],
+  [[871,-8],[871,40]], [[871,47],[970,47],[door(.12,.34)]],
+  [[492,59],[790,59],[gap(.09,.23),gap(.48,.62),door(.87,.94)]], [[492,59],[492,135]], [[730,59],[730,135]],
+  [[790,59],[790,135],[door(.22,.42)]], [[854,59],[854,204],[gap(.27,.55),gap(.73,.94)]],
+  [[790,135],[854,135]], [[804,204],[854,204],[gap(.34,.77)]],
+  [[804,266],[982,266],[gap(.24,.52)]],
+  [[798,306],[886,306]], [[886,283],[886,474],[door(.19,.27),door(.65,.74)]],
+  [[798,391],[886,391]], [[798,404],[886,404]], [[799,473],[887,473],[door(.70,.92)]],
+  [[898,283],[898,459],[door(.19,.25),door(.37,.44),gap(.75,.86)]],
+  [[898,331],[995,331]], [[898,373],[995,373]], [[898,397],[995,397]], [[898,442],[995,442]],
+  [[887,475],[994,475],[door(.27,.42),door(.70,.84)]], [[887,475],[887,517]], [[937,475],[937,517]],
+];
+
+const communityOneFloor = makeFloor('b1','단층',[567,160],[.094,.121],-42,communityOneOutline,communityOneRooms,communityOneWalls,[
+  { segment: 10, openings: [win(.18,.59)] },
+  { segment: 12, openings: [win(.35,.58),win(.68,.86)] },
+  { segment: 14, openings: [win(.11,.30),win(.46,.64),door(.76,.94)] },
+  { segment: 19, openings: [win(.06,.16),win(.21,.33),win(.39,.51),win(.56,.69),win(.73,.83),win(.87,.95)] },
+  { segment: 21, openings: [win(.05,.13),door(.20,.30),win(.35,.44),win(.67,.78),win(.84,.95)] },
+]);
+
 const communityOutline: readonly FacilityPoint[] = [
   [146,648],[210,648],[210,610],[492,610],[492,648],[557,648],[557,614],[624,614],
   [624,633],[864,633],[864,581],[925,581],[925,490],[934,490],[934,390],[1272,390],
@@ -138,7 +201,7 @@ const communityWalls: readonly DraftWall[] = [
   [[934,490],[1018,490],[door(.26,.53)]], [[1018,494],[1176,494],[door(.36,.57)]],
 ];
 
-const communityFloor = makeFloor('b1','지하 1층',[704,611],[.069,.080],47,communityOutline,communityRooms,communityWalls,[
+const communityFloor = makeFloor('b1','단층',[704,611],[.069,.080],47,communityOutline,communityRooms,communityWalls,[
   { segment: 15, openings: [win(.08,.31),win(.38,.58),win(.65,.90)] },
   { segment: 21, openings: [win(.10,.31),win(.39,.65),win(.72,.92)] },
   { segment: 22, openings: [win(.10,.28),win(.37,.51),win(.62,.83)] },
@@ -230,9 +293,14 @@ const daycareTwo = makeFloor('2f','2층',[885,466],[.052,.052],46,daycareTwoOutl
 const scaleDisclaimer = '공급안내문 5쪽의 절개 투시도를 바탕으로 벽과 공간을 다시 그린 참고용 모형입니다. 안내 이미지에 치수가 없어 비례를 사용했고, 세부 문과 가구 위치는 실제와 다를 수 있습니다.';
 
 export const FACILITY_DETAIL_PLANS: Readonly<Record<FacilityDetailId, FacilityDetailPlan>> = {
+  'community-1': {
+    id: 'community-1', label: '커뮤니티센터 Ⅰ', floors: [communityOneFloor],
+    description: '105·106동 앞에서 중앙공원을 감싸는 커뮤니티시설입니다. 피트니스와 작은도서관이 있는 긴 날개가 꺾여 골프연습장과 생활지원시설로 이어집니다.',
+    sourceNote: `${scaleDisclaimer} 방향은 4쪽 붉은 영역과 5쪽 위치도에 맞췄습니다. 두 날개 사이의 연결부는 절개 투시도와 단지배치도의 외곽을 함께 보고 추정했습니다.`,
+  },
   'community-2': {
     id: 'community-2', label: '커뮤니티센터 Ⅱ', floors: [communityFloor],
-    description: '109동 아래에 자리한 지하 1층 커뮤니티센터입니다. 북서쪽 에듀라운지에서 동남쪽 키즈라운지로 이어지고, 꺾인 북동쪽 날개 끝에 스포츠코트가 있습니다.',
+    description: '109동 아래에 자리한 커뮤니티센터입니다. 북서쪽 에듀라운지에서 동남쪽 키즈라운지로 이어지고, 꺾인 북동쪽 날개 끝에 스포츠코트가 있습니다.',
     sourceNote: `${scaleDisclaimer} 방향은 4쪽 붉은 영역과 5쪽 우상단 위치도의 N 표시를 기준으로 맞췄습니다.`,
   },
   'daycare-104': {

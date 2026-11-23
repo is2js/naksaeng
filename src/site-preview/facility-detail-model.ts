@@ -96,7 +96,7 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
   // for mobile. They don't change room bounds, labels, or picking surfaces.
   type FixturePart = readonly [x: number, y: number, z: number, width: number, height: number, depth: number, pitch?: number];
   function addCommunityFixtures(room: FacilityRoom): void {
-    if (floor.id !== 'b1' || !['multi-room', 'private-office', 'kids-lounge'].includes(room.id)) return;
+    if (!['fitness', 'group-exercise', 'lounge-library', 'indoor-driving-range', 'multi-room', 'private-office', 'kids-lounge'].includes(room.id)) return;
     const props = new Group();
     props.position.set(room.center[0], 0, room.center[1]);
     const [origin, across] = room.polygon;
@@ -113,7 +113,33 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
       put(oliveGray, x, high * .43, z, .36, high * .74, .33);
       put(color, x, high, z, .56, .13, .51);
     };
-    if (room.id === 'multi-room') {
+    if (room.id === 'fitness') {
+      // Two parallel equipment runs sit alongside the glazed workout strip.
+      for (const x of [-7, -4.7, -2.4, -.1, 2.2]) for (const z of [-3.4, 1.9]) {
+        put('#444b49', x, .17, z, .78, .18, 1.62);
+        put('#a7ae9e', x, .22, z + .56, .9, .14, .34);
+        for (const side of [-.31, .31]) put(oliveGray, x + side, .59, z + .59, .09, .84, .12);
+        put('#58625e', x, 1.02, z + .52, .79, .15, .29, -.38);
+      }
+    } else if (room.id === 'group-exercise') {
+      for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) for (const z of [-1.1, 1.1]) {
+        put('#9eaaa5', x, .036, z, .9, .035, 1.55);
+      }
+    } else if (room.id === 'lounge-library') {
+      for (const x of [-6.75, -2.25, 2.25, 6.75]) for (const z of [-1.85, 1.65]) {
+        put(ivory, x, .68, z, 2.05, .11, 1.14);
+        put(oliveGray, x, .35, z, 1.55, .66, .34);
+        seat(x - .49, z - .86, green);
+        seat(x + .49, z + .86, green);
+      }
+    } else if (room.id === 'indoor-driving-range') {
+      for (const z of [-9, -5.4, -1.8, 1.8, 5.4, 9]) {
+        put('#65765b', 2.05, .073, z, 2.45, .095, 2.66);
+        put('#7e9a64', 1.85, .132, z, 1.68, .046, 1.6);
+        put('#828976', 3.57, .49, z - 1.45, .43, .91, .13);
+        put('#dedbc7', 3.76, 1.04, z, .045, 1.7, 2.44);
+      }
+    } else if (room.id === 'multi-room') {
       for (const x of [-2.55, 2.55]) {
         put(ivory, x, .68, 0, 3.05, .13, 1.06);
         for (const leg of [x - 1.25, x + 1.25]) put(oliveGray, leg, .34, 0, .12, .65, .73);

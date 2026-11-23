@@ -17,6 +17,8 @@
   position: absolute; inset: 0; width: 100%; height: 100%;
 }
 .building-map-viewport { touch-action: none; }
+.building-map-viewport[data-site-facility-view] :is(.building-map-markers, .site-facility-annotations, .site-facility-controls),
+.household-building-map-list[data-facility-mode] { visibility: hidden; }
 .building-map:not([data-building-map-state="ready"]) .building-map-viewport { pointer-events: none; }
 .building-map .preview-canvas { display: block; cursor: grab; touch-action: none; }
 .building-map .preview-canvas:active { cursor: grabbing; }

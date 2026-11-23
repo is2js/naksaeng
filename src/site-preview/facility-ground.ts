@@ -3,7 +3,7 @@ import {
   MeshBasicMaterial, Object3D, Raycaster, Scene, Vector2, Vector3,
   type Intersection, type OrthographicCamera, type WebGLRenderer,
 } from 'three';
-import { FACILITY_STYLES, type FacilityScreenPoint } from './facility-overlay';
+import { FACILITY_STYLES, isSiteFacilityDetail, type FacilityScreenPoint } from './facility-overlay';
 import { SITE_FACILITIES } from './facility-markers';
 import { createFacilityFootprint } from './facility-footprints';
 
@@ -115,6 +115,7 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   }
 
   return {
+    anchorFor(id: string): Vector3 | undefined { return anchors.find(({ facility }) => facility.id === id)?.xyz.clone(); },
     draw(renderer: WebGLRenderer, camera: OrthographicCamera, width: number, height: number, emphasized: boolean,
       kindVisible: (kind: Facility['kind']) => boolean,
     ) {
@@ -140,8 +141,10 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
         label.copy(xyz).y += .42;
         projected.copy(label).project(camera);
         const screenX = (projected.x * .5 + .5) * width, screenY = (.5 - projected.y * .5) * height;
+        // Actionable labels are map navigation, not occlusion markers. Their
+        // leader still points to the facility when a foreground tower hides it.
         const visible = Math.abs(projected.z) <= 1 && screenX >= 4 && screenX <= width - 4
-          && screenY >= 4 && screenY <= height - 4 && !isOccluded(label, camera);
+          && screenY >= 4 && screenY <= height - 4 && (isSiteFacilityDetail(facility.id) || !isOccluded(label, camera));
         points.push({ id: facility.id, screenX, screenY, visible, emphasized });
       }
       if (hasMarks) {

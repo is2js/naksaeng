@@ -12,6 +12,8 @@ const reset = (page: Page) => map(page).locator('[data-site-reset]');
 const action = (page: Page) => map(page).locator('[data-site-confirm]');
 const cards = (page: Page) => picker(page).locator('.household-building-picker');
 const card = (page: Page, id: string) => cards(page).locator(`[data-choose-building="${id}"]`);
+const facilityTrigger = (page: Page, id: string) => map(page).locator(`[data-site-facility-detail="${id}"]`);
+const facilityDetail = (page: Page, id: string) => map(page).locator(`.building-map-viewport > [data-facility-detail="${id}"]`);
 const isSiteModel = (url: string | URL) => {
   const target = new URL(url);
   return /\/bunfirvil-site-v\d+(?:-[^/]+)?\.glb$/.test(target.pathname)
@@ -92,6 +94,22 @@ async function expectFocusedBuilding(page: Page, id: string) {
   await expect(canvas(page)).toHaveAttribute('data-outline-building', id);
 }
 
+async function expectInlineFacility(page: Page, id: string, floor: 'b1' | '1f' | '2f', previousUrl: string) {
+  const detail = facilityDetail(page, id);
+  await expect(detail).toBeVisible({ timeout: 30_000 });
+  await expect(detail).toHaveAttribute('data-active-facility-floor', floor);
+  await expect(detail.locator('canvas[data-facility-detail-canvas]')).toBeVisible();
+  await expect(detail.locator('[data-facility-return]')).toHaveAccessibleName('단지로 이동');
+  await expect(detail.locator('.facility-detail-title')).not.toContainText(/\bB1\b/i);
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await expect(canvas(page)).toHaveAttribute('data-camera-phase', 'facility');
+  await expect(page.getByRole('heading', { name: '분당퍼스트빌리지 동 선택' })).toBeVisible();
+  await expect(step(page, 'building')).toHaveAttribute('aria-current', 'step');
+  await expect(action(page)).toBeHidden();
+  await expect(page).toHaveURL(previousUrl);
+  return detail;
+}
+
 test('main desktop wizard stays on its map while loading, outlines a single building and confirms the unit step', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 });
   await openWhileModelIsDelayed(page, testInfo.outputPath('desktop-in-map-loading.png'));
@@ -103,8 +121,11 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
   await expect(page.getByRole('heading', { name: '분당퍼스트빌리지 동 선택' })).toBeVisible();
   await expectOverview(page);
   await expect(action(page)).toBeHidden();
-  await expect(map(page).locator('[data-site-facility-label]:visible:not([data-facility-kind="main-entrance"], [data-facility-kind="sub-entrance"], [data-facility-kind="community"])')).toHaveCount(0);
-  await expect(map(page).locator('button[data-site-facility-detail]')).toHaveCount(2);
+  await expect(map(page).locator('[data-site-facility-label]:visible:not([data-facility-kind="main-entrance"], [data-facility-kind="sub-entrance"], [data-site-facility-detail])')).toHaveCount(0);
+  await expect(map(page).locator('button[data-site-facility-detail]:visible')).toHaveCount(3);
+  for (const id of ['community-1', 'community-2']) {
+    await expect(facilityTrigger(page, id)).not.toContainText(/\bB1\b/i);
+  }
   await expect(cards(page)).toHaveCount(0);
   await expect(map(page).locator('canvas[data-outline-building]')).toHaveCount(0);
 
@@ -167,6 +188,7 @@ test('facility legend works on a touch viewport without moving the camera or sel
     const legend = map(page).getByRole('button', { name: '시설 범례' });
     await expect(legend).toHaveAttribute('aria-expanded', 'false');
     await expect(map(page).locator('[data-site-facility-label]')).toHaveCount(35);
+    await expect(map(page).locator('button[data-site-facility-detail]:visible')).toHaveCount(3);
     await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2 daycare-104');
     await page.screenshot({ path: testInfo.outputPath('mobile-facilities.png'), animations: 'disabled' });
     await legend.tap();
@@ -192,14 +214,29 @@ test('facility legend works on a touch viewport without moving the camera or sel
     await panel.getByRole('button', { name: '전체 보기' }).tap();
     await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'false');
     await expect(panel).toBeHidden();
-    await map(page).locator('[data-site-facility-detail="community-2"]').tap();
-    const detail = page.locator('dialog.facility-detail-dialog[open]');
-    await expect(detail.locator('[data-facility-detail-canvas]')).toBeVisible();
-    await detail.getByRole('button', { name: '스포츠코트', exact: true }).tap();
-    await expect(detail.locator('.facility-detail-current-name')).toHaveText('스포츠코트');
+    const before = page.url();
+    const communityTwo = facilityTrigger(page, 'community-2');
+    await communityTwo.tap();
+    const detail = await expectInlineFacility(page, 'community-2', 'b1', before);
+    const room = detail.locator('button[data-facility-room]:visible:not([data-unplaced])').first();
+    const name = (await room.textContent())!.trim();
+    expect(name).not.toHaveLength(0);
+    await room.tap();
+    await expect(detail.locator('.facility-detail-current-name')).toHaveText(name);
     await detail.screenshot({ path: testInfo.outputPath('mobile-community-2-detail.png'), animations: 'disabled' });
-    await detail.getByRole('button', { name: '시설 상세 닫기' }).tap();
+    await detail.locator('[data-facility-return]').tap();
     await expect(detail).toHaveCount(0);
+    await expect(page).toHaveURL(before);
+    await expectOverview(page);
+
+    // The third detail is also reachable directly from the unzoomed 390px overview.
+    await facilityTrigger(page, 'daycare-104').tap();
+    const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+    await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).tap();
+    await expect(school).toHaveAttribute('data-active-facility-floor', '2f');
+    await school.locator('[data-facility-return]').tap();
+    await expect(school).toHaveCount(0);
+    await expectOverview(page);
     await marker(page, '105').tap();
     await expectFocusedBuilding(page, '105');
   } finally {
@@ -230,29 +267,31 @@ test('desktop site right click keeps the selection, right drag pans, and the res
   await expectOverview(page);
 });
 
-test('both facility labels open a directional 3D room viewer without replacing the site selection', async ({ page }, testInfo) => {
+test('all three facilities open in the same map; daycare stairs change floors and returning keeps the site pose', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 });
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('./');
   await expectOverview(page);
-  const community = map(page).locator('[data-site-facility-detail="community-2"]');
-  await community.click();
-  const detail = page.locator('dialog.facility-detail-dialog[open]');
-  await expect(detail).toBeVisible();
-  await expect(detail.locator('[data-facility-detail-canvas]')).toBeVisible();
-  await expect(detail.locator('[data-facility-floor="b1"]')).toHaveAttribute('aria-pressed', 'true');
-  await detail.getByRole('button', { name: '평면 보기', exact: true }).click();
-  const court = detail.locator('.facility-detail-labels span:not([hidden])').filter({ hasText: /^스포츠코트$/ });
-  await expect(court).toBeVisible();
-  const position = await court.boundingBox();
-  expect(position).not.toBeNull();
-  await page.mouse.click(position!.x + position!.width / 2, position!.y + position!.height / 2);
-  await expect(detail.locator('.facility-detail-current-name')).toHaveText('스포츠코트');
-  await detail.getByRole('button', { name: '정북 보기', exact: true }).click();
-  await detail.screenshot({ path: testInfo.outputPath('community-2-detail.png'), animations: 'disabled' });
+  const before = page.url();
+  const overviewZoom = await zoom(page);
+  const communityOne = facilityTrigger(page, 'community-1');
+  await communityOne.click();
+  const one = await expectInlineFacility(page, 'community-1', 'b1', before);
+  await expect.poll(() => zoom(page)).toBeGreaterThan(overviewZoom * 1.5);
+  await one.locator('button[data-facility-room="fitness"]').click();
+  await expect(one.locator('.facility-detail-current-name')).toHaveText('피트니스');
+  await one.screenshot({ path: testInfo.outputPath('community-1-detail.png'), animations: 'disabled' });
+  await one.locator('[data-facility-return]').click();
+  await expect(one).toHaveCount(0);
+  await expectOverview(page);
+  const communityTwo = facilityTrigger(page, 'community-2');
+  await communityTwo.click();
+  const two = await expectInlineFacility(page, 'community-2', 'b1', before);
+  await two.locator('button[data-facility-room="sports-court"]').click();
+  await expect(two.locator('.facility-detail-current-name')).toHaveText('스포츠코트');
+  await two.screenshot({ path: testInfo.outputPath('community-2-detail.png'), animations: 'disabled' });
   await page.keyboard.press('Escape');
-  await expect(detail).toHaveCount(0);
-  await expect(community).toBeFocused();
+  await expect(two).toHaveCount(0);
+  await expect(communityTwo).toBeFocused();
   await expectOverview(page);
 
   await page.locator('[data-map-building="109"]').click();
@@ -266,19 +305,27 @@ test('both facility labels open a directional 3D room viewer without replacing t
   await page.mouse.down();
   await page.mouse.move(bounds!.x + bounds!.width * .74, bounds!.y + bounds!.height * .68, { steps: 10 });
   await page.mouse.up();
-  const daycare = map(page).locator('[data-site-facility-detail="daycare-104"]');
+  const daycare = facilityTrigger(page, 'daycare-104');
   await expect(daycare).toBeVisible();
   await map(page).screenshot({ path: testInfo.outputPath('daycare-exterior.png'), animations: 'disabled' });
+  const previousTarget = (await canvas(page).getAttribute('data-camera-target'))!;
+  const previousZoom = await zoom(page);
   await daycare.click();
-  await expect(detail).toBeVisible();
-  await expect(detail.locator('[data-facility-floor="1f"]')).toHaveAttribute('aria-pressed', 'true');
-  await detail.locator('[data-facility-floor="2f"]').click();
-  await detail.getByRole('button', { name: /^교사실/ }).click();
-  await expect(detail.locator('.facility-detail-current-name')).toHaveText('교사실');
-  await detail.screenshot({ path: testInfo.outputPath('daycare-2f-detail.png'), animations: 'disabled' });
-  await detail.getByRole('button', { name: '시설 상세 닫기' }).click();
-  await expect(detail).toHaveCount(0);
+  const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+  await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).click();
+  await expect(school).toHaveAttribute('data-active-facility-floor', '2f');
+  await school.getByRole('button', { name: /^교사실$/ }).click();
+  await expect(school.locator('.facility-detail-current-name')).toHaveText('교사실');
+  await school.screenshot({ path: testInfo.outputPath('daycare-2f-detail.png'), animations: 'disabled' });
+  await school.locator('[data-facility-stair]').filter({ hasText: '1층으로' }).click();
+  await expect(school).toHaveAttribute('data-active-facility-floor', '1f');
+  await school.locator('[data-facility-return]').click();
+  await expect(school).toHaveCount(0);
   await expect(canvas(page)).toHaveAttribute('data-outline-building', '104');
+  await expect(canvas(page)).toHaveAttribute('data-camera-target', previousTarget);
+  await expect.poll(() => zoom(page)).toBeCloseTo(previousZoom, 3);
+  await expect(action(page)).toHaveText(/104동 세대 선택/);
+  await expect(page).toHaveURL(before);
 });
 
 async function pinchFromOpenCanvas(page: Page) {

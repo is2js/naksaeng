@@ -5,6 +5,20 @@
   height: 100%;
   pointer-events: none;
 }
+.site-facility-loading {
+  position: absolute;
+  z-index: 5;
+  inset: auto 10px 14px;
+  width: fit-content;
+  max-width: calc(100% - 20px);
+  margin: 0 auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #142c27ef;
+  color: #e9f9f1;
+  font: 650 12px/1.35 system-ui, sans-serif;
+  pointer-events: none;
+}
 .site-facility-leaders line { stroke-width: .75; opacity: .52; }
 .site-facility-label {
   position: absolute;

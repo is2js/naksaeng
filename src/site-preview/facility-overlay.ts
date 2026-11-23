@@ -26,9 +26,9 @@ export const FACILITY_STYLES = {
 } as const satisfies Record<FacilityKind, FacilityStyle>;
 
 const KINDS = Object.keys(FACILITY_STYLES) as FacilityKind[];
-const OVERVIEW_NAMES = new Set<FacilityKind>(['main-entrance', 'sub-entrance', 'community']);
+const OVERVIEW_NAMES = new Set<FacilityKind>(['main-entrance', 'sub-entrance']);
 const UTILITY = new Set<FacilityKind>(['recycling', 'elevator', 'stairs']);
-const isDetail = (id: string): id is FacilityDetailId => id === 'community-2' || id === 'daycare-104';
+export const isSiteFacilityDetail = (id: string): id is FacilityDetailId => id === 'community-1' || id === 'community-2' || id === 'daycare-104';
 const PRIORITY: Record<FacilityKind, number> = {
   daycare: 0, community: 1, 'main-entrance': 2, 'sub-entrance': 3, guesthouse: 4,
   'kids-station': 5, senior: 6, security: 7, elevator: 8, stairs: 9, recycling: 10,
@@ -76,7 +76,7 @@ export function createFacilityOverlay(
   const listeners = { signal: events.signal };
   const annotations = document.createElement('div');
   annotations.className = 'site-facility-annotations';
-  // Only the two detail buttons are interactive; their siblings remain passive annotations.
+  // Only modeled facilities are interactive; their siblings remain passive annotations.
   const leaders = document.createElementNS(SVG_NS, 'svg');
   leaders.classList.add('site-facility-leaders');
   leaders.setAttribute('aria-hidden', 'true');
@@ -178,18 +178,17 @@ export function createFacilityOverlay(
 
   const ordered = [...facilities].sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind]);
   const labels = new Map(ordered.map((facility) => {
-    const tag = isDetail(facility.id) ? document.createElement('button') : document.createElement('span');
+    const tag = isSiteFacilityDetail(facility.id) ? document.createElement('button') : document.createElement('span');
     tag.className = 'site-facility-label';
     tag.dataset.siteFacilityLabel = facility.id;
     tag.dataset.facilityKind = facility.kind;
     tag.hidden = true;
     tag.style.setProperty('--facility-neon', FACILITY_STYLES[facility.kind].color);
     tag.textContent = facility.label;
-    if (tag instanceof HTMLButtonElement && isDetail(facility.id)) {
+    if (tag instanceof HTMLButtonElement && isSiteFacilityDetail(facility.id)) {
       const id = facility.id;
       tag.type = 'button';
       tag.dataset.siteFacilityDetail = id;
-      tag.setAttribute('aria-haspopup', 'dialog');
       tag.setAttribute('aria-label', `${facility.label} 3D 공간 보기`);
       for (const type of ['pointerdown', 'pointerup', 'wheel', 'contextmenu'] as const) {
         tag.addEventListener(type, (event) => { event.stopPropagation(); if (type === 'contextmenu') event.preventDefault(); }, listeners);
@@ -231,7 +230,7 @@ export function createFacilityOverlay(
     for (const badge of buildingMarkers) {
       if (badge.hidden) continue;
       const x = parseFloat(badge.style.left), y = parseFloat(badge.style.top);
-      if (Number.isFinite(x) && Number.isFinite(y)) occupied.push({ x: x - 27, y: y - 15, w: 54, h: 30 });
+      if (Number.isFinite(x) && Number.isFinite(y)) occupied.push({ x: x - 27, y: y - 22, w: 54, h: 44 });
     }
     const labelHeight = Math.ceil(fontSize * 1.3);
 
@@ -242,9 +241,8 @@ export function createFacilityOverlay(
       // Long legend names are already visible in the key. Shorten their repeat
       // labels on narrow maps so their anchors stay legible around tower badges.
       const text = compact && UTILITY.has(kind) ? FACILITY_STYLES[kind].shortLabel : label;
-      // Symbols and the key stay available at every zoom. Only arrivals and
-      // community centers carry names in the unzoomed whole-site view.
-      const nameVisible = OVERVIEW_NAMES.has(kind) || point?.emphasized;
+      // The three enterable facilities remain discoverable in the overview.
+      const nameVisible = isSiteFacilityDetail(id) || OVERVIEW_NAMES.has(kind) || point?.emphasized;
       if (point?.visible && isKindVisible(kind) && nameVisible) {
         const { screenX: x, screenY: y } = point;
         if (x >= 3 && y >= 3 && x <= width - 3 && y <= height - 3) {
@@ -259,9 +257,23 @@ export function createFacilityOverlay(
             [x - labelWidth - 19, y - usedHeight - 13], [x + 19, y + 12], [x - labelWidth - 19, y + 12],
             [centered, y + 27], [centered - 31, y - usedHeight - 28], [centered + 31, y - usedHeight - 28],
             [centered - 31, y + 27], [centered + 31, y + 27]];
-          rect = candidates.map(([cx, cy]) => ({ x: cx, y: cy, w: labelWidth, h: usedHeight })).find((trial) =>
+          const fits = (trial: Rect): boolean =>
             trial.x >= 4 && trial.y >= 4 && trial.x + trial.w <= width - 4 && trial.y + trial.h <= height - 4
-              && occupied.every((other) => !overlap({ x: trial.x - 3, y: trial.y - 3, w: trial.w + 6, h: trial.h + 6 }, other)));
+              && occupied.every((other) => !overlap({ x: trial.x - 3, y: trial.y - 3, w: trial.w + 6, h: trial.h + 6 }, other));
+          rect = candidates.map(([cx, cy]) => ({ x: cx, y: cy, w: labelWidth, h: usedHeight })).find(fits);
+          if (!rect && isButton) {
+            // An important facility can sit underneath tightly packed tower tags.
+            // Keep the closest clear spot in the frame and use its model leader.
+            let distance = Infinity;
+            for (let cy = 6; cy <= height - usedHeight - 4; cy += 12) {
+              for (let cx = 6; cx <= width - labelWidth - 4; cx += 12) {
+                const delta = (cx - centered) ** 2 + (cy + usedHeight / 2 - y) ** 2;
+                if (delta >= distance) continue;
+                const trial = { x: cx, y: cy, w: labelWidth, h: usedHeight };
+                if (fits(trial)) { rect = trial; distance = delta; }
+              }
+            }
+          }
         }
       }
       tag.hidden = !rect;
@@ -282,6 +294,10 @@ export function createFacilityOverlay(
 
   return {
     update, isKindVisible,
+    setInteractive(interactive: boolean): void {
+      annotations.inert = controls.inert = !interactive;
+      if (!interactive) setOpen(false);
+    },
     dispose(): void { events.abort(); controls.remove(); annotations.remove(); },
   };
 }

@@ -79,11 +79,11 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   at('stairs-t203', 'stairs', '지하 출입 계단', 216.5, 202.5),
 
   {
-    ...at('community-1', 'community', '커뮤니티센터 1 (B1)', 560.2, 648.3),
+    ...at('community-1', 'community', '커뮤니티센터 Ⅰ', 560.2, 648.3),
     footprint: { surface: 'terrain', outline: COMMUNITY_ONE.map(siteXZ) },
   },
   {
-    ...at('community-2', 'community', '커뮤니티센터 2 (B1)', 366, 490.7),
+    ...at('community-2', 'community', '커뮤니티센터 Ⅱ', 366, 490.7),
     footprint: { surface: 'terrain', outline: COMMUNITY_TWO.map(siteXZ) },
   },
   // The 112 B1 label is printed over the high-rise footprint. Keep it at grade just beside the same wing.

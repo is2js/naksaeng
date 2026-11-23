@@ -26,6 +26,28 @@ function byId(floor: FacilityFloor, id: string) {
 }
 
 describe('page 5 facility plans', () => {
+  it('models the printed Community I programs as one directional, single-floor plan', () => {
+    const plan = FACILITY_DETAIL_PLANS['community-1'];
+    expect(plan.floors).toHaveLength(1);
+    const [floor] = plan.floors;
+    expect(floor.label).toBe('단층');
+    expect(floor.rooms.map(({ label }) => label)).toEqual(expect.arrayContaining([
+      '피트니스', 'G.X룸', '바디체크룸', '인포메이션', '커뮤니티라운지', '라커룸', '라운지카페(작은도서관)',
+      '샤워룸(남/여)', '스크린골프룸', '미니짐', '실내골프연습장', '멀티룸(주민회의실)', '생활지원센터',
+      '생애안심주거복지센터', '근로자휴게실(남/여)',
+    ]));
+    expect(floor.rooms.filter(({ label }) => label.startsWith('화장실(남/여)'))).toHaveLength(2);
+    const [fitnessX, fitnessZ] = byId(floor, 'fitness').center;
+    const [cornerX, cornerZ] = byId(floor, 'screen-golf').center;
+    const [supportX, supportZ] = byId(floor, 'life-support').center;
+    expect(cornerX).toBeGreaterThan(fitnessX);
+    expect(cornerZ).toBeLessThan(fitnessZ);
+    expect(supportX).toBeGreaterThan(cornerX);
+    expect(supportZ).toBeGreaterThan(cornerZ);
+    expect(FACILITY_DETAIL_PLANS['community-2'].floors).toHaveLength(1);
+    expect(FACILITY_DETAIL_PLANS['community-2'].floors[0].label).toBe('단층');
+  });
+
   it('records the printed room programs, repeated childcare rooms and the shared vertical core', () => {
     const [b1] = FACILITY_DETAIL_PLANS['community-2'].floors;
     const [first, second] = FACILITY_DETAIL_PLANS['daycare-104'].floors;

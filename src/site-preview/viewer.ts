@@ -14,6 +14,7 @@ import { createGroundFacilities } from './facility-ground';
 import { SITE_FACILITIES } from './facility-markers';
 import { createFacilityOverlay } from './facility-overlay';
 import { refineFacilityExteriors } from './facility-exteriors';
+import type { FacilityDetailId } from './facility-detail-data';
 
 const decoderUrls: Record<string, string> = {
   'draco_decoder.wasm': dracoWasm,
@@ -40,10 +41,21 @@ interface Options {
   onSelect(id: string): void;
   onLost(): void;
   onViewChange?(canReset: boolean): void;
+  onFacilityMode?(active: boolean): void;
 }
 
-type CameraPhase = 'overview' | 'building' | 'manual';
+type CameraPhase = 'overview' | 'building' | 'manual' | 'facility';
 interface CameraPose { target: Vector3; orbit: Spherical; zoom: number; }
+interface FacilityVisit {
+  id: FacilityDetailId;
+  trigger: HTMLButtonElement;
+  before: CameraPose;
+  previousPhase: Exclude<CameraPhase, 'facility'>;
+  mount?: typeof import('./facility-detail').mountFacilityDetail;
+  detail?: { dispose(): void };
+  returning: boolean;
+  failed?: boolean;
+}
 interface CameraMove {
   startedAt: number;
   duration: number;
@@ -218,6 +230,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let cameraPhase: CameraPhase = 'overview';
     let cameraMove: CameraMove | null = null;
     let selectedId: string | null = null;
+    let facilityVisit: FacilityVisit | null = null;
     let w = 1;
     let h = 1;
     let outline: ReturnType<typeof createBuildingOutline> | null = null;
@@ -229,23 +242,23 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     const motionOrbit = new Spherical();
     const groundFacilities = createGroundFacilities(model, owners);
     destroyFacilities = () => groundFacilities.dispose();
+    const facilityStatus = document.createElement('p');
+    facilityStatus.className = 'site-facility-loading';
+    facilityStatus.setAttribute('role', 'status');
+    facilityStatus.hidden = true;
+    options.viewport.append(facilityStatus);
     const facilityOverlay = createFacilityOverlay(options.viewport, SITE_FACILITIES, {
       onVisibilityChange: queueRender,
-      onOpenDetail(id, trigger) {
-        if (trigger.getAttribute('aria-busy') === 'true') return;
-        const normalLabel = `${trigger.textContent} 3D 공간 보기`;
-        trigger.setAttribute('aria-busy', 'true');
-        void import('./facility-detail').then(({ openFacilityDetail }) => {
-          if (!signal.aborted) {
-            trigger.setAttribute('aria-label', normalLabel);
-            openFacilityDetail(id, trigger);
-          }
-        }).catch(() => {
-          if (!signal.aborted) trigger.setAttribute('aria-label', '시설 상세를 불러오지 못했습니다. 다시 눌러 주세요.');
-        }).finally(() => trigger.removeAttribute('aria-busy'));
-      },
+      onOpenDetail: enterFacility,
     });
-    destroyFacilities = () => { facilityOverlay.dispose(); groundFacilities.dispose(); };
+    destroyFacilities = () => {
+      facilityVisit?.detail?.dispose();
+      if (facilityVisit) setFacilityMode(null);
+      facilityVisit = null;
+      facilityStatus.remove();
+      facilityOverlay.dispose();
+      groundFacilities.dispose();
+    };
 
     function queueRender(): void {
       if (!disposed && !paused && !document.hidden && !renderFrame) renderFrame = requestAnimationFrame(render);
@@ -257,6 +270,79 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         orbit: new Spherical().setFromVector3(camera.position.clone().sub(controls.target)),
         zoom: camera.zoom,
       };
+    }
+
+    function setFacilityMode(mode: 'entering' | 'open' | 'returning' | null): void {
+      if (mode) options.viewport.dataset.siteFacilityView = mode;
+      else delete options.viewport.dataset.siteFacilityView;
+      controls.enabled = !mode;
+      options.markerLayer.inert = Boolean(mode);
+      facilityOverlay.setInteractive(!mode);
+      options.onFacilityMode?.(Boolean(mode));
+    }
+
+    function enterFacility(id: FacilityDetailId, trigger: HTMLButtonElement): void {
+      if (facilityVisit || disposed) return;
+      const target = groundFacilities.anchorFor(id);
+      if (!target) return;
+      const before = capturePose();
+      const previous = cameraMove ? 'manual' : cameraPhase;
+      const visit: FacilityVisit = {
+        id, trigger, before, previousPhase: previous === 'facility' ? 'manual' : previous, returning: false,
+      };
+      facilityVisit = visit;
+      trigger.setAttribute('aria-busy', 'true');
+      facilityStatus.hidden = true;
+      facilityStatus.textContent = '시설 공간을 불러오는 중입니다.';
+      setFacilityMode('entering');
+      const orbit = before.orbit.clone();
+      // Transition towards the real facility in the district's coordinates,
+      // then reveal its matching north-oriented cutaway in the same viewport.
+      orbit.theta = 0;
+      orbit.phi = .59;
+      const zoom = Math.min(controls.maxZoom, Math.max(initialPose.zoom * 3.65, before.zoom * 1.25));
+      tweenTo({ target, orbit, zoom }, 'facility');
+      void import('./facility-detail').then(({ mountFacilityDetail }) => {
+        if (signal.aborted || facilityVisit !== visit || visit.returning) return;
+        visit.mount = mountFacilityDetail;
+        queueRender();
+      }).catch(() => returnFromFacility(visit, true));
+    }
+
+    function returnFromFacility(visit: FacilityVisit, failed = false): void {
+      if (disposed || facilityVisit !== visit || visit.returning) return;
+      visit.returning = true;
+      visit.failed = failed;
+      visit.trigger.removeAttribute('aria-busy');
+      visit.detail?.dispose();
+      visit.detail = undefined;
+      facilityStatus.hidden = true;
+      setFacilityMode('returning');
+      tweenTo(visit.before, visit.previousPhase);
+    }
+
+    function finishFacilityMove(): void {
+      const visit = facilityVisit;
+      if (!visit || cameraMove) return;
+      if (visit.returning) {
+        facilityVisit = null;
+        setFacilityMode(null);
+        const restore = !visit.trigger.hidden ? visit.trigger : options.viewport.closest('.building-map')?.querySelector<HTMLButtonElement>('[data-site-zoom="in"]');
+        restore?.focus({ preventScroll: true });
+        if (visit.failed) {
+          facilityStatus.textContent = '시설 공간을 불러오지 못했습니다. 다시 선택해 주세요.';
+          facilityStatus.hidden = false;
+        }
+      } else if (visit.mount) {
+        facilityStatus.hidden = true;
+        visit.trigger.removeAttribute('aria-busy');
+        setFacilityMode('open');
+        try {
+          visit.detail = visit.mount(options.viewport, visit.id, () => returnFromFacility(visit));
+        } catch {
+          returnFromFacility(visit, true);
+        }
+      } else facilityStatus.hidden = false;
     }
 
     function applyPose(target: Vector3, orbit: Spherical, zoom: number): void {
@@ -279,7 +365,8 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
           && Math.abs(shortestAngle(from.orbit.theta, to.orbit.theta)) < .001
           && Math.abs(from.orbit.phi - to.orbit.phi) < .001
           && Math.abs(from.zoom - to.zoom) < .001;
-        cameraMove = isAtDestination ? null : { startedAt: performance.now(), duration: phase === 'overview' ? 550 : 720, from, to, phase };
+        const duration = phase === 'facility' ? 510 : facilityVisit?.returning || phase === 'overview' ? 480 : 720;
+        cameraMove = isAtDestination ? null : { startedAt: performance.now(), duration, from, to, phase };
         if (!cameraMove) cameraPhase = phase;
       }
       queueRender();
@@ -321,7 +408,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
 
     function render(now: number): void {
       renderFrame = 0;
-      if (disposed || paused || document.hidden) return;
+      if (disposed || paused || document.hidden || facilityVisit?.detail) return;
       if (cameraMove) {
         const move = cameraMove;
         const progress = Math.max(0, Math.min(1, (now - move.startedAt) / move.duration));
@@ -365,6 +452,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       options.compass.setAttribute('aria-label', bearing ? `나침반: 북쪽 방향 ${bearing}도` : '나침반: 북쪽 위');
       placeMarkers();
       facilityOverlay.update(facilityPoints, w, h, selectedId !== null);
+      finishFacilityMove();
       if (cameraMove) queueRender();
     }
 
@@ -434,7 +522,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       camera.updateProjectionMatrix();
       gpu.setSize(w, h, false);
       leaderLayer.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      if (selectedId && (cameraMove?.phase ?? cameraPhase) === 'building') focusBuilding(selectedId, Boolean(cameraMove), false);
+      if (!facilityVisit && selectedId && (cameraMove?.phase ?? cameraPhase) === 'building') focusBuilding(selectedId, Boolean(cameraMove), false);
       queueRender();
     }
 
@@ -452,8 +540,14 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let press: { id: number; x: number; y: number; marker: HTMLButtonElement | null; surface: boolean } | null = null;
     let suppressClick = false;
     const capture = { capture: true, signal };
+    window.addEventListener('keydown', (event) => {
+      const visit = facilityVisit;
+      if (event.key !== 'Escape' || !visit || visit.detail || visit.returning) return;
+      event.preventDefault();
+      returnFromFacility(visit);
+    }, { signal });
     options.viewport.addEventListener('pointerdown', (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-site-facility-controls],[data-site-facility-detail]')) return;
+      if (facilityVisit || (event.target instanceof Element && event.target.closest('[data-site-facility-controls],[data-site-facility-detail]'))) return;
       if (!activePointers.size) {
         suppressClick = false;
         const marker = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-building-marker]') : null;
@@ -501,6 +595,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       }
     }, capture);
     function select(id: string | null, animate = true, focus = true): void {
+      if (facilityVisit) return;
       const changed = id !== selectedId;
       selectedId = id;
       if (focus && id && (changed || animate)) focusBuilding(id, animate);
@@ -542,9 +637,10 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     return {
       select,
       reset() {
-        tweenTo(initialPose, 'overview');
+        if (!facilityVisit) tweenTo(initialPose, 'overview');
       },
       zoom(by) {
+        if (facilityVisit) return;
         stopCameraMove();
         camera.zoom = Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * by));
         camera.updateProjectionMatrix();

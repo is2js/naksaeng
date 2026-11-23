@@ -76,9 +76,11 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   let viewer: SiteViewer | null = null;
   let loading: AbortController | null = null;
   let selected = options.selectedId ?? null;
+  let facilityMode = false;
   let disposed = false;
   let pagePaused = false;
   let retryRequiresReload = false;
+  const mapList = host.parentElement?.querySelector<HTMLElement>('.household-building-map-list');
 
   for (const id of options.buildingIds) {
     const marker = document.createElement('button');
@@ -93,9 +95,19 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   }
 
   function syncSelection(): void {
-    selectionOverlay.hidden = !viewer || !selected;
+    selectionOverlay.hidden = !viewer || !selected || facilityMode;
     confirm.firstElementChild!.textContent = selected ? `${selected}동 세대 선택` : '';
     for (const [id, marker] of markers) marker.setAttribute('aria-pressed', String(id === selected));
+  }
+
+  function setFacilityMode(active: boolean): void {
+    facilityMode = active;
+    if (mapList) {
+      mapList.inert = active;
+      mapList.toggleAttribute('data-facility-mode', active);
+    }
+    controls.hidden = active || shell.dataset.buildingMapState !== 'ready';
+    syncSelection();
   }
 
   function select(id: string | null, animate = true): void {
@@ -154,6 +166,7 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
         selectionOverlay, signal: attempt.signal,
         onSelect: options.onSelect,
         onLost: () => showError(attempt),
+        onFacilityMode: setFacilityMode,
         onViewChange: (canReset) => {
           if (attempt.signal.aborted) return;
           const hidden = !canReset;

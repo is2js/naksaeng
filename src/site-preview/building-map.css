@@ -70,10 +70,18 @@
 }
 .building-map .building-map-confirm:hover { background: #cef8e4; }
 .building-map-status {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px;
+  position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   padding: 16px; text-align: center; color: #dbe9e2; font-size: 13px; line-height: 1.5; word-break: keep-all;
 }
 .building-map-status p { margin: 0; }
+.building-map-status-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 13px; }
+.building-map-status-actions .building-map-button { min-height: 42px; font-size: 12px; }
+.building-map-card-fallback {
+  display: inline-grid; place-items: center; min-height: 42px; padding: 2px 5px;
+  color: #d0f4e6; font-size: 12px; font-weight: 700; text-underline-offset: 3px; text-decoration: underline;
+}
+.building-map-card-fallback:hover { color: #fff; }
+.building-map-status:focus-visible { outline: 2px solid #b1f3d7; outline-offset: -4px; }
 .building-map[data-building-map-state="loading"] .building-map-status::before {
   content: ""; width: 22px; height: 22px; border: 2px solid #50766b; border-top-color: #aceacc;
   border-radius: 50%; animation: building-map-spin .95s linear infinite;

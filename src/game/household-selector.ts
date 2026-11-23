@@ -20,7 +20,7 @@ import {
   type HouseholdVerificationRole,
 } from './household-verification';
 import { resetAllBunfirvilLocalData } from '../shared/storage';
-import type { BuildingMap } from '../site-preview/building-map';
+import { mountBuildingMap, type BuildingMap } from '../site-preview/building-map';
 import '../styles/household-input.css';
 import '../styles/household-building-map.css';
 
@@ -101,15 +101,12 @@ function buildingMapPicker(): string {
   const choices = [...selectableBuildingIds].map((id) =>
     `<button type="button" data-map-building="${id}" aria-pressed="false">${id}동</button>`).join('');
   return `<div id="household-building-map-stage" class="household-building-map-stage" hidden>
-    <div id="household-building-map-host" tabindex="-1"></div>
+    <div id="household-building-map-host"></div>
     <aside class="household-building-map-list" aria-labelledby="household-building-map-list-title">
       <h2 id="household-building-map-list-title">동 목록</h2>
       <div class="household-building-map-choices" role="group" aria-label="단지 지도에서 고를 동">${choices}</div>
     </aside>
-  </div>
-  <p id="household-building-map-fallback-notice" class="household-building-map-fallback-notice" role="status" hidden>
-    3D 단지 모형을 불러오지 못했습니다. 아래에서 동을 선택해 주세요.
-  </p>`;
+  </div>`;
 }
 
 export function householdStorageDialogMarkup(): string {
@@ -209,16 +206,15 @@ export function waitForHouseholdSelection(
                 : '<button type="button" id="household-step-unit" disabled><i>2</i><b>세대 선택</b></button><em aria-hidden="true"></em><button type="button" id="household-step-nickname" disabled><i>3</i><b>닉네임 입력</b></button>'}
             </nav>
             <p class="eyebrow">BUNDANG FIRST VILLAGE</p>
-            <h1 id="household-selector-title">분당퍼스트빌리지 동 선택</h1>
+            <h1 id="household-selector-title" tabindex="-1">분당퍼스트빌리지 동 선택</h1>
             <p id="household-selector-description">먼저 확인할 동을 선택해 주세요. 다음 화면에서 해당 동의 세대를 선택할 수 있습니다.</p>
           </div>
           <div class="household-legend" id="household-selector-legend" aria-label="평형 색상 범례" hidden>
             <span class="unit-51a"><i></i>51A</span><span class="unit-55a"><i></i>55A</span><span class="unit-55b"><i></i>55B</span><span class="unit-59a"><i></i>59A</span><span class="is-pilotis"><i>×</i>필로티</span>
           </div>
         </section>
-        <section id="household-building-picker" class="household-building-picker-panel ${useBuildingMap ? 'has-building-map-slot' : ''}">
-          ${useBuildingMap ? buildingMapPicker() : ''}
-          <div id="household-building-fallback" class="household-building-picker">${buildingPicker()}</div>
+        <section id="household-building-picker" class="household-building-picker-panel">
+          ${useBuildingMap ? buildingMapPicker() : `<div id="household-building-fallback" class="household-building-picker">${buildingPicker()}</div>`}
         </section>
         <section id="household-building-detail" class="household-building-detail" hidden>
           <header class="household-building-detail-head">
@@ -293,14 +289,11 @@ export function waitForHouseholdSelection(
     let entryRole: HouseholdVerificationRole = 'public';
     let verificationAttempt = 0;
     let verificationController: AbortController | null = null;
-    const cardPicker = mount.querySelector<HTMLElement>('#household-building-fallback')!;
     const mapStage = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-stage') : null;
     const mapHost = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-host') : null;
-    const fallbackNotice = useBuildingMap ? mount.querySelector<HTMLElement>('#household-building-map-fallback-notice') : null;
     let buildingMap: BuildingMap | null = null;
     let buildingMapEvents: AbortController | null = null;
     let mapCandidateId: string | null = null;
-    let mapFailed = false;
 
     const paintMapChoice = (): void => {
       mapStage?.querySelectorAll<HTMLButtonElement>('[data-map-building]').forEach((button) => {
@@ -322,57 +315,45 @@ export function waitForHouseholdSelection(
       buildingMap = null;
       if (mapStage) {
         mapStage.hidden = true;
-        mapStage.classList.remove('is-preparing');
+        mapStage.classList.remove('is-ready');
       }
-      cardPicker.hidden = false;
     };
 
     const startBuildingMap = (): void => {
-      if (!mapHost?.isConnected || !mapStage || mapFailed || buildingMapEvents) return;
+      if (!mapHost?.isConnected || !mapStage || buildingMapEvents) return;
       const events = new AbortController();
       buildingMapEvents = events;
-      mapStage.inert = true;
-      mapStage.classList.add('is-preparing');
       mapStage.hidden = false;
-      const onError = (): void => {
-        if (events.signal.aborted || picker.hidden) return;
-        const focusedMap = mapStage.contains(document.activeElement);
-        mapFailed = true;
-        releaseBuildingMap();
-        if (fallbackNotice) fallbackNotice.hidden = false;
-        description.textContent = cardDescription;
-        if (focusedMap) cardPicker.querySelector<HTMLButtonElement>(mapCandidateId
-          ? `[data-choose-building="${mapCandidateId}"]` : '[data-choose-building]')?.focus({ preventScroll: true });
-      };
-      void import('../site-preview/building-map').then(({ mountBuildingMap }) => {
-        if (events.signal.aborted) return;
-        const map = mountBuildingMap(mapHost, {
-          buildingIds: selectableBuildingIds,
-          selectedId: mapCandidateId,
-          signal: events.signal,
-          onSelect: selectMapCandidate,
-          onConfirm: (id) => { if (id === mapCandidateId) showBuilding(id, true); },
-          onReset: () => { mapCandidateId = null; paintMapChoice(); },
-          onReady: () => {
-            if (events.signal.aborted || picker.hidden) return;
-            const focusedCard = cardPicker.contains(document.activeElement);
-            mapStage.classList.remove('is-preparing');
-            mapStage.inert = false;
-            cardPicker.hidden = true;
-            description.textContent = mapDescription;
-            paintMapChoice();
-            if (focusedCard) mapHost.focus({ preventScroll: true });
-          },
-          onError,
-        });
-        if (events.signal.aborted) map.dispose();
-        else buildingMap = map;
-      }).catch(onError);
+      const cardsUrl = new URL(window.location.href);
+      cardsUrl.searchParams.set('buildingPicker', 'cards');
+      buildingMap = mountBuildingMap(mapHost, {
+        buildingIds: selectableBuildingIds,
+        selectedId: mapCandidateId,
+        cardFallbackHref: cardsUrl.href,
+        signal: events.signal,
+        onSelect: selectMapCandidate,
+        onConfirm: (id) => {
+          if (id !== mapCandidateId) return;
+          showBuilding(id, true);
+          title.focus({ preventScroll: true });
+        },
+        onReset: () => { mapCandidateId = null; paintMapChoice(); },
+        onReady: () => {
+          if (events.signal.aborted || picker.hidden) return;
+          mapStage.classList.add('is-ready');
+          paintMapChoice();
+        },
+        onError: () => {
+          const focusedList = mapStage.querySelector('.household-building-map-list')?.contains(document.activeElement);
+          mapStage.classList.remove('is-ready');
+          if (focusedList) mapHost.querySelector<HTMLButtonElement>('[data-site-retry]')?.focus({ preventScroll: true });
+        },
+      });
     };
 
     mapStage?.addEventListener('click', (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-map-building]');
-      if (!button?.dataset.mapBuilding || !buildingMap) return;
+      if (!button?.dataset.mapBuilding || !buildingMap || !mapStage.classList.contains('is-ready')) return;
       selectMapCandidate(button.dataset.mapBuilding);
       if (event.detail === 0) mapHost?.querySelector<HTMLButtonElement>('[data-site-confirm]')?.focus({ preventScroll: true });
     });
@@ -548,7 +529,7 @@ export function waitForHouseholdSelection(
       title.textContent = '분당퍼스트빌리지 동 선택';
       description.textContent = shareAuthentication
         ? '공유 놀이터에서 사용할 동을 선택해 주세요. 세대 선택은 필요하지 않습니다.'
-        : cardDescription;
+        : useBuildingMap ? mapDescription : cardDescription;
       buildingStep.classList.add('is-current');
       buildingStep.classList.toggle('is-complete', Boolean(chosenBuildingId));
       buildingStep.setAttribute('aria-current', 'step');

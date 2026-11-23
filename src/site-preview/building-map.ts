@@ -10,6 +10,7 @@ export interface BuildingMap {
 export interface BuildingMapOptions {
   buildingIds: ReadonlySet<string>;
   selectedId?: string | null;
+  cardFallbackHref: string;
   onSelect(id: string): void;
   onConfirm(id: string): void;
   onReset(): void;
@@ -18,7 +19,7 @@ export interface BuildingMapOptions {
   signal?: AbortSignal;
 }
 
-/** Isolated, lazily loaded viewport. The household wizard owns selection and navigation. */
+/** Synchronous viewport shell; Three.js and the model load only after mounting. */
 export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions): BuildingMap {
   const shell = document.createElement('section');
   shell.className = 'building-map';
@@ -49,7 +50,13 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
         <span></span><span aria-hidden="true">→</span>
       </button>
     </div>
-    <div class="building-map-status" role="status"></div>
+    <div class="building-map-status" tabindex="-1">
+      <p role="status">단지 모형을 불러오는 중입니다.</p>
+      <div class="building-map-status-actions" hidden>
+        <button class="building-map-button" type="button" data-site-retry>다시 불러오기</button>
+        <a class="building-map-card-fallback" data-site-card-fallback>기존 카드로 선택</a>
+      </div>
+    </div>
   `;
   const viewport = shell.querySelector<HTMLElement>('.building-map-viewport')!;
   const compass = shell.querySelector<HTMLElement>('[data-site-compass]')!;
@@ -59,6 +66,10 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   const confirm = shell.querySelector<HTMLButtonElement>('[data-site-confirm]')!;
   const resetButton = shell.querySelector<HTMLButtonElement>('[data-site-reset]')!;
   const status = shell.querySelector<HTMLElement>('.building-map-status')!;
+  const statusMessage = status.querySelector<HTMLElement>('[role="status"]')!;
+  const statusActions = status.querySelector<HTMLElement>('.building-map-status-actions')!;
+  const retry = status.querySelector<HTMLButtonElement>('[data-site-retry]')!;
+  status.querySelector<HTMLAnchorElement>('[data-site-card-fallback]')!.href = options.cardFallbackHref;
   const events = new AbortController();
   const listeners = { signal: events.signal };
   const markers = new Map<string, HTMLButtonElement>();
@@ -66,6 +77,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   let loading: AbortController | null = null;
   let selected = options.selectedId ?? null;
   let disposed = false;
+  let pagePaused = false;
+  let retryRequiresReload = false;
 
   for (const id of options.buildingIds) {
     const marker = document.createElement('button');
@@ -101,37 +114,40 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
     options.onReset();
   }
 
-  function showError(attempt: AbortController): void {
+  function showError(attempt: AbortController, importFailed = false): void {
     if (disposed || attempt.signal.aborted || loading !== attempt) return;
+    const restoreFocus = shell.contains(document.activeElement);
     viewer?.dispose();
     viewer = null;
+    retryRequiresReload = importFailed;
     shell.dataset.buildingMapState = 'error';
     controls.hidden = true;
     resetButton.hidden = true;
     for (const marker of markers.values()) marker.hidden = true;
     syncSelection();
-    const message = document.createElement('p');
-    message.textContent = '3D 단지 모형을 불러오지 못했습니다. 동 목록으로 계속 선택할 수 있습니다.';
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'building-map-button';
-    retry.textContent = '다시 불러오기';
-    retry.addEventListener('click', () => void load(), { ...listeners, once: true });
-    status.replaceChildren(message, retry);
+    statusMessage.textContent = '3D 단지 모형을 불러오지 못했습니다.';
+    statusActions.hidden = false;
     status.hidden = false;
     options.onError?.();
+    if (restoreFocus) retry.focus({ preventScroll: true });
   }
 
   async function load(): Promise<void> {
+    if (disposed) return;
     loading?.abort();
     const attempt = new AbortController();
     loading = attempt;
+    const restoreFocus = document.activeElement === retry;
     shell.dataset.buildingMapState = 'loading';
     resetButton.hidden = true;
-    status.replaceChildren('단지 모형을 불러오는 중입니다.');
+    statusMessage.textContent = '단지 모형을 불러오는 중입니다.';
+    statusActions.hidden = true;
     status.hidden = false;
+    if (restoreFocus) status.focus({ preventScroll: true });
+    let importFailed = true;
     try {
       const { mountSiteViewer } = await import('./viewer');
+      importFailed = false;
       if (attempt.signal.aborted) return;
       const mounted = await mountSiteViewer({
         viewport, compass, markerLayer, markers, buildingIds: options.buildingIds,
@@ -156,6 +172,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
         return;
       }
       viewer = mounted;
+      if (pagePaused) viewer.pause();
+      const restoreMapFocus = document.activeElement === status;
       shell.dataset.buildingMapState = 'ready';
       status.hidden = true;
       controls.hidden = false;
@@ -163,8 +181,9 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
       syncSelection();
       viewer.select(selected, false, false);
       options.onReady?.();
+      if (restoreMapFocus) controls.querySelector<HTMLButtonElement>('[data-site-zoom="in"]')?.focus({ preventScroll: true });
     } catch {
-      showError(attempt);
+      showError(attempt, importFailed);
     }
   }
 
@@ -180,11 +199,25 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
 
   confirm.addEventListener('click', () => { if (selected && viewer) options.onConfirm(selected); }, listeners);
   resetButton.addEventListener('click', activateReset, listeners);
+  retry.addEventListener('click', () => {
+    // Failed module fetches may stay cached by the current page's module
+    // loader. Reload this same URL to resolve a fresh deployment in that case.
+    if (retryRequiresReload) window.location.reload();
+    else void load();
+  }, listeners);
   for (const zoom of shell.querySelectorAll<HTMLButtonElement>('[data-site-zoom]')) {
     zoom.addEventListener('click', () => viewer?.zoom(zoom.dataset.siteZoom === 'in' ? 1.24 : 1 / 1.24), listeners);
   }
-  window.addEventListener('pagehide', (event) => { if (event.persisted) viewer?.pause(); else dispose(); }, listeners);
-  window.addEventListener('pageshow', () => viewer?.resume(), listeners);
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) {
+      pagePaused = true;
+      viewer?.pause();
+    } else dispose();
+  }, listeners);
+  window.addEventListener('pageshow', () => {
+    pagePaused = false;
+    viewer?.resume();
+  }, listeners);
   options.signal?.addEventListener('abort', dispose, { ...listeners, once: true });
   if (options.signal?.aborted) dispose();
   else {

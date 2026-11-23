@@ -1,6 +1,6 @@
 import {
   ACESFilmicToneMapping, Box3, DirectionalLight, HemisphereLight, LoadingManager, Material,
-  Mesh, MeshStandardMaterial, MOUSE, Object3D, OrthographicCamera, Raycaster,
+  Mesh, MOUSE, Object3D, OrthographicCamera, Raycaster,
   Scene, Spherical, Texture, TOUCH, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -9,6 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import dracoWasm from 'three/addons/libs/draco/gltf/draco_decoder.wasm?url';
 import dracoWasmWrapper from 'three/addons/libs/draco/gltf/draco_wasm_wrapper.js?url';
 import modelUrl from './assets/bunfirvil-site-v9.glb?url';
+import { createBuildingOutline } from './building-outline';
 
 const decoderUrls: Record<string, string> = {
   'draco_decoder.wasm': dracoWasm,
@@ -36,11 +37,6 @@ interface Options {
   onReset(): void;
   onLost(): void;
   onZoom?(zoom: number, overviewZoom: number): void;
-}
-
-interface MeshHighlight {
-  mesh: Mesh;
-  base: Material | Material[];
 }
 
 type CameraPhase = 'overview' | 'building' | 'manual';
@@ -218,8 +214,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let selectedId: string | null = null;
     let w = 1;
     let h = 1;
-    let activeHighlights: MeshHighlight[] = [];
-    const accents = new Map<Material, Material>();
+    let outline: ReturnType<typeof createBuildingOutline> | null = null;
     const vector = new Vector3();
     const ray = new Raycaster();
     const pointer = new Vector2();
@@ -319,6 +314,14 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         applyPose(motionTarget, motionOrbit, move.from.zoom * (move.to.zoom / move.from.zoom) ** t);
       }
       gpu.render(world, camera);
+      if (selectedId) {
+        outline ??= createBuildingOutline(gpu, owners);
+        outline.resize(w, h);
+        outline.render(world, camera, selectedId);
+        canvas.dataset.outlineBuilding = selectedId;
+      } else {
+        delete canvas.dataset.outlineBuilding;
+      }
       canvas.dataset.cameraPhase = cameraMove ? 'transition' : cameraPhase;
       canvas.dataset.zoom = camera.zoom.toFixed(3);
       options.onZoom?.(camera.zoom, initialPose.zoom);
@@ -474,33 +477,9 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       options.onReset();
     }, capture);
 
-    function accentFor(material: Material): Material {
-      const old = accents.get(material);
-      if (old) return old;
-      const accent = material.clone();
-      if (accent instanceof MeshStandardMaterial) {
-        accent.color.lerp(accent.color.clone().set(0x9ed9bb), .14);
-        accent.emissive.set(0x396b56);
-        accent.emissiveIntensity = .16;
-      }
-      accents.set(material, accent);
-      return accent;
-    }
-
     function select(id: string | null, animate = true, focus = true): void {
       const changed = id !== selectedId;
-      if (changed) {
-        for (const { mesh, base } of activeHighlights) mesh.material = base;
-        activeHighlights = [];
-        selectedId = id;
-        groups.get(id ?? '')?.traverse((node) => {
-          if (!(node instanceof Mesh)) return;
-          const base = node.material;
-          const accent = Array.isArray(base) ? base.map(accentFor) : accentFor(base);
-          node.material = accent;
-          activeHighlights.push({ mesh: node, base });
-        });
-      }
+      selectedId = id;
       if (focus && id && (changed || animate)) focusBuilding(id, animate);
       queueRender();
     }
@@ -559,8 +538,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         controls.removeEventListener('start', stopCameraMove);
         controls.removeEventListener('change', queueRender);
         controls.dispose();
-        for (const { mesh, base } of activeHighlights) mesh.material = base;
-        for (const accent of accents.values()) accent.dispose();
+        outline?.dispose();
         releaseModel(model);
         sun.shadow.dispose();
         gpu.dispose();

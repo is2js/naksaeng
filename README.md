@@ -13,7 +13,7 @@
 - 세대 인증: 비공개 Google Sheet의 가입요청·인증명단을 분리하고, 운영자는 별도 코드도 확인합니다. 현재 탭에 역할·공유용 닉네임·인증 범위를 저장하며 코드는 저장하지 않습니다.
 - 자체 서버 기능: 없음 — DB, Socket.IO, 전투 판정, 원본 게시 기능을 포함하지 않습니다.
 
-동 선택은 3D 단지 모형을 사용합니다. 로드가 실패하면 기존 카드로 전환되며, [기존 카드로 바로 선택](https://is2js.github.io/naksaeng/bunfirvil/?buildingPicker=cards)도 할 수 있습니다. [배포·롤백 기록](docs/3d-building-picker-rollout.md)에 교체 전 백업 태그와 복구 절차를 보관합니다.
+동 선택은 처음부터 3D 단지 모형 영역을 표시합니다. 로드에 실패하면 같은 자리에서 다시 시도할 수 있고, [기존 카드로 선택](https://is2js.github.io/naksaeng/bunfirvil/?buildingPicker=cards)은 수동 복구 경로로 유지합니다. [배포·롤백 기록](docs/3d-building-picker-rollout.md)에 교체 전 백업 태그와 복구 절차를 보관합니다.
 
 ## 공식 문서·PDF 보관
 

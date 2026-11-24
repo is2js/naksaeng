@@ -6,6 +6,7 @@ import {
 import { SITE_FACILITIES } from './facility-markers';
 import { MAIN_GATE_101 } from './facility-gate101-layout';
 import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
+import { DAYCARE_COURTYARD } from './daycare-courtyard-layout';
 import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } from './site-promenade-layout';
 import { refineBrochureGround } from './facility-brochure-ground';
 
@@ -22,11 +23,15 @@ const COLORS = {
   courtFrame: '#676259', courtDeck: '#aa805f', courtDeckJoint: '#8a684f', courtPaver: '#b69f87',
   promenadeStone: '#bdb2a0', promenadeBand: '#716d64', promenadeTrim: '#e0d7c4',
   cafeGlass: '#62746f', cafeGlassLow: '#435651',
+  daycareRubber: '#88a76b', daycareSage: '#a8be74', daycareMark: '#e1d4aa', daycareSky: '#9dbdba',
+  daycareSlide: '#dc8b42', daycareLime: '#97af53', daycarePost: '#be9554',
+  gardenBark: '#736356', gardenLeaf: '#657e4d', gardenBud: '#8e9f56', gardenFlower: '#d9b6ba', gardenBed: '#778e5e',
 } as const;
 type Finish = keyof typeof COLORS;
 
 const FACADE = 'SM_Rebuilt_Community_Terraces';
 const DAYCARE = 'SM_Rebuilt_Daycare_Pavilion';
+const DAYCARE_GARDEN = 'SM_Rebuilt_Daycare_Courtyard';
 const DRIVE = 'SM_Rebuilt_Upper_Open_Entry';
 const GUARD = 'SM_Rebuilt_Upper_Guardhouse';
 const UPPER_MAIN = 'SM_Rebuilt_Upper_Main_Entry';
@@ -745,7 +750,7 @@ function daycareTerraceRail(batch: SurfaceBatch, a: XZ, b: XZ, floor: number): v
   }
 }
 
-function daycareEntrance(model: Object3D): void {
+function daycareEntrance(model: Object3D): { threshold: XZ; sill: number } | undefined {
   const original = model.getObjectByName('SM_Public_Daycare_2F');
   if (!original) return;
   const { centerPlanPx, lengthMeters, widthMeters, wallMidpoint, gableCenterOffsetMeters } = DAYCARE_ENTRY_FRONTAGE;
@@ -829,20 +834,6 @@ function daycareEntrance(model: Object3D): void {
   for (let x = -shelfHalf + .24; x < shelfHalf; x += .45) {
     batch.plate('stoneJoint', rectangular(at, x, back + .12, x + .017, shelfFront - .07), shelfTop + .007);
   }
-  // Follow the playground edge rather than drawing across the play surface.
-  const pathEnd = plan(455, 554);
-  const promenade = model.getObjectByName('SM_Graded_Pedestrian_Routes');
-  const down = new Raycaster(new Vector3(pathEnd[0], 25, pathEnd[1]), new Vector3(0, -1, 0));
-  const join = (promenade && down.intersectObject(promenade, true)[0]?.point.y)
-    || terrainAt(model, pathEnd, sill) + .13;
-  const threshold = at(center, front + .34);
-  const walk = [[threshold, 1.43, sill + .009],
-    [mix(threshold, pathEnd, .52), 1.31, (sill + join) * .5 + .009], [pathEnd, 1.32, join + .009]] as const;
-  for (let i = 1; i < walk.length; i++) {
-    const [a, aWidth, aY] = walk[i - 1], [b, bWidth, bY] = walk[i];
-    batch.quad('path', groundPoint(add(a, across, -aWidth), aY), groundPoint(add(a, across, aWidth), aY),
-      groundPoint(add(b, across, bWidth), bY), groundPoint(add(b, across, -bWidth), bY));
-  }
   for (const x of [x0, x1]) batch.wall('zinc', at(x, shelfFront - .12), at(x, front), sill, eave);
   const portalLeft = center - 1.16, portalRight = center + 1.16, lintel = sill + 2.12;
   batch.wall('zinc', at(x0, front), at(portalLeft, front), sill, eave);
@@ -874,6 +865,185 @@ function daycareEntrance(model: Object3D): void {
     batch.wall('seams', at(x, front + .016), at(x + .016, front + .016), bottom, level(x) - .02);
   }
   batch.attachTo(group);
+  model.add(group);
+  return { threshold: at(center, front + .34), sill };
+}
+
+/** Remodel only the P4 play wedge and its approaches; keep the v9 shell and the 105 roof promenade. */
+function daycareCourtyard(model: Object3D, entry: ReturnType<typeof daycareEntrance>): void {
+  if (!entry) return;
+  const toPlan = ([x, z]: XZ): XZ => [x / .52 + 490, z / .52 + 540];
+  const fromPlan = ([x, z]: XZ): XZ => plan(x, z);
+  const distance = (p: XZ, points: readonly XZ[]): number => points.slice(1).reduce((best, b, i) => {
+    const a = points[i], vx = b[0] - a[0], vz = b[1] - a[1];
+    const lengthSq = vx * vx + vz * vz;
+    const t = lengthSq ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vz) / lengthSq)) : 0;
+    return Math.min(best, Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vz));
+  }, Infinity);
+  const formerLanes: readonly (readonly XZ[])[] = [
+    [[408,656],[396,623],[391,600],[401,576],[419,559],[434,547],[451,532],[470,515],[481,504]],
+    [[434,547],[455,554],[466,573],[478,597],[494,617]],
+  ];
+  const center = fromPlan(DAYCARE_COURTYARD.playCenter);
+  const along: XZ = DAYCARE_COURTYARD.longSide, cross: XZ = [along[1], -along[0]];
+  const at = (x: number, z: number) => add(add(center, cross, x), along, z);
+  const world = new Vector3(), garden = model.getObjectByName('SM_Courtyard_Lawns_And_Play');
+  garden?.traverseVisible(object => {
+    if (!isMesh(object) || !/^MAT_Garden_/.test(finishName(object))) return;
+    keepTriangles(object, (a, b, c) => {
+      world.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+      const [x, z] = toPlan([world.x, world.z]);
+      // Old rectangular pad, orange slide and the unreferenced oval beside it.
+      return Math.hypot((x - 462) / 25, (z - 600) / 24) > 1 && Math.hypot((x - 491) / 19, (z - 583) / 21) > 1;
+    });
+  });
+  const bakedWalk = model.getObjectByName('SM_Graded_Pedestrian_Routes');
+  let pavingMaterial: MeshStandardMaterial | undefined;
+  bakedWalk?.traverseVisible(object => {
+    if (!isMesh(object) || !/^MAT_(?:Sandstone_Pedestrian_Pavers|Promenade_Paver_Coping)$/.test(finishName(object))) return;
+    if (finishName(object) === 'MAT_Sandstone_Pedestrian_Pavers' && object.material instanceof MeshStandardMaterial) pavingMaterial = object.material;
+    keepTriangles(object, (a, b, c) => {
+      world.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+      const p = toPlan([world.x, world.z]);
+      if (p[1] >= 654 || p[0] > 487 && p[1] > 612) return true;
+      return !formerLanes.some(line => distance(p, line) < 4.6);
+    });
+  });
+  // Remove just the old scatter inside this courtyard. Reuse the surrounding
+  // baked trees and keep the parcel-wide scenery intact.
+  const instance = new Matrix4();
+  model.traverseVisible(object => {
+    if (!(object instanceof InstancedMesh) || !object.parent?.name.startsWith('Courtyard_Grove_Instances')) return;
+    let count = 0;
+    for (let i = 0; i < object.count; i++) {
+      object.getMatrixAt(i, instance);
+      world.setFromMatrixPosition(instance).applyMatrix4(object.matrixWorld);
+      const [x, z] = toPlan([world.x, world.z]);
+      if (Math.hypot((x - 473) / 43, (z - 576) / 57) < 1) continue;
+      if (i !== count) object.setMatrixAt(count, instance);
+      count++;
+    }
+    if (count !== object.count) {
+      object.count = count;
+      object.instanceMatrix.needsUpdate = true;
+      object.computeBoundingSphere();
+    }
+  });
+
+  const group = new Group();
+  group.name = DAYCARE_GARDEN;
+  const batch = new SurfaceBatch(), seam = model.getObjectByName(`${SEAM_PARK}_siteGrass`);
+  const down = new Raycaster(new Vector3(0, 40, 0), new Vector3(0, -1, 0));
+  const base = (p: XZ) => {
+    down.ray.origin.set(p[0], 40, p[1]);
+    return Math.max(terrainAt(model, p, entry.sill - .20), (seam && down.intersectObject(seam)[0]?.point.y) ?? -Infinity);
+  };
+  const grade = (p: XZ) => base(p) + .123;
+  const padY = Math.max(...[at(-5, -6.7), at(5, -6.7), at(5, 6.7), at(-5, 6.7), center].map(base)) + .086;
+  const padOutline = [[-4.78,-6.6],[4.76,-6.6],[5.12,-6.2],[5.12,6.29],[4.72,6.7],[-4.74,6.7],[-5.12,6.24],[-5.12,-6.18]] as const;
+  const inset = (scale: number) => padOutline.map(([u, v]) => at(u * scale, v * scale));
+  batch.prism('stoneInset', 'daycareMark', inset(1), Math.min(padY - .22, base(center) - .06), padY);
+  batch.plate('daycareRubber', inset(.937), padY + .009);
+  batch.plate('daycareSage', [[-4.6,-2.9],[-2.4,-2.9],[-1.8,-4],[1.4,-4],[1.4,-2],[3.5,-1.7],
+    [3.7,2.35],[1.2,2.35],[.65,4.4],[-3.75,4.4],[-4.6,3.15]].map(([x, z]) => at(x, z)), padY + .018);
+  batch.plate('daycareMark', [[-2.6,4.65],[-2.6,2.05],[-1.5,1.15],[.6,1.15],[.6,-2.7],[2.35,-2.7],
+    [2.35,-4.8],[3.38,-4.8],[3.38,-1.65],[1.63,-1.65],[1.63,2.15],[-.87,2.15],[-1.58,2.8],[-1.58,4.65]].map(([x,z]) => at(x,z)), padY + .026);
+  for (const [u, v, w, d, finish] of [[-3.7,-3.2,1.2,1.4,'daycareSky'],[3.1,3.8,1.3,1.4,'daycareSlide'],[-3.5,4.9,1.4,.7,'daycareMark']] as const) {
+    batch.plate(finish, rectangular(at, u, v, u + w, v + d), padY + .033);
+  }
+  const tower = (u: number, v: number) => at(u - 1.28, v - 2.0);
+  const y = padY + .04;
+  const box = (finish: Finish, u: number, v: number, w: number, d: number, h0: number, h1: number) =>
+    batch.prism(finish, finish, rectangular(tower, u, v, u + w, v + d), y + h0, y + h1);
+  for (const u of [-.72, .57]) for (const v of [-.70, .54]) box('daycarePost', u, v, .15, .15, 0, 2.83);
+  box('daycareLime', -.86, -.82, 1.72, 1.66, 2.62, 2.83);
+  box('daycareLime', -.60, -.60, 1.2, 1.2, 1.17, 1.29);
+  for (const u of [-.70, .57]) box('daycarePost', u, -.64, .13, 1.29, 1.29, 1.84);
+  for (let i = 1; i <= 4; i++) box('daycarePost', -.57, -.84 - (4-i)*.095, 1.13, .15, i*.25, i*.25+.08);
+  const slide = [[.60,1.29],[1.14,1.2],[2.13,.64],[2.96,.22],[3.28,.13]] as const;
+  for (let i = 1; i < slide.length; i++) {
+    const [[a, h0], [b, h1]] = [slide[i - 1], slide[i]];
+    batch.quad('daycareSlide', groundPoint(tower(-.42,a),y+h0),groundPoint(tower(.42,a),y+h0),
+      groundPoint(tower(.42,b),y+h1),groundPoint(tower(-.42,b),y+h1));
+    for (const u of [-.42,.42]) batch.quad('daycareSlide', groundPoint(tower(u,a),y+h0),groundPoint(tower(u,b),y+h1),
+      groundPoint(tower(u,b),y+h1+.15),groundPoint(tower(u,a),y+h0+.15));
+  }
+
+  const usedPaths = DAYCARE_COURTYARD.paths.map(({ points, width }) => ({ points: roundedRoute(points), width }));
+  const entryPath = [toPlan(entry.threshold), DAYCARE_COURTYARD.innerJunction];
+  upperParkPavers(batch, model, entryPath, 2.13, p => {
+    const t = Math.min(1, Math.hypot(p[0] - entry.threshold[0], p[1] - entry.threshold[1]) / 2.8);
+    return entry.sill + .014 + (grade(p) - entry.sill) * smoothStep(t);
+  });
+  usedPaths.forEach(({ points, width }, index) => upperParkPavers(batch, model, points, width, p => grade(p) + .006 * index));
+  const clear = (p: XZ, radius: number) => {
+    const worldP = fromPlan(p), dx = worldP[0]-center[0], dz = worldP[1]-center[1];
+    const [nx, nz] = DAYCARE_ENTRY_OUTWARD;
+    const [bodyX, bodyZ] = fromPlan(DAYCARE_ENTRY_FRONTAGE.centerPlanPx);
+    const wallX = worldP[0] - bodyX, wallZ = worldP[1] - bodyZ;
+    return (Math.abs(dx*cross[0]+dz*cross[1]) > 5.14 + radius || Math.abs(dx*along[0]+dz*along[1]) > 6.71 + radius)
+      && (Math.abs(wallX*nx+wallZ*nz) > DAYCARE_ENTRY_FRONTAGE.lengthMeters / 2 + radius
+        || Math.abs(wallX*nz-wallZ*nx) > DAYCARE_ENTRY_FRONTAGE.widthMeters / 2 + radius)
+      && distance(p, entryPath) * .52 > 1.04 + radius
+      && distance(p, COMMUNITY_PROMENADE) * .52 > 1.725 + radius
+      && usedPaths.every(path => distance(p, path.points) * .52 > path.width/2 + radius);
+  };
+  const mound = (p: XZ, start: number, radius: number, height: number, phase: number, colors: readonly Finish[], broad = false) => {
+    const ring = Array.from({ length: 7 }, (_, i) => {
+      const angle = phase + i * Math.PI * 2 / 7, r = radius * (1 + .13 * Math.sin(i * 4.1 + phase));
+      return add(p,[Math.cos(angle),Math.sin(angle)],r);
+    });
+    const peak = groundPoint(add(p,[.17,-.24],radius),start + height);
+    ring.forEach((a,i) => {
+      const b = ring[(i+1)%ring.length], finish = colors[i % colors.length];
+      if (!broad) batch.tri(finish,groundPoint(a,start),groundPoint(b,start),peak);
+      else {
+        // A wider shoulder and rounded lower edge read as broadleaf canopy,
+        // rather than a row of conical background trees.
+        const shoulderA = groundPoint(a,start+height*.47), shoulderB = groundPoint(b,start+height*.47);
+        batch.quad(finish,groundPoint(mix(p,a,.54),start),groundPoint(mix(p,b,.54),start),shoulderB,shoulderA);
+        batch.tri(finish,shoulderA,shoulderB,peak);
+      }
+    });
+  };
+  for (const { kind, points } of DAYCARE_COURTYARD.trees) points.forEach((p, i) => {
+    if (!clear(p, .54)) return;
+    const worldP = fromPlan(p), trunkY = base(worldP), height = 2.8 + (i % 4) * .34;
+    const frame = (x: number, z: number): XZ => [worldP[0]+x,worldP[1]+z];
+    batch.prism('gardenBark', 'gardenBark', rectangular(frame,-.091,-.085,.091,.085),trunkY,trunkY+height*.64);
+    const shades = kind === 'flower' ? ['gardenFlower','gardenFlower','daycareMark'] as const : ['gardenLeaf','gardenBud','gardenLeaf'] as const;
+    for (let j=0;j<3;j++) {
+      const angle = i * 2.11 + j * Math.PI * 2/3, radius = .78 + (i % 3)*.12;
+      mound(add(worldP,[Math.cos(angle),Math.sin(angle)],.58),trunkY+height*(.42+j*.045),radius,height*.62,angle,shades,true);
+    }
+  });
+  DAYCARE_COURTYARD.beds.forEach((line, j) => {
+    const samples = roundedRoute(line);
+    for (let i = 1; i < samples.length; i++) {
+      if (!clear(samples[i-1],.50) || !clear(samples[i],.50)) continue;
+      const a = fromPlan(samples[i-1]), b = fromPlan(samples[i]), [vx,vz] = unit(a,b);
+      const edges = [add(a,[-vz,vx],.47),add(a,[-vz,vx],-.47),add(b,[-vz,vx],-.42),add(b,[-vz,vx],.42)];
+      const [r,s,t,u] = edges.map(p => groundPoint(p,base(p)+.035));
+      batch.quad('gardenBed',r,s,t,u);
+    }
+    samples.filter((_, i) => i % 2 === 0).forEach((p,i) => {
+      const q: XZ = [p[0]+Math.sin(i*9.1+j)*.68,p[1]+Math.cos(i*7.3)*.92];
+      if (!clear(q,.30)) return;
+      const point = fromPlan(q), size = .30 + (i % 4)*.075;
+      mound(point,base(point)+.02,size,size*.85,i*1.27,['gardenLeaf','gardenBud',j%3 === 0 ? 'gardenFlower' : 'gardenLeaf']);
+    });
+  });
+  batch.attachTo(group);
+  group.traverse(node => {
+    if (!isMesh(node) || !(node.material instanceof MeshStandardMaterial)) return;
+    if (/gardenBark|gardenLeaf|gardenFlower|daycareLime|daycarePost|daycareSlide/.test(node.name)) node.userData.castsSiteShadow = true;
+    if (!node.name.endsWith('_path') || !pavingMaterial?.map) return;
+    const p = node.geometry.getAttribute('position'), uv: number[] = [];
+    for (let i = 0; i < p.count; i++) uv.push(p.getX(i) * .62, 1 + p.getZ(i) * .62);
+    node.geometry.setAttribute('uv',new Float32BufferAttribute(uv,2));
+    node.material.map = pavingMaterial.map;
+    node.material.color.copy(pavingMaterial.color);
+  });
   model.add(group);
 }
 
@@ -1780,7 +1950,7 @@ export function refineFacilityExteriors(model: Object3D): void {
   if (model.getObjectByName(FACADE)) return;
   model.updateMatrixWorld(true);
   const podiumWalk = communityExteriors(model);
-  daycareEntrance(model);
+  const daycareEntry = daycareEntrance(model);
   raiseNorthernParks(model);
   mainUpperEntry(model);
   upperOpenEntry(model);
@@ -1790,6 +1960,7 @@ export function refineFacilityExteriors(model: Object3D): void {
   rebuildUpperRetail(model);
   upperPodiumPavers(model, podiumWalk);
   southPromenades(model);
+  daycareCourtyard(model, daycareEntry);
   deForetCafe(model);
   refineBrochureGround(model);
   model.updateMatrixWorld(true);

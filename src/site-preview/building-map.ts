@@ -81,9 +81,30 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   let pagePaused = false;
   let retryRequiresReload = false;
   const mapList = host.parentElement?.querySelector<HTMLElement>('.household-building-map-list');
-  // OrbitControls may be disabled mid-interaction (e.g. during the cutaway).
-  // Keep context-menu suppression local to the map even then.
-  shell.addEventListener('contextmenu', (event) => event.preventDefault(), listeners);
+  const capture = { ...listeners, capture: true };
+  let rightMapPointer: number | null = null;
+  let suppressRightMenuUntil = 0;
+  const isInMap = (event: Event) => event.composedPath().includes(shell);
+  window.addEventListener('pointerdown', (event) => {
+    if (event.button !== 2) return;
+    rightMapPointer = isInMap(event) ? event.pointerId : null;
+    suppressRightMenuUntil = 0;
+  }, capture);
+  const endRightMapPointer = (event: PointerEvent) => {
+    if (event.pointerId !== rightMapPointer) return;
+    rightMapPointer = null;
+    // Browsers can emit contextmenu on release, after OrbitControls has
+    // released pointer capture and the original drag is outside the canvas.
+    suppressRightMenuUntil = performance.now() + 450;
+  };
+  window.addEventListener('pointerup', endRightMapPointer, capture);
+  window.addEventListener('pointercancel', endRightMapPointer, capture);
+  window.addEventListener('contextmenu', (event) => {
+    if (isInMap(event) || (event.button === 2 && (rightMapPointer !== null || performance.now() < suppressRightMenuUntil))) {
+      event.preventDefault();
+    }
+  }, capture);
+  window.addEventListener('blur', () => { rightMapPointer = null; suppressRightMenuUntil = 0; }, listeners);
 
   for (const id of options.buildingIds) {
     const marker = document.createElement('button');

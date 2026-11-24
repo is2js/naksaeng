@@ -287,6 +287,20 @@ test('desktop site right click keeps the selection, right drag pans, and the res
   await page.mouse.up({ button: 'right' });
   await expect(canvas(page)).not.toHaveAttribute('data-camera-target', before!);
   await expect(canvas(page)).toHaveAttribute('data-outline-building', '105');
+
+  // Windows can deliver contextmenu after release, retargeted outside the
+  // WebGL host. A new, unrelated right click outside must still be native.
+  const title = page.getByRole('heading', { name: '분당퍼스트빌리지 동 선택' });
+  const contextMenuIsSuppressed = () => title.evaluate(node =>
+    !node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })));
+  const titleBounds = (await title.boundingBox())!;
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(titleBounds.x + 6, titleBounds.y + 6, { steps: 7 });
+  await page.mouse.up({ button: 'right' });
+  expect(await contextMenuIsSuppressed()).toBe(true);
+  await title.evaluate(node => node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 2, pointerId: 1 })));
+  expect(await contextMenuIsSuppressed()).toBe(false);
   await reset(page).click();
   await expectOverview(page);
 });

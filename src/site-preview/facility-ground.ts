@@ -13,7 +13,7 @@ type Shape = typeof FACILITY_STYLES[Facility['kind']]['shape'];
 
 // Surface batches from the approved model. Foliage and occupied tower roofs
 // are never eligible height samples for public-space and basement facilities.
-const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach|Rebuilt_Upper_Open_Entry|Rebuilt_Upper_Main_Entry|Rebuilt_Seam_Park)$/;
+const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach|Rebuilt_Upper_Open_Entry|Rebuilt_Upper_Main_Entry|Rebuilt_Seam_Park|Rebuilt_South_Promenades)$/;
 const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Main_Gate_Life_Support_Terrace|Rebuilt_Community_Terraces|Rebuilt_Upper_Retail_Frontage)$/;
 const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Northwest_Entry_Portals_And_Guardhouses|Rebuilt_Upper_Guardhouse)$/;
 const DAYCARE = /^SM_Public_Daycare_2F$/;

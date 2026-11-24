@@ -237,6 +237,47 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
   const slabLip = addMesh(new ExtrudeGeometry(shapeOf(floor.outline), { depth: .06, bevelEnabled: false }).rotateX(-Math.PI / 2), board);
   slabLip.position.y = -.075;
 
+  if (floor.guardRails.length) {
+    const railing = material('#a6aaab');
+    const curb = material('#7d8080');
+    const seenCorners = new Set<string>();
+    const pickets: { point: Point; width: number }[] = [];
+    const railTop = .90;
+    const curbTop = .14;
+    for (const { start: [ax, az], end: [bx, bz] } of floor.guardRails) {
+      const span = Math.hypot(bx - ax, bz - az);
+      const run = new Group();
+      run.position.set(ax, 0, az);
+      run.rotation.y = -Math.atan2(bz - az, bx - ax);
+      root.add(run);
+      box(span / 2, curbTop / 2, 0, span, curbTop, .11, curb, run);
+      box(span / 2, railTop, 0, span, .055, .07, railing, run);
+      const intervals = Math.max(1, Math.ceil(span / .20));
+      for (let i = 0; i <= intervals; i++) {
+        const t = i / intervals;
+        const point: Point = i === 0 ? [ax, az] : i === intervals ? [bx, bz] : [ax + (bx - ax) * t, az + (bz - az) * t];
+        const corner = i === 0 || i === intervals;
+        if (corner) {
+          const key = point.join(',');
+          if (seenCorners.has(key)) continue;
+          seenCorners.add(key);
+        }
+        pickets.push({ point, width: corner || i % 7 === 0 ? .055 : .027 });
+      }
+    }
+    const unitBox = new BoxGeometry();
+    geometries.add(unitBox);
+    const balusters = new InstancedMesh(unitBox, railing, pickets.length);
+    balusters.castShadow = balusters.receiveShadow = true;
+    const p = new Vector3(), size = new Vector3(), q = new Quaternion(), matrix = new Matrix4();
+    pickets.forEach(({ point: [x, z], width }, i) => {
+      matrix.compose(p.set(x, (railTop + curbTop) / 2, z), q, size.set(width, railTop - curbTop, width));
+      balusters.setMatrixAt(i, matrix);
+    });
+    root.add(balusters);
+    fixtures.add(balusters);
+  }
+
   for (const room of floor.rooms) {
     let pattern = paint.get(room.kind);
     if (!pattern) {
@@ -244,7 +285,7 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
       paint.set(room.kind, pattern);
       textures.add(pattern);
     }
-    const color = room.id === 'sports-court' ? '#548e6c' : room.id === 'entry' ? '#b8b2a3'
+    const color = room.id === 'sports-court' ? '#548e6c' : room.id === 'entry' ? '#b8b2a3' : room.id === 'terrace' ? '#a6a8a6'
       : room.label.includes('보육실') ? '#b6c8ad' : palette[room.kind];
     const mat = new MeshStandardMaterial({ color, map: pattern, roughness: .85, side: DoubleSide });
     materials.add(mat);

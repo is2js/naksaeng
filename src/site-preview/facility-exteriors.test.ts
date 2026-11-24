@@ -1,7 +1,8 @@
-import { Group, Mesh } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { expect, it } from 'vitest';
 import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
 import { refineFacilityExteriors } from './facility-exteriors';
+import { SITE_FACILITIES } from './facility-markers';
 
 it('mounts the daycare door in front of the middle of the short wall, not on its corner', () => {
   const model = new Group();
@@ -44,4 +45,38 @@ it('adds the Community I pavilion palette only to its own terrace', () => {
     'MAT_Rebuilt_courtGlass', 'MAT_Rebuilt_courtDeck', 'MAT_Rebuilt_courtPaver']));
   expect(materials(second as Group)).toContain('MAT_Rebuilt_facadeGlass');
   expect(materials(second as Group).every(name => !name.startsWith('MAT_Rebuilt_court'))).toBe(true);
+});
+
+it('centers the 105 and 109 guardhouses on cardinal axes without deleting the ramp', () => {
+  const model = new Group(), entries = new Group();
+  entries.name = 'SM_Entry_Portals_And_Parking_Ramp';
+  model.add(entries);
+  const markers = ['security-105', 'security-109'].map(id => SITE_FACILITIES.find(facility => facility.id === id)!);
+  const { x, z } = markers[0];
+  const inside = [x - .5, 1, z, x + .5, 1, z, x, 2, z + .3];
+  const outside = [x - 8, 1, z, x - 7, 1, z, x - 7, 2, z + .3];
+  const mesh = (name: string, vertices: number[]) => {
+    const geometry = new BufferGeometry().setAttribute('position', new Float32BufferAttribute(vertices, 3));
+    const material = new MeshStandardMaterial();
+    material.name = name;
+    const result = new Mesh(geometry, material);
+    entries.add(result);
+    return result;
+  };
+  const shared = mesh('MAT_Entry_Pale_Limestone', [...inside, ...outside]);
+  const asphalt = mesh('MAT_Entry_Asphalt', inside);
+  refineFacilityExteriors(model);
+  expect(Array.from(shared.geometry.getIndex()!.array)).toEqual([3, 4, 5]);
+  expect(asphalt.visible).toBe(true);
+  expect(asphalt.geometry.getIndex()).toBeNull();
+  for (const marker of markers) {
+    const roof = model.getObjectByName(`SM_Rebuilt_Upper_Guardhouse_${marker.id}_zinc`) as Mesh;
+    const points = roof.geometry.getAttribute('position');
+    const distinct = (read: (i: number) => number) => [...new Set(Array.from({ length: points.count }, (_, i) => read(i)))].sort((a, b) => a - b);
+    const xs = distinct(i => points.getX(i)), zs = distinct(i => points.getZ(i));
+    expect(xs).toHaveLength(2);
+    expect(zs).toHaveLength(2);
+    expect((xs[0] + xs[1]) / 2).toBeCloseTo(marker.x, 4);
+    expect((zs[0] + zs[1]) / 2).toBeCloseTo(marker.z, 4);
+  }
 });

@@ -144,4 +144,20 @@ describe('page 5 facility plans', () => {
       }
     }
   });
+
+  it('uses an open guardrail along the 2F terrace exposure only and keeps the hall door', () => {
+    const [first, second] = FACILITY_DETAIL_PLANS['daycare-104'].floors;
+    const terrace = byId(second, 'terrace');
+    const hall = byId(second, 'hall-2');
+    expect(first.guardRails).toHaveLength(0);
+    expect(second.guardRails.map(rail => rail.start)).toEqual([0, 1, 8, 9].map(index => second.outline[index]));
+    for (const { start, end } of second.guardRails) {
+      expect(contains(start, terrace.polygon) && contains(end, terrace.polygon)).toBe(true);
+      expect(second.walls.some(wall => distance(wall.start, start) < 1e-7 && distance(wall.end, end) < 1e-7)).toBe(false);
+    }
+    expect(second.openings.some(({ kind, start, end }) => {
+      const center: FacilityPoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+      return kind === 'door' && contains(center, terrace.polygon) && contains(center, hall.polygon);
+    })).toBe(true);
+  });
 });

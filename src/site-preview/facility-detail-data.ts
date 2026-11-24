@@ -39,6 +39,7 @@ export interface FacilityFloor {
   readonly rooms: readonly FacilityRoom[];
   readonly walls: readonly FacilityWall[];
   readonly openings: readonly FacilityOpening[];
+  readonly guardRails: readonly Pick<FacilityWall, 'start' | 'end'>[];
 }
 
 export interface FacilityDetailPlan {
@@ -77,7 +78,8 @@ const win = (from: number, to: number): DraftOpening => [from, to, 'window'];
 // Scale is proportional to the p.4/site-model footprint (there is no room dimension schedule).
 // Rotation to +X east / +Z south is applied HERE once; renderers use north = -Z directly.
 function makeFloor(id: FacilityFloorId, label: string, origin: FacilityPoint, scale: FacilityPoint, degrees: number,
-  outline: readonly FacilityPoint[], rooms: readonly DraftRoom[], interior: readonly DraftWall[], outerOpenings: readonly OutlineRun[]): FacilityFloor {
+  outline: readonly FacilityPoint[], rooms: readonly DraftRoom[], interior: readonly DraftWall[], outerOpenings: readonly OutlineRun[],
+  exposedRailSegments: readonly number[] = []): FacilityFloor {
   const angle = degrees * Math.PI / 180;
   const c = Math.cos(angle), s = Math.sin(angle);
   function toWorld([u, v]: FacilityPoint): FacilityPoint {
@@ -90,16 +92,21 @@ function makeFloor(id: FacilityFloorId, label: string, origin: FacilityPoint, sc
   const outerSpecs: readonly DraftWall[] = outline.map((start, i) => [start, outline[(i + 1) % outline.length], outerOpenings.find((row) => row.segment === i)?.openings]);
   const walls: FacilityWall[] = [];
   const openings: FacilityOpening[] = [];
+  const guardRails: FacilityFloor['guardRails'][number][] = [];
   for (const [index, [start, end, apertures]] of [...outerSpecs, ...interior].entries()) {
     const exterior = index < outerSpecs.length;
     const wallId = `${id}-wall-${index + 1}`;
     const a = toWorld(start), b = toWorld(end);
+    if (exterior && exposedRailSegments.includes(index)) {
+      guardRails.push({ start: a, end: b });
+      continue;
+    }
     walls.push({ id: wallId, start: a, end: b, exterior, thickness: exterior ? .24 : .15 });
     apertures?.forEach(([from, to, kind], openingIndex) => openings.push({
       id: `${wallId}-opening-${openingIndex + 1}`, wallId, start: between(a, b, from), end: between(a, b, to), kind,
     }));
   }
-  return { id, label, outline: outline.map(toWorld), rooms: rooms.map((r) => ({ ...r, polygon: r.polygon.map(toWorld), center: toWorld(r.center) })), walls, openings };
+  return { id, label, outline: outline.map(toWorld), rooms: rooms.map((r) => ({ ...r, polygon: r.polygon.map(toWorld), center: toWorld(r.center) })), walls, openings, guardRails };
 }
 
 // The p.5 upper-left cutaway has two perpendicular wings. Fit the long
@@ -296,7 +303,9 @@ const daycareTwo = makeFloor('2f','2층',[885,466],[.052,.052],DAYCARE_CUTAWAY_Y
   { segment: 3, openings: [win(.23,.33),win(.37,.47),win(.52,.57),win(.77,.86)] },
   { segment: 6, openings: [win(.17,.30),win(.72,.91)] },
   { segment: 7, openings: [win(.08,.17),win(.20,.30),win(.59,.68),win(.73,.83),win(.89,.95)] },
-]);
+// p.5: rail along the front and both exposed returns. The west edge has
+// a short extra return; the shared interior wall (including the door) remains.
+], [0,1,8,9]);
 
 const scaleDisclaimer = '공급안내문 5쪽의 절개 투시도를 바탕으로 벽과 공간을 다시 그린 참고용 모형입니다. 안내 이미지에 치수가 없어 비례를 사용했고, 세부 문과 가구 위치는 실제와 다를 수 있습니다.';
 
@@ -314,6 +323,6 @@ export const FACILITY_DETAIL_PLANS: Readonly<Record<FacilityDetailId, FacilityDe
   'daycare-104': {
     id: 'daycare-104', label: '국공립어린이집', floors: [daycareOne, daycareTwo],
     description: '104동 옆 어린이집의 두 층입니다. 유아놀이터 쪽 현관과 중앙 복도에서 보육실, 교사 공간과 지원 시설이 갈라집니다.',
-    sourceNote: `${scaleDisclaimer} 두 층의 계단·승강기 코어를 맞췄습니다. 1층 현관은 동쪽 유아놀이터를 향하는 짧은 입면 중앙에 두었으며 포치와 문의 치수는 추정입니다.`,
+    sourceNote: `${scaleDisclaimer} 두 층의 계단·승강기 코어를 맞췄습니다. 1층 현관은 동쪽 유아놀이터를 향하는 짧은 입면 중앙에 두었습니다. 2층 테라스는 투시도에서 보이는 타일과 금속 난간을 재현했습니다. 포치·문과 난간의 치수는 추정입니다.`,
   },
 };

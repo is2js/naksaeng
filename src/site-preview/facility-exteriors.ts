@@ -4,8 +4,9 @@ import {
   type Object3D,
 } from 'three';
 import { SITE_FACILITIES } from './facility-markers';
+import { MAIN_GATE_101 } from './facility-gate101-layout';
 import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
-import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS } from './site-promenade-layout';
+import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } from './site-promenade-layout';
 import { refineBrochureGround } from './facility-brochure-ground';
 
 type XZ = readonly [number, number];
@@ -34,6 +35,9 @@ const RETAIL = 'SM_Rebuilt_Upper_Retail_Frontage';
 const PROMENADE = 'SM_Rebuilt_South_Promenades';
 const CAFE = 'SM_Rebuilt_DeForet_Cafe';
 const EPSILON = 1e-4;
+const COMMUNITY_TWO_ROOF = 7.72;
+const UPPER_RETAIL_ROOF = 7.58;
+const PODIUM_VISIBLE_FLOOR = 3.05; // Same single-storey exposure as Community I.
 const groundPoint = (p: XZ, y: number): XYZ => [p[0], y, p[1]];
 const plan = (px: number, py: number): XZ => [(px - 490) * 0.52, (py - 540) * 0.52];
 const add = (a: XZ, b: XZ, by = 1): XZ => [a[0] + b[0] * by, a[1] + b[1] * by];
@@ -328,34 +332,83 @@ function removeBakedFacilityProxy(model: Object3D, center: XZ, angleDegrees: num
   }
 }
 
-function lowerCommunityTwoFrontage(model: Object3D, outline: readonly XZ[]): void {
-  // Page 6 shows a podium floor exposed on the stream side. In the GLB this
-  // strip was graded at the 109 tower's pad, which would bury the new windows.
-  // Taper only the garden-side frontage; never lower the tower pad or road.
-  const frontage = [3, 4, 5, 6, 7, 8, 9].map(i => {
-    const a = outline[i], b = outline[i + 1];
-    const axis = unit(a, b);
-    return { a, axis, outward: [axis[1], -axis[0]] as XZ, length: Math.hypot(b[0] - a[0], b[1] - a[1]) };
+const communityTwoGlazedEdges = [2, 3, 4, 5, 6, 7, 8, 9];
+const retailGlazedEdges = [1, 2];
+const upperRetailOutline: readonly XZ[] = [[393.0,442.2],[405.0,429.8],[426.5,455.7],[415.1,470.0]]
+  .map(([x,z]) => plan(x,z));
+const upperPodiumWalk = [[290,410], [298,422], [320,459], [342,493], [358,517],
+  [368,523], [377,520], [390,511], [416,488], [430,474], [432,466]]
+  .map(([x, z]) => plan(x, z));
+
+function podiumFrontage(outline: readonly XZ[], edges: readonly number[], roof: number) {
+  const orientation = Math.sign(outline.reduce((area, a, i) => {
+    const b = outline[(i + 1) % outline.length];
+    return area + a[0] * b[1] - b[0] * a[1];
+  }, 0)) || 1;
+  return edges.map(i => {
+    const a = outline[i], b = outline[(i + 1) % outline.length], axis = unit(a, b);
+    return { a, axis, outward: [axis[1] * orientation, -axis[0] * orientation] as XZ,
+      length: Math.hypot(b[0] - a[0], b[1] - a[1]), floor: roof - PODIUM_VISIBLE_FLOOR };
   });
-  const ease = (n: number): number => {
-    const t = Math.min(1, Math.max(0, n));
-    return t * t * (3 - 2 * t);
-  };
-  const gradeInfluence = (x: number, z: number): number => {
-    let closest = Infinity, influence = 0;
-    for (const { a, axis, outward, length } of frontage) {
+}
+
+function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
+  const frontage = [...podiumFrontage(outline, communityTwoGlazedEdges, COMMUNITY_TWO_ROOF),
+    ...podiumFrontage(upperRetailOutline, retailGlazedEdges, UPPER_RETAIL_ROOF)];
+  const route = roundedRoute(upperPodiumWalk);
+  const stations = [0];
+  for (let i = 1; i < route.length; i++) {
+    stations.push(stations[i - 1] + Math.hypot(route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1]));
+  }
+  const total = stations.at(-1)!;
+  const level = COMMUNITY_TWO_ROOF - PODIUM_VISIBLE_FLOOR;
+  const endGrade = terrainAt(model, route.at(-1)!, UPPER_RETAIL_ROOF - PODIUM_VISIBLE_FLOOR) + .16;
+  const startGrade = terrainAt(model, route[0], level) + .18;
+  const pavingY = (station: number) => level + (startGrade - level) * (1 - smoothStep(station / 4.9))
+    + (endGrade - level) * smoothStep((station - total + 14.1) / 14.1);
+  const segments = route.slice(1).map((b, i) => ({ a: route[i], axis: unit(route[i], b), station: stations[i],
+    length: stations[i + 1] - stations[i] }));
+  const bounds = { xMin: Math.min(...route.map(p => p[0])) - 7, xMax: Math.max(...route.map(p => p[0])) + 7,
+    zMin: Math.min(...route.map(p => p[1])) - 7, zMax: Math.max(...route.map(p => p[1])) + 7 };
+  const nearest = (x: number, z: number) => {
+    let distance = Infinity, station = 0;
+    if (x < bounds.xMin || x > bounds.xMax || z < bounds.zMin || z > bounds.zMax) return { distance, station };
+    for (const { a, axis, station: start, length } of segments) {
       const dx = x - a[0], dz = z - a[1];
+      const t = Math.min(length, Math.max(0, dx * axis[0] + dz * axis[1]));
+      const d = (dx - t * axis[0]) ** 2 + (dz - t * axis[1]) ** 2;
+      if (d < distance) {
+        distance = d;
+        station = start + t;
+      }
+    }
+    return { distance: Math.sqrt(distance), station };
+  };
+  // Set the low street face independently from the tower pad. Only the visible
+  // wing and its path are cut back; the surrounding grade and roof stay put.
+  const floorLimit = (p: XZ): number => {
+    let allowed = Infinity;
+    for (const { a, axis, outward, length, floor } of frontage) {
+      const dx = p[0] - a[0], dz = p[1] - a[1];
       const along = dx * axis[0] + dz * axis[1];
       const out = dx * outward[0] + dz * outward[1];
       const beyond = Math.max(0, -along, along - length);
-      const distance = Math.hypot(beyond, out);
-      if (distance >= closest) continue;
-      closest = distance;
-      influence = ease((out + 3.2) / 2.8) * ease((12.2 - out) / 5.2) * ease((5 - beyond) / 5);
+      const distance = Math.hypot(beyond, Math.max(0, out - 7, -out - 1.20));
+      if (distance >= 7 || out < -3.05) continue;
+      // Rejoin the hillside miter at the wall ends; don't pull down either
+      // the inside of the park roof or the artery at the foot of the ramp.
+      const fade = Math.max(smoothStep(distance / 7), smoothStep((-out - 1.2) / 1.85));
+      allowed = Math.min(allowed, floor - .16 + 5.25 * fade);
     }
-    return influence;
+    return allowed;
   };
-  const lower = (v: Vector3): number => Math.max(0, v.y - 4.42) * gradeInfluence(v.x, v.z);
+  const lower = (v: Vector3): number => {
+    const capped = Math.min(v.y, floorLimit([v.x, v.z]));
+    const { distance, station } = nearest(v.x, v.z);
+    const weight = (1 - smoothStep((distance - 2.65) / 3.4))
+      * smoothStep(station / 4.2) * smoothStep((total - station) / 4.2);
+    return v.y - (capped + (pavingY(station) - .105 - capped) * weight);
+  };
   const point = new Vector3(), inverse = new Matrix4();
   const moveVertices = (mesh: Mesh, shift: (p: Vector3) => number) => {
     const position = mesh.geometry.getAttribute('position');
@@ -364,7 +417,7 @@ function lowerCommunityTwoFrontage(model: Object3D, outline: readonly XZ[]): voi
     for (let index = 0; index < position.count; index++) {
       point.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
       const dy = shift(point);
-      if (dy < EPSILON) continue;
+      if (Math.abs(dy) < EPSILON) continue;
       changed = true;
       point.y -= dy;
       point.applyMatrix4(inverse);
@@ -381,11 +434,20 @@ function lowerCommunityTwoFrontage(model: Object3D, outline: readonly XZ[]): voi
     if (isMesh(node) && finishName(node) === 'MAT_Site_Grass') moveVertices(node, lower);
   });
 
-  // Preserve the drawn path and existing trees on top of the adjusted grade.
-  // A narrow buffer keeps slabs/plantings that border the cut from hovering.
+  // The two historical routes share this arc. Remove both facelift sections
+  // before putting the centreline down once, rather than lowering two skins.
+  const withinRebuiltWalk = (p: Vector3) => {
+    const { distance, station } = nearest(p.x, p.z);
+    return distance < 3.5 && station > .02 && station < total - .02;
+  };
+  const midpoint = new Vector3();
   model.getObjectByName('SM_Graded_Pedestrian_Routes')?.traverse(node => {
-    if (isMesh(node)) moveVertices(node, p => gradeInfluence(p.x, p.z) > 0
-      ? Math.max(0, p.y - terrainAt(model, [p.x, p.z], p.y) - .105) : 0);
+    if (!isMesh(node)) return;
+    keepTriangles(node, (a, b, c) => !withinRebuiltWalk(midpoint.copy(a).add(b).add(c).multiplyScalar(1/3)));
+    moveVertices(node, p => {
+      const limit = floorLimit([p.x, p.z]);
+      return p.y > limit ? Math.max(0, p.y - terrainAt(model, [p.x, p.z], p.y) - .105) : 0;
+    });
   });
   const instance = new Matrix4();
   model.traverse(node => {
@@ -397,7 +459,7 @@ function lowerCommunityTwoFrontage(model: Object3D, outline: readonly XZ[]): voi
       node.getMatrixAt(i, instance);
       point.setFromMatrixPosition(instance).applyMatrix4(node.matrixWorld);
       const dy = lower(point);
-      if (dy < EPSILON) continue;
+      if (Math.abs(dy) < EPSILON) continue;
       changed = true;
       localShift.copy(point);
       point.y -= dy;
@@ -412,15 +474,17 @@ function lowerCommunityTwoFrontage(model: Object3D, outline: readonly XZ[]): voi
       node.computeBoundingSphere();
     }
   });
+  return route.map((p, i) => ({ position: p, y: pavingY(stations[i]) }));
 }
 
-function steppedTerrace(batch: SurfaceBatch, outline: readonly XZ[], top: number, gradeLow: number): void {
+function steppedTerrace(batch: SurfaceBatch, outline: readonly XZ[], top: number, gradeLow: number,
+  glazedEdges: readonly number[]): void {
   const twiceArea = outline.reduce((sum, a, i) => {
     const b = outline[(i + 1) % outline.length];
     return sum + a[0] * b[1] - b[0] * a[1];
   }, 0);
   const orientation = Math.sign(twiceArea) || 1;
-  batch.prism('limestone', 'roofLawn', outline, gradeLow, top);
+  batch.prism('courtStone', 'roofLawn', outline, gradeLow, top);
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i], b = outline[(i + 1) % outline.length];
     const [dx, dz] = unit(a, b);
@@ -435,28 +499,29 @@ function steppedTerrace(batch: SurfaceBatch, outline: readonly XZ[], top: number
     if (length > 5) {
       batch.strip('hedge', add(mix(a, b, .14), outward, -1.52), add(mix(a, b, .86), outward, -1.52), 0.45, top + 0.04);
     }
-    const bays = Math.max(1, Math.round(length / 4.05));
-    const floor = Math.max(gradeLow + .14, top - 3.39);
+    if (!glazedEdges.includes(i)) continue;
+    const bays = Math.max(1, Math.round(length / 4.75));
+    const floor = top - PODIUM_VISIBLE_FLOOR;
     for (let j = 0; j < bays; j++) {
       const u = (j + 0.5) / bays;
       const half = Math.max(.08, 0.5 / bays - .27 / length);
       const starting = mix(a, b, u - half), ending = mix(a, b, u + half);
       const frontA = add(starting, outward, 0.035), frontB = add(ending, outward, 0.035);
-      batch.wall('stoneInset', frontA, frontB, floor, top - .45);
+      batch.wall('courtGlassShade', frontA, frontB, floor + .12, top - .45);
       const glassHalf = Math.max(.03, half - .16 / length);
-      batch.wall('facadeGlass', add(mix(a, b, u - glassHalf), outward, 0.047),
-        add(mix(a, b, u + glassHalf), outward, 0.047), floor + 0.12, top - .57);
-      if (length / bays > 2) {
-        const sashA = add(mix(a, b, u - .041 / length), outward, .056);
-        const sashB = add(mix(a, b, u + .041 / length), outward, .056);
-        batch.wall('facadeSash', sashA, sashB, floor + 0.1, top - .57);
+      batch.wall('courtGlass', add(mix(a, b, u - glassHalf), outward, 0.047),
+        add(mix(a, b, u + glassHalf), outward, 0.047), floor + .17, top - .94);
+      if (length / bays > 2.2) {
+        for (const offset of [-glassHalf / 3, glassHalf / 3]) {
+          const sashA = add(mix(a, b, u + offset - .033 / length), outward, .057);
+          const sashB = add(mix(a, b, u + offset + .033 / length), outward, .057);
+          batch.wall('courtFrame', sashA, sashB, floor + .15, top - .94);
+        }
+        const x = j * length / bays;
+        const at = (l: number, d: number) => add(add(a, [dx, dz], l), outward, d);
+        batch.prism('courtStone', 'courtStone', rectangular(at, Math.max(0, x - .19), -.055, x + .23, .15),
+          floor - .04, top - .33);
       }
-      batch.wall('windowGlint', add(frontA, outward, .022), add(frontB, outward, .022),
-        top - .80, top - .76);
-    }
-    for (let joint = 1; joint <= 2; joint++) {
-      batch.wall('stoneJoint', add(a, outward, .026), add(b, outward, .026),
-        top - .46 - joint * .17, top - .45 - joint * .17);
     }
   }
 }
@@ -572,7 +637,9 @@ function communityOneExterior(batch: SurfaceBatch, model: Object3D, outline: rea
     [plan(528, 689), mainWing, 7.5], [plan(564, 651), mainWing, 6.4], [plan(603, 617), mainWing, 6.3],
     [plan(645, 626), returnWing, 9.4], [plan(677, 663), returnWing, 8.1],
   ] as const) communityOneRoofRectangle(batch, outline, center, along, width, 1.07, roof);
-  communityOnePavers(batch, model, [plan(521, 712), plan(552, 685), plan(572, 668), plan(609, 637)], 1.66, low);
+  // End at the existing 104 approach; an earlier extension went beyond the
+  // junction and surfaced as an isolated paver stub out on the west lawn.
+  communityOnePavers(batch, model, [plan(550, 684), plan(572, 668), plan(609, 637)], 1.66, low);
   communityOnePavers(batch, model, [plan(572, 668), plan(583, 675), plan(591, 671)], 1.40, low);
 }
 
@@ -592,7 +659,47 @@ function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
   batch.wall('facadeGlass', at(-.61, 1.455), at(.61, 1.455), roof + .54, top - .39);
 }
 
-function communityExteriors(model: Object3D): void {
+type PodiumWalkPoint = { position: XZ; y: number };
+
+function upperPodiumPavers(model: Object3D, route: readonly PodiumWalkPoint[]): void {
+  const terrace = model.getObjectByName(`${FACADE}_community-2`);
+  if (!(terrace instanceof Group)) return;
+  const batch = new SurfaceBatch();
+  const seam = model.getObjectByName(`${SEAM_PARK}_siteGrass`);
+  const ray = new Raycaster(new Vector3(0, 40, 0), new Vector3(0, -1, 0));
+  const groundY = (p: XZ, fallback: number): number => {
+    ray.ray.origin.set(p[0], 40, p[1]);
+    return Math.max(terrainAt(model, p, fallback), (seam && ray.intersectObject(seam)[0]?.point.y) ?? -Infinity);
+  };
+  const course = route.flatMap((a, i) => {
+    const b = route[i + 1];
+    if (!b) return [a];
+    const count = Math.ceil(Math.hypot(b.position[0] - a.position[0], b.position[1] - a.position[1]) / .55);
+    return Array.from({ length: count }, (_, j) => ({ position: mix(a.position, b.position, j/count), y: a.y + (b.y - a.y) * j/count }));
+  });
+  const sections = course.map(({ position: p, y }, i) => {
+    const [dx, dz] = unit(course[Math.max(0, i - 1)].position, course[Math.min(course.length - 1, i + 1)].position);
+    const offsets = [-1.91, -1.79, -1.18, -.59, 0, .59, 1.18, 1.79, 1.91];
+    return offsets.map(offset => {
+      const edge = add(p, [dz, -dx], offset);
+      return groundPoint(edge, Math.max(y, groundY(edge, y - .1) + .10));
+    });
+  });
+  for (let i = 1; i < sections.length; i++) {
+    for (let j = 1; j < sections[i].length; j++) {
+      const edge = j === 1 || j === sections[i].length - 1;
+      batch.quad(edge ? 'coping' : 'courtPaver', sections[i - 1][j - 1], sections[i - 1][j], sections[i][j], sections[i][j - 1]);
+    }
+    for (const j of [0, sections[i].length - 1]) {
+      const [a, b] = [sections[i - 1][j], sections[i][j]];
+      const foot = (p: XYZ): XYZ => [p[0], Math.min(p[1] - .035, groundY([p[0], p[2]], p[1] - .05)), p[2]];
+      batch.quad('stoneInset', a, foot(a), foot(b), b);
+    }
+  }
+  batch.attachTo(terrace);
+}
+
+function communityExteriors(model: Object3D): readonly PodiumWalkPoint[] {
   // Only the Community I baked terrace, lifts and stale detailing are superseded.
   // Hide its meshes individually so visibility-independent terrain probes don’t use old roofs.
   model.getObjectByName('SM_Community_Grade_And_Elevators')?.traverse(object => {
@@ -602,9 +709,10 @@ function communityExteriors(model: Object3D): void {
   const group = new Group();
   group.name = FACADE;
   group.userData.castsSiteShadow = true;
+  let podiumWalk: readonly PodiumWalkPoint[] = [];
   // Virtual model levels, not surveyed site elevations: the lower park and the
   // 109 foundation already exist at different elevations in the accepted model.
-  for (const [id, roof, low] of [['community-1', 5.08, 2.05], ['community-2', 7.72, .49]] as const) {
+  for (const [id, roof, low] of [['community-1', 5.08, 2.05], ['community-2', COMMUNITY_TWO_ROOF, .49]] as const) {
     const facility = SITE_FACILITIES.find(item => item.id === id);
     if (facility?.footprint?.surface !== 'terrain') continue;
     const terrace = new Group();
@@ -613,14 +721,15 @@ function communityExteriors(model: Object3D): void {
     const batch = new SurfaceBatch();
     if (id === 'community-1') communityOneExterior(batch, model, facility.footprint.outline, roof, low);
     else {
-      lowerCommunityTwoFrontage(model, facility.footprint.outline);
-      steppedTerrace(batch, facility.footprint.outline, roof, low);
+      podiumWalk = levelUpperPodiumFrontage(model, facility.footprint.outline);
+      steppedTerrace(batch, facility.footprint.outline, roof, low, communityTwoGlazedEdges);
       communityTwoElevator(batch, roof);
     }
     batch.attachTo(terrace);
     group.add(terrace);
   }
   model.add(group);
+  return podiumWalk;
 }
 
 function daycareTerraceRail(batch: SurfaceBatch, a: XZ, b: XZ, floor: number): void {
@@ -1300,9 +1409,9 @@ function rebuildSeamPark(model: Object3D): void {
   // let their slightly raised pedestrian edges continue to define each site.
   const outline = [[467.9,446.5],[494,463],[498.5,465.2],[504,471.7],[507,475.2],[489,483],[482,489],
     [451,515],[404,556],[376,583],[372,602],
-    // Stop at the line between the surveyed-plan parcel shoulders. Do not
-    // extend the reserve as a green slab over the west-bank stream.
-    [364,583],[356,562],[347,539],[365,545],[377,535],
+    // Join the 104 and 109 banks just inboard of their shared outer line.
+    // Middle stations are deliberately landward, never a bulge into the river.
+    [371,590],[367,575],[360,557],[348,539],[365,545],[377,535],
     [408,506],[439,478]].map(([x,z]) => plan(x,z));
   const group = new Group();
   group.name = SEAM_PARK;
@@ -1409,13 +1518,11 @@ function rebuildSeamPark(model: Object3D): void {
 function rebuildUpperRetail(model: Object3D): void {
   // The plan separates commercial strip 3 from Community II by a divider.
   // Preserve that notch, and keep its pale coping continuous with the podium.
-  const outline = [[393.0,442.2],[405.0,429.8],[426.5,455.7],[415.1,470.0]]
-    .map(([x,z]) => plan(x,z));
   const group = new Group();
   group.name = RETAIL;
   group.userData.castsSiteShadow = true;
   const batch = new SurfaceBatch();
-  steppedTerrace(batch, outline, 7.58, 2.35);
+  steppedTerrace(batch, upperRetailOutline, UPPER_RETAIL_ROOF, 2.35, retailGlazedEdges);
   batch.attachTo(group);
   model.add(group);
 }
@@ -1435,6 +1542,30 @@ function roundedRoute(points: readonly XZ[]): XZ[] {
 function southPromenades(model: Object3D): void {
   model.updateMatrixWorld(true);
   const garden = 'SM_Courtyard_Lawns_And_Play';
+  const distanceToRoute = (p: XZ, points: readonly XZ[]) => points.slice(1).reduce((best, b, i) => {
+    const a = points[i], dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz)));
+    return Math.min(best, Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz));
+  }, Infinity);
+  // Protect the adjacent broad 103 walkway while removing the unneeded spur
+  // from it. The rest of the baked network (including all vehicle routes) stays.
+  const broad103: readonly XZ[] = [[531, 754], [550, 773], [563, 787], [565, 800], [556, 816]];
+  const turnout104: readonly XZ[] = [[494, 617], [501, 629], [511, 639], [517, 645]];
+  for (const [layer, name, finishes] of [
+    ['graded', 'SM_Graded_Pedestrian_Routes', /^(?:MAT_Sandstone_Pedestrian_Pavers|MAT_Promenade_Paver_Coping)$/],
+    ['courtyard', garden, /^(?:MAT_Sandstone_Pedestrian_Pavers|MAT_Garden_cream)$/],
+  ] as const) {
+    const obsolete = SUPERSEDED_WALK_SECTIONS.filter(section => section.layer === layer);
+    model.getObjectByName(name)?.traverse(object => {
+      if (!isMesh(object) || !finishes.test(finishName(object))) return;
+      keepTriangles(object, (a, b, c) => {
+        const p: XZ = [(a.x + b.x + c.x) / 1.56 + 490, (a.z + b.z + c.z) / 1.56 + 540];
+        if (layer === 'graded' && (distanceToRoute(p, broad103) < 6.2
+          || (p[1] >= 617.2 && distanceToRoute(p, turnout104) < 2.8))) return true;
+        return !obsolete.some(({ points, halfWidth }) => distanceToRoute(p, points) < halfWidth);
+      });
+    });
+  }
   const groundBatches = ['SM_Parcels_Roads_And_Stream', 'SM_Graded_Pedestrian_Routes', 'SM_Rebuilt_Seam_Park', garden,
     'SM_Approach_Promenades_106_107'].flatMap(name => {
     const meshes: Mesh[] = [];
@@ -1455,6 +1586,7 @@ function southPromenades(model: Object3D): void {
   const group = new Group();
   group.name = PROMENADE;
   const promenade = roundedRoute(COMMUNITY_PROMENADE.map(([x, z]) => plan(x, z)));
+  const bakedPaving = groundBatches.find(mesh => finishName(mesh) === 'MAT_Sandstone_Pedestrian_Pavers')?.material;
   const routeStations = (route: XZ[], width: number, goesOverRoof: boolean, layer: number) => {
     const arc: number[] = [0];
     route.slice(1).forEach((b, i) => arc.push(arc[i] + Math.hypot(b[0] - route[i][0], b[1] - route[i][1])));
@@ -1475,9 +1607,13 @@ function southPromenades(model: Object3D): void {
       const y = s.y + (s.edgeY[offset < 0 ? 0 : 1] - s.y) * Math.abs(offset * 2 / width);
       return Math.max(y + s.rise, goesOverRoof && polygonContains(p, roof) ? 5.08 + .105 : 0);
     };
-    const bands = [-.5, -.472, -.32, -.28, -.12, -.08, .08, .12, .28, .32, .472, .5];
-    const stripMaterials: Finish[] = ['promenadeTrim', 'promenadeBand', 'promenadeTrim', 'promenadeStone',
-      'promenadeTrim', 'promenadeStone', 'promenadeTrim', 'promenadeStone', 'promenadeTrim', 'promenadeBand', 'promenadeTrim'];
+    // The wide community promenade keeps its four pale lines. Quiet garden
+    // links meet the surrounding sandstone paving without carrying the stripes
+    // into it or drawing a separate outline across each T-junction.
+    const bands = goesOverRoof ? [-.5, -.472, -.32, -.28, -.12, -.08, .08, .12, .28, .32, .472, .5] : [-.5, 0, .5];
+    const stripMaterials: Finish[] = goesOverRoof ? ['promenadeTrim', 'promenadeBand', 'promenadeTrim', 'promenadeStone',
+      'promenadeTrim', 'promenadeStone', 'promenadeTrim', 'promenadeStone', 'promenadeTrim', 'promenadeBand', 'promenadeTrim']
+      : ['promenadeStone', 'promenadeStone'];
     const cross = graded.map(s => bands.map(offset => {
       const lateral = offset * width;
       return groundPoint(add(s.p, s.normal, lateral), yAt(s, lateral) + .052 + layer);
@@ -1501,7 +1637,19 @@ function southPromenades(model: Object3D): void {
         if (!polygonContains([a[0], a[2]], roof) && !polygonContains([d[0], d[2]], roof)) batch.quad('hedge', a, b, c, d);
       }
     }
+    const firstMesh = group.children.length;
     batch.attachTo(group);
+    if (!goesOverRoof && bakedPaving instanceof MeshStandardMaterial && bakedPaving.map) {
+      for (const node of group.children.slice(firstMesh)) {
+        if (!isMesh(node) || !(node.material instanceof MeshStandardMaterial)) continue;
+        const p = node.geometry.getAttribute('position');
+        const uv: number[] = [];
+        for (let i = 0; i < p.count; i++) uv.push(p.getX(i) * .62, 1 + p.getZ(i) * .62);
+        node.geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+        node.material.map = bakedPaving.map;
+        node.material.color.copy(bakedPaving.color);
+      }
+    }
   };
   routeStations(promenade, 3.45, true, 0);
   PARK_PATHS.forEach((points, i) => routeStations(roundedRoute(points.map(([x, z]) => plan(x, z))), i === 0 ? 2.10 : 1.68, false, .014 + .006 * i));
@@ -1561,18 +1709,86 @@ function deForetCafe(model: Object3D): void {
   model.add(group);
 }
 
+function mainGate101Landings(model: Object3D): void {
+  const { elevator, kids, lowerPaving, upperGrade } = MAIN_GATE_101;
+  const group = new Group();
+  group.name = 'SM_Rebuilt_Main_Gate_Landings';
+  group.userData.castsSiteShadow = true;
+  const batch = new SurfaceBatch();
+
+  // The v9 lift was baked into the far end of the glass frontage, not into
+  // the plan's square cabin by 101. Keep all other frontage and coping intact.
+  const former = plan(650, 882), axis = unit(plan(650, 886), plan(692, 875));
+  const previousCabin = ({ x, y, z }: Vector3): boolean => {
+    const dx = x - former[0], dz = z - former[1];
+    return y >= .55 && Math.abs(dx * axis[0] + dz * axis[1]) <= 2.23
+      && Math.abs(-dx * axis[1] + dz * axis[0]) <= 2.14;
+  };
+  model.getObjectByName('SM_Main_Gate_Life_Support_Terrace')?.traverse(object => {
+    if (isMesh(object) && /MAT_Gate_Support_(?:cap|stone|frame|glass|body)$/.test(finishName(object))) {
+      keepTriangles(object, (...points) => !points.every(previousCabin));
+    }
+  });
+
+  // The raised square over the lift is already on the residential deck.
+  // Its lower door opens at the retaining line through a short recessed link,
+  // leaving the vehicular loop and adjacent 108 frontage at their own grade.
+  const center = plan(...elevator.planPx), d = elevator.halfWidth;
+  const across: XZ = [-elevator.axis[1], elevator.axis[0]];
+  const at = (x: number, z: number): XZ => add(add(center, elevator.axis, x), across, z);
+  const highPaving = upperGrade + .208;
+  upperParkPavers(batch, model, [[624.4,899.1],[627.9,899.8],[630.6,901],[633.65,904.4]],
+    1.58, () => highPaving);
+  batch.prism('stoneInset', 'path', rectangular(at, -d - .24, -d - .18, d + .15, d + .20),
+    upperGrade - .11, highPaving + .034);
+  batch.prism('limestone', 'limestone', rectangular(at, -d, -d, d, d), highPaving, elevator.roofY - .19);
+  batch.prism('stoneInset', 'coping', rectangular(at, -d - .10, -d - .10, d + .10, d + .10),
+    elevator.roofY - .194, elevator.roofY);
+  batch.wall('door', at(-d - .013, -.72), at(-d - .013, .63), highPaving + .032, elevator.roofY - .32);
+  batch.wall('facadeGlass', at(-d - .024, -.59), at(-d - .024, .50), highPaving + .12, elevator.roofY - .44);
+  batch.wall('windowGlint', at(-d - .029, -.038), at(-d - .029, .036), highPaving + .13, elevator.roofY - .43);
+
+  const door = plan(...elevator.lowerDoorPx), jamb = unit(plan(641, 901), plan(643, 911));
+  const face: XZ = [jamb[1], -jamb[0]];
+  const rim = (x: number, offset: number): XZ => add(add(door, jamb, x), face, offset);
+  batch.wall('coping', rim(-1.20, .08), rim(1.20, .08), lowerPaving - .03, lowerPaving + 2.37);
+  batch.wall('door', rim(-.80, .097), rim(.80, .097), lowerPaving, lowerPaving + 2.18);
+  batch.wall('facadeGlass', rim(-.64, .112), rim(.64, .112), lowerPaving + .13, lowerPaving + 2.01);
+  batch.wall('windowGlint', rim(-.028, .122), rim(.028, .122), lowerPaving + .14, lowerPaving + 2.0);
+
+  // Raised pedestrian paving follows the 101 side of the car apron. The
+  // waiting footprint is small and open; the plan does not show a building.
+  upperParkPavers(batch, model, [[641.95,903.7],[644.3,906.9],[648.5,910.6],[653.5,913.5],
+    [659.1,914.95],[667.2,917.35],[675.6,920.5],[683.2,923.2],[688.3,923.8],[695.6,920.8],[700.7,914.3]],
+  1.42, () => lowerPaving);
+  const pickUp = plan(...kids.planPx), cross: XZ = [-kids.axis[1], kids.axis[0]];
+  const pad = (x: number, z: number): XZ => add(add(pickUp, kids.axis, x), cross, z);
+  const w = kids.halfWidth, h = kids.halfDepth;
+  batch.prism('stoneInset', 'coping', rectangular(pad, -w - .08, -h - .12, w + .08, h + .12),
+    lowerPaving - .035, kids.surfaceY - .022);
+  batch.plate('courtPaver', rectangular(pad, -w, -h, w, h), kids.surfaceY);
+  const bench = rectangular(pad, -.83, h + .05, .83, h + .42);
+  batch.prism('courtFrame', 'courtDeck', bench, kids.surfaceY + .37, kids.surfaceY + .46);
+  for (const x of [-.65, .65]) batch.prism('courtFrame', 'courtFrame',
+    rectangular(pad, x - .045, h + .11, x + .045, h + .33), lowerPaving, kids.surfaceY + .37);
+  batch.attachTo(group);
+  model.add(group);
+}
+
 /** Idempotent overlay for the checked-in v9 model. All children are owned by the viewer's model lifecycle. */
 export function refineFacilityExteriors(model: Object3D): void {
   if (model.getObjectByName(FACADE)) return;
   model.updateMatrixWorld(true);
-  communityExteriors(model);
+  const podiumWalk = communityExteriors(model);
   daycareEntrance(model);
   raiseNorthernParks(model);
   mainUpperEntry(model);
   upperOpenEntry(model);
   rebuildGuardhouses(model);
+  mainGate101Landings(model);
   rebuildSeamPark(model);
   rebuildUpperRetail(model);
+  upperPodiumPavers(model, podiumWalk);
   southPromenades(model);
   deForetCafe(model);
   refineBrochureGround(model);

@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
 import { refineFacilityExteriors } from './facility-exteriors';
@@ -32,7 +32,22 @@ it('mounts the daycare door in front of the middle of the short wall, not on its
   expect(Math.max(...lateral) - Math.min(...lateral)).toBeLessThan(3.5);
 });
 
-it('adds the Community I pavilion palette only to its own terrace', () => {
+it('lands the main-gate markers on the constructed lift roof and lower waiting pad', () => {
+  const model = new Group();
+  refineFacilityExteriors(model);
+  const entry = model.getObjectByName('SM_Rebuilt_Main_Gate_Landings')!;
+  const elevator = SITE_FACILITIES.find(({ id }) => id === 'elevator-101')!;
+  const station = SITE_FACILITIES.find(({ id }) => id === 'kids-station-101')!;
+  expect(elevator.x).toBeLessThan(station.x);
+  expect(elevator.y! - station.y!).toBeGreaterThan(5);
+  for (const marker of [elevator, station]) {
+    const down = new Raycaster(new Vector3(marker.x, 15, marker.z), new Vector3(0, -1, 0));
+    const [hit] = down.intersectObject(entry, true);
+    expect(hit.point.y).toBeCloseTo(marker.y!, 4);
+  }
+});
+
+it('shares the Community I pavilion palette while keeping each facility layout distinct', () => {
   const model = new Group();
   refineFacilityExteriors(model);
   const first = model.getObjectByName('SM_Rebuilt_Community_Terraces_community-1')!;
@@ -43,8 +58,9 @@ it('adds the Community I pavilion palette only to its own terrace', () => {
 
   expect(materials(first as Group)).toEqual(expect.arrayContaining(['MAT_Rebuilt_courtStone',
     'MAT_Rebuilt_courtGlass', 'MAT_Rebuilt_courtDeck', 'MAT_Rebuilt_courtPaver']));
-  expect(materials(second as Group)).toContain('MAT_Rebuilt_facadeGlass');
-  expect(materials(second as Group).every(name => !name.startsWith('MAT_Rebuilt_court'))).toBe(true);
+  expect(materials(second as Group)).toEqual(expect.arrayContaining(['MAT_Rebuilt_courtStone',
+    'MAT_Rebuilt_courtGlass', 'MAT_Rebuilt_courtPaver']));
+  expect(materials(second as Group)).not.toContain('MAT_Rebuilt_courtDeck');
 });
 
 it('aligns the 105 and 109 guardhouse roofs with their matching seam-side markers without deleting the ramp', () => {

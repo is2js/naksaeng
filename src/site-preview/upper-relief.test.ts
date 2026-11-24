@@ -10,9 +10,28 @@ it('ends the green seam at the shared parcel shoulders rather than covering the 
   const park = site.getObjectByName('SM_Rebuilt_Seam_Park')!;
   const down = new Raycaster(atPlan(327, 565), new Vector3(0, -1, 0));
   expect(down.intersectObject(park, true)).toHaveLength(0);
+  // Just west of the dashed common parcel edge (not in the channel itself).
+  down.ray.origin.copy(atPlan(362, 576));
+  expect(down.intersectObject(park, true)).toHaveLength(0);
+  down.ray.origin.copy(atPlan(371, 576));
+  expect(down.intersectObject(park, true).length).toBeGreaterThan(0);
   down.ray.origin.copy(atPlan(404, 531));
   expect(down.intersectObject(park, true).length).toBeGreaterThan(0);
-  expect(new Box3().setFromObject(park).min.x).toBeCloseTo(atPlan(347, 539).x, 3);
+  expect(new Box3().setFromObject(park).min.x).toBeCloseTo(atPlan(348, 539).x, 3);
+});
+
+it('keeps the Community II and retail façades at one exposed storey with a walk in front', () => {
+  const site = new Group();
+  refineFacilityExteriors(site);
+  const community = site.getObjectByName('SM_Rebuilt_Community_Terraces_community-2')!;
+  const retail = site.getObjectByName('SM_Rebuilt_Upper_Retail_Frontage')!;
+  for (const [group, roof] of [[community, 7.72], [retail, 7.58]] as const) {
+    const glass = group.getObjectByName(`${group.name}_courtGlassShade`)!;
+    const walls = new Box3().setFromObject(glass);
+    expect(walls.min.y).toBeCloseTo(roof - 3.05 + .12, 2);
+    expect(walls.max.y).toBeCloseTo(roof - .45, 2);
+  }
+  expect(community.getObjectByName(`${community.name}_courtPaver`)?.userData.siteSurface).toBe(true);
 });
 
 it('raises the park without raising the outer drive and keeps both covered throats below grade', () => {

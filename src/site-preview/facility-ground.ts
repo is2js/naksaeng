@@ -1,5 +1,5 @@
 import {
-  Box3, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh,
+  Box3, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, InstancedMesh, Matrix3, Matrix4, Mesh,
   MeshBasicMaterial, Object3D, Raycaster, Scene, Vector2, Vector3,
   type Intersection, type OrthographicCamera, type WebGLRenderer,
 } from 'three';
@@ -18,6 +18,11 @@ const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Mai
 const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Northwest_Entry_Portals_And_Guardhouses|Rebuilt_Upper_Guardhouse)$/;
 const DAYCARE = /^SM_Public_Daycare_2F$/;
 const DAYCARE_STRUCTURE = /^SM_(?:Public_Daycare_2F|Rebuilt_Daycare_Pavilion)$/;
+const PRIORITY_MARKER_SAMPLES = [[0, 0], [-.75, 0], [.75, 0], [0, -.75], [0, .75]] as const;
+
+function isPriorityMarker(kind: Facility['kind']): boolean {
+  return kind === 'recycling' || kind === 'stairs';
+}
 
 function symbolGeometry(shape: Shape, color: string, roofMark = false): BufferGeometry {
   const count = shape === 'pentagon' ? 5 : shape === 'triangle' ? 3 : shape === 'circle' ? 24 : 4;
@@ -69,15 +74,29 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   const daycareStructure = surfaceMeshes(model, DAYCARE_STRUCTURE);
   const siteSurfaces = [...terraces, ...ground];
   const down = new Raycaster(new Vector3(), new Vector3(0, -1, 0), 0, 210);
+  const normal = new Vector3(), normalMatrix = new Matrix3();
+  function prioritySurfaceY(x: number, z: number): number | undefined {
+    // Use the highest local plaza, path or podium surface, not the ground
+    // hidden underneath it. Check immediately around joints between paving levels.
+    let height = -Infinity;
+    for (const [dx, dz] of PRIORITY_MARKER_SAMPLES) {
+      down.ray.origin.set(x + dx, 100, z + dz);
+      const hit = down.intersectObjects(siteSurfaces, false).find(({ face, object }) => face
+        && Math.abs(normal.copy(face.normal).applyNormalMatrix(normalMatrix.getNormalMatrix(object.matrixWorld)).y) > .38);
+      if (hit) height = Math.max(height, hit.point.y);
+    }
+    return Number.isFinite(height) ? height : undefined;
+  }
   const anchors = SITE_FACILITIES.map((facility) => {
     const { x, z, kind } = facility;
+    const priority = isPriorityMarker(kind);
     down.ray.origin.set(x, 100, z);
     const meshes = kind === 'daycare' ? [...daycareStructure, ...ground]
       : kind === 'security' ? [...entrances, ...ground]
         : kind === 'guesthouse' || kind === 'community' || kind === 'senior' || kind === 'elevator'
           ? siteSurfaces : ground;
-    const surfaceY = ('y' in facility ? facility.y : undefined) ?? down.intersectObjects(meshes, false)[0]?.point.y ?? .48;
-    return { facility, xyz: new Vector3(x, surfaceY + (facility.roofMark ? .04 : .16), z) };
+    const surfaceY = facility.y ?? (priority ? prioritySurfaceY(x, z) : down.intersectObjects(meshes, false)[0]?.point.y) ?? .48;
+    return { facility, xyz: new Vector3(x, surfaceY + (priority ? .30 : facility.roofMark ? .04 : .16), z) };
   });
   const areas = new Map(anchors.flatMap(({ facility }) => {
     const mesh = createFacilityFootprint(facility, siteSurfaces, daycare);
@@ -91,6 +110,10 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   const pinAnchors = anchors.filter(({ facility }) => !areas.has(facility.id));
   const batches = new Map<string, { kind: Facility['kind']; mesh: InstancedMesh; sites: typeof anchors }>();
   const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide, forceSinglePass: true });
+  const priorityMaterial = material.clone();
+  priorityMaterial.polygonOffset = true;
+  priorityMaterial.polygonOffsetFactor = -1;
+  priorityMaterial.polygonOffsetUnits = -4;
   for (const anchor of pinAnchors) {
     const kind = anchor.facility.kind;
     const markedRoof = !!anchor.facility.roofMark;
@@ -98,10 +121,12 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
     let batch = batches.get(key);
     if (!batch) {
       const style = FACILITY_STYLES[kind];
-      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color, markedRoof), material,
+      const priority = isPriorityMarker(kind);
+      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color, markedRoof), priority ? priorityMaterial : material,
         pinAnchors.filter(({ facility }) => facility.kind === kind && !!facility.roofMark === markedRoof).length);
       mesh.frustumCulled = false;
-      mesh.renderOrder = 1;
+      // Above facility fills and other ground symbols; retain depth occlusion by buildings.
+      mesh.renderOrder = priority ? 2 : 1;
       scene.add(mesh);
       batch = { kind, mesh, sites: [] };
       batches.set(key, batch);
@@ -183,6 +208,7 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
       for (const { mesh } of batches.values()) { mesh.dispose(); mesh.geometry.dispose(); }
       for (const { mesh } of areas.values()) { mesh.geometry.dispose(); mesh.material.dispose(); }
       material.dispose();
+      priorityMaterial.dispose();
     },
   };
 }

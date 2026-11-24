@@ -1,4 +1,5 @@
 import { DAYCARE_ENTRY_FRONTAGE } from './facility-daycare-placement';
+import { MAIN_GATE_101 } from './facility-gate101-layout';
 
 export type SiteFacilityKind = 'main-entrance' | 'sub-entrance' | 'recycling' | 'elevator' | 'stairs'
   | 'community' | 'guesthouse' | 'daycare' | 'kids-station' | 'senior' | 'security';
@@ -18,7 +19,7 @@ export interface SiteFacility {
   /** Optional explicit model height; ordinary markers use the rendered terrain or a facility roof. */
   readonly y?: number;
   readonly footprint?: SiteFacilityFootprint;
-  /** Real roof shape for the two guardhouses at the ends of the same district seam. */
+  /** Exact horizontal footprint for a cabin roof or a small paved facility. */
   readonly roofMark?: { readonly axis: PlanPoint; readonly halfWidth: number; readonly halfDepth: number };
 }
 
@@ -74,7 +75,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   at('recycling-110-north', 'recycling', '쓰레기 분리수거장', 239.1, 204.4),
   at('recycling-109', 'recycling', '쓰레기 분리수거장', 293.1, 349.4),
 
-  at('elevator-101', 'elevator', '외부 E/V', 634.9, 903.2),
+  { ...at('elevator-101', 'elevator', '외부 E/V', ...MAIN_GATE_101.elevator.planPx), y: MAIN_GATE_101.elevator.roofY },
   at('elevator-community-1', 'elevator', '외부 E/V', 552.6, 666.5),
   at('elevator-community-2', 'elevator', '외부 E/V', 386.7, 480),
   at('elevator-110', 'elevator', '외부 E/V', 317.6, 208.8),
@@ -96,7 +97,8 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   at('guesthouse-112', 'guesthouse', '112동 게스트하우스 (B1)', 336, 104),
   // The renderer takes the complete roof footprint from this specific model building.
   { ...at('daycare-104', 'daycare', '어린이집 (1·2F)', ...DAYCARE_ENTRY_FRONTAGE.centerPlanPx), footprint: { surface: 'daycare-roof' } },
-  at('kids-station-101', 'kids-station', '키즈스테이션', 654.4, 921.4),
+  { ...at('kids-station-101', 'kids-station', '키즈스테이션', ...MAIN_GATE_101.kids.planPx), y: MAIN_GATE_101.kids.surfaceY,
+    roofMark: { axis: MAIN_GATE_101.kids.axis, halfWidth: MAIN_GATE_101.kids.halfWidth, halfDepth: MAIN_GATE_101.kids.halfDepth } },
   at('kids-station-110', 'kids-station', '키즈스테이션', 326.4, 210),
   at('senior-102', 'senior', '시니어라운지', 511.8, 903.2),
 

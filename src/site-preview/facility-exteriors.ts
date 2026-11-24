@@ -976,6 +976,14 @@ function daycareCourtyard(model: Object3D, entry: ReturnType<typeof daycareEntra
     return entry.sill + .014 + (grade(p) - entry.sill) * smoothStep(t);
   });
   usedPaths.forEach(({ points, width }, index) => upperParkPavers(batch, model, points, width, p => grade(p) + .006 * index));
+  // Short access spur from the porch side of the loop to the rubber edge.
+  // Stop at the kerb; do not draw gravel paving across the play surface.
+  const padEntry = at(-5.07,-5.1), loopEntry = plan(460.5,565.5);
+  const playAccess = [toPlan(loopEntry),toPlan(padEntry)];
+  upperParkPavers(batch, model, playAccess, 1.46, p => {
+    const t = 1 - Math.min(1, Math.hypot(p[0]-padEntry[0],p[1]-padEntry[1]) / Math.hypot(loopEntry[0]-padEntry[0],loopEntry[1]-padEntry[1]));
+    return (grade(p) + .027) * (1-t) + (padY + .016) * t;
+  });
   const clear = (p: XZ, radius: number) => {
     const worldP = fromPlan(p), dx = worldP[0]-center[0], dz = worldP[1]-center[1];
     const [nx, nz] = DAYCARE_ENTRY_OUTWARD;
@@ -985,6 +993,7 @@ function daycareCourtyard(model: Object3D, entry: ReturnType<typeof daycareEntra
       && (Math.abs(wallX*nx+wallZ*nz) > DAYCARE_ENTRY_FRONTAGE.lengthMeters / 2 + radius
         || Math.abs(wallX*nz-wallZ*nx) > DAYCARE_ENTRY_FRONTAGE.widthMeters / 2 + radius)
       && distance(p, entryPath) * .52 > 1.04 + radius
+      && distance(p, playAccess) * .52 > .73 + radius
       && distance(p, COMMUNITY_PROMENADE) * .52 > 1.725 + radius
       && usedPaths.every(path => distance(p, path.points) * .52 > path.width/2 + radius);
   };

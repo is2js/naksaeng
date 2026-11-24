@@ -44,5 +44,6 @@ it('replaces the displaced daycare play pad and connects its edge and paved appr
   expect(surface(path, threshold), 'paved approach just outside the built door').toBeDefined();
   expect(surface(path, plan(DAYCARE_COURTYARD.innerJunction)), 'connection to the garden paths').toBeDefined();
   expect(surface(path, plan([488, 588])), 'play court perimeter paving').toBeDefined();
+  expect(surface(path, plan([464, 565.8])), 'short paved spur from the loop to the play mat').toBeDefined();
   expect(courtyard.getObjectByName(`${courtyard.name}_gardenFlower`)).toBeInstanceOf(Mesh);
 });

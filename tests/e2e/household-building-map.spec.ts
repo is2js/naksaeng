@@ -93,6 +93,9 @@ async function expectFacilityApproach(page: Page, approach: Awaited<ReturnType<t
 }
 
 async function expectOverview(page: Page) {
+  // A fresh WebGL context loads and decodes the model before this canvas is
+  // ready, independently of the camera's animation and gesture assertions.
+  await expect(map(page)).toBeVisible({ timeout: 30_000 });
   await expect(canvas(page)).toHaveAttribute('data-camera-phase', 'overview');
   await expect(map(page).locator('[data-site-compass]')).toHaveAttribute('data-bearing', '0');
   await expect(reset(page)).toBeHidden();

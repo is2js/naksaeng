@@ -7,6 +7,7 @@ import { SITE_FACILITIES } from './facility-markers';
 import { MAIN_GATE_101 } from './facility-gate101-layout';
 import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
 import { DAYCARE_COURTYARD } from './daycare-courtyard-layout';
+import { siteTerrainSampler } from './site-terrain-sampler';
 import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } from './site-promenade-layout';
 import { refineBrochureGround } from './facility-brochure-ground';
 
@@ -932,12 +933,13 @@ function daycareCourtyard(model: Object3D, entry: ReturnType<typeof daycareEntra
 
   const group = new Group();
   group.name = DAYCARE_GARDEN;
-  const batch = new SurfaceBatch(), seam = model.getObjectByName(`${SEAM_PARK}_siteGrass`);
-  const down = new Raycaster(new Vector3(0, 40, 0), new Vector3(0, -1, 0));
-  const base = (p: XZ) => {
-    down.ray.origin.set(p[0], 40, p[1]);
-    return Math.max(terrainAt(model, p, entry.sill - .20), (seam && down.intersectObject(seam)[0]?.point.y) ?? -Infinity);
-  };
+  const batch = new SurfaceBatch();
+  const surfaces = ['SM_Parcels_Roads_And_Stream', `${SEAM_PARK}_siteGrass`].flatMap(name => {
+    const surface = model.getObjectByName(name);
+    return surface ? [surface] : [];
+  });
+  const sample = siteTerrainSampler(surfaces, plan(370,480), plan(537,663));
+  const base = (p: XZ) => sample(p, entry.sill - .20);
   const grade = (p: XZ) => base(p) + .123;
   const padY = Math.max(...[at(-5, -6.7), at(5, -6.7), at(5, 6.7), at(-5, 6.7), center].map(base)) + .086;
   const padOutline = [[-4.78,-6.6],[4.76,-6.6],[5.12,-6.2],[5.12,6.29],[4.72,6.7],[-4.74,6.7],[-5.12,6.24],[-5.12,-6.18]] as const;

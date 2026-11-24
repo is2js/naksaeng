@@ -4,6 +4,7 @@ import {
   type Object3D,
 } from 'three';
 import { SITE_FACILITIES } from './facility-markers';
+import { DAYCARE_ENTRY_FRONTAGE, DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
 
 type XZ = readonly [number, number];
 type XYZ = readonly [number, number, number];
@@ -14,6 +15,8 @@ const COLORS = {
   roofLawn: '#8c9561', hedge: '#617546', path: '#b9ada0', deck: '#a47e5f',
   zinc: '#64615a', seams: '#827b6c', door: '#303433', entranceGlass: '#536261',
   asphalt: '#494d4e', roadPaint: '#e6e0c9', roadAmber: '#bca464',
+  courtStone: '#cec3af', courtGlass: '#3a3e39', courtGlassShade: '#2c302f',
+  courtFrame: '#676259', courtDeck: '#aa805f', courtDeckJoint: '#8a684f', courtPaver: '#b69f87',
 } as const;
 type Finish = keyof typeof COLORS;
 
@@ -82,7 +85,8 @@ class SurfaceBatch {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
       geometry.computeVertexNormals();
-      const glass = finish === 'facadeGlass' || finish === 'entranceGlass';
+      const glass = finish === 'facadeGlass' || finish === 'entranceGlass'
+        || finish === 'courtGlass' || finish === 'courtGlassShade';
       const material = new MeshStandardMaterial({
         color: COLORS[finish], roughness: glass ? 0.42 : 0.92, metalness: glass ? 0.18 : 0,
         side: DoubleSide,
@@ -91,7 +95,7 @@ class SurfaceBatch {
       const mesh = new Mesh(geometry, material);
       mesh.name = `${group.name}_${finish}`;
       // Lower or vertical detail doesn't create an artificial floor at roof height.
-      mesh.userData.siteSurface = ['roofLawn', 'coping', 'asphalt', 'path'].includes(finish);
+      mesh.userData.siteSurface = ['roofLawn', 'coping', 'asphalt', 'path', 'courtPaver'].includes(finish);
       group.add(mesh);
     }
   }
@@ -295,24 +299,6 @@ function finishName(mesh: Mesh): string {
   return Array.isArray(mesh.material) ? '' : mesh.material.name;
 }
 
-function retainApprovedElevators(model: Object3D): void {
-  const original = model.getObjectByName('SM_Community_Grade_And_Elevators');
-  const shafts = [
-    { center: plan(554, 669), radius: 3.35 },
-    { center: plan(641, 638), radius: 4.0 },
-  ];
-  original?.traverse(object => {
-    if (!isMesh(object)) return;
-    // Roof walks, terraces and loose decoration are replaced. The two approved vertical links remain.
-    if (/(?:_walk|_leaf|_rail|_turf|_wood|Site_Grass)/i.test(finishName(object))) {
-      object.visible = false;
-      return;
-    }
-    keepTriangles(object, (...points) => shafts.some(({ center, radius }) =>
-      points.every(p => Math.hypot(p.x - center[0], p.z - center[1]) < radius)));
-  });
-}
-
 function removeLegacy109Podium(model: Object3D): void {
   // The old rim-retail proxy on [388,479] is part of batched GLB meshes.
   // Only replace that proxy and its footing, not the separate land/towers,
@@ -469,6 +455,121 @@ function steppedTerrace(batch: SurfaceBatch, outline: readonly XZ[], top: number
   }
 }
 
+/** The two approved lift locations stay put; only their square enclosures change. */
+const COMMUNITY_ONE_LIFTS = [
+  { center: plan(554, 669), facing: 4, width: 4.12, depth: 3.66, rise: 2.65 },
+  { center: plan(641, 638), facing: 1, width: 3.32, depth: 3.03, rise: 2.34 },
+] as const;
+
+function communityOneLift(batch: SurfaceBatch, outline: readonly XZ[], lift: typeof COMMUNITY_ONE_LIFTS[number], low: number, roof: number): void {
+  const direction = unit(outline[lift.facing], outline[lift.facing + 1]);
+  const outward: XZ = [direction[1], -direction[0]];
+  const at = (x: number, depth: number): XZ => add(add(lift.center, direction, x), outward, depth);
+  const w = lift.width / 2, d = lift.depth / 2, top = roof + lift.rise;
+  batch.prism('courtStone', 'coping', rectangular(at, -w, -d, w, d), low, top);
+  batch.plate('courtDeck', rectangular(at, -w + .13, -d + .13, w - .13, d - .13), top + .012);
+  batch.plate('courtGlassShade', rectangular(at, -w + .28, -d + .3, -w + 1.61, -d + 1.39), top + .026);
+  // The nearly full-height dark panel on the park side is the lift tower's visual cue.
+  const lowerGlassWidth = w * .54;
+  batch.wall('courtGlassShade', at(-lowerGlassWidth, d + .021), at(lowerGlassWidth, d + .021), low + .07, top - .40);
+  batch.wall('courtGlass', at(-lowerGlassWidth + .18, d + .031), at(lowerGlassWidth - .18, d + .031), low + .08, low + 2.09);
+  batch.wall('courtFrame', at(-.036, d + .04), at(.036, d + .04), low + .08, top - .40);
+  batch.wall('courtGlassShade', at(-.71, -d - .021), at(.71, -d - .021), roof + .035, top - .34);
+}
+
+function communityOneRoofRectangle(batch: SurfaceBatch, outline: readonly XZ[], center: XZ, direction: XZ, width: number, depth: number, roof: number, deck = false): void {
+  const normal: XZ = [-direction[1], direction[0]];
+  const at = (x: number, z: number): XZ => add(add(center, direction, x), normal, z);
+  const w = width / 2, d = depth / 2;
+  const patch = rectangular(at, -w, -d, w, d);
+  if (!patch.every(p => polygonContains(p, outline))) return;
+  if (deck) {
+    batch.plate('courtDeck', patch, roof + .035);
+    for (let x = -w + .34; x < w; x += .44) batch.strip('courtDeckJoint', at(x, -d), at(x, d), .022, roof + .045);
+  } else {
+    batch.prism('courtStone', 'hedge', patch, roof + .014, roof + .22);
+    for (let x = -w + .45; x < w - .23; x += .79) {
+      const canopy = at(x, 0);
+      const perimeter = Array.from({ length: 6 }, (_, i) => {
+        const a = i * Math.PI / 3;
+        return at(x + .39 * Math.cos(a), .37 * Math.sin(a));
+      });
+      for (let i = 0; i < perimeter.length; i++) batch.tri(i % 3 ? 'hedge' : 'roofLawn',
+        groundPoint(perimeter[i], roof + .22), groundPoint(perimeter[(i + 1) % perimeter.length], roof + .22),
+        groundPoint(canopy, roof + .61 + .09 * Math.cos(x * 3)));
+    }
+  }
+}
+
+function communityOnePavers(batch: SurfaceBatch, model: Object3D, points: readonly XZ[], width: number, low: number): void {
+  // No bridge, ramp, or stair connects the top here. These walks follow the existing lower garden grade.
+  const sections = points.map((p, i) => {
+    const [dx, dz] = unit(points[Math.max(0, i - 1)], points[Math.min(points.length - 1, i + 1)]);
+    const across: XZ = [dz, -dx];
+    const y = terrainAt(model, p, low) + .046;
+    return [groundPoint(add(p, across, -width / 2), y), groundPoint(add(p, across, width / 2), y)] as const;
+  });
+  for (let i = 1; i < sections.length; i++) {
+    const [a, b] = sections[i - 1], [d, c] = sections[i];
+    batch.quad('courtPaver', a, b, c, d);
+    const length = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+    const rows = Math.ceil(length / .85);
+    const along = (from: XYZ, to: XYZ, t: number): XYZ => [from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t + .009, from[2] + (to[2] - from[2]) * t];
+    for (let row = 1; row < rows; row++) {
+      const t = row / rows;
+      batch.quad('path', along(a, d, t), along(b, c, t), along(b, c, t + .022 / length), along(a, d, t + .022 / length));
+    }
+  }
+}
+
+function communityOneExterior(batch: SurfaceBatch, model: Object3D, outline: readonly XZ[], roof: number, low: number): void {
+  // The red outline in the site plan fixes the two legs. The model-house photo
+  // and PDF park view inform the pavilion bays, dark lift and planted/deck areas.
+  batch.prism('courtStone', 'roofLawn', outline, low, roof);
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const forward = unit(a, b), outward: XZ = [forward[1], -forward[0]];
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const at = (x: number, depth: number): XZ => add(add(a, forward, x), outward, depth);
+    batch.wall('coping', at(0, .14), at(span, .14), roof - .44, roof + .10);
+    batch.strip('coping', at(0, -.03), at(span, -.03), .34, roof + .10);
+    if (i !== 1 && i !== 2 && i !== 4) continue;
+    // The tall glazed bays are independent panels. Their pale square mullions
+    // are physical trim so dark glass never becomes a single continuous stripe.
+    const count = Math.round(span / 4.75), step = span / count;
+    for (let j = 0; j < count; j++) {
+      const left = j * step + .34, right = (j + 1) * step - .34;
+      const glassTop = roof - .46, glassLow = low + .12;
+      batch.wall(j % 3 === 2 ? 'courtGlass' : 'courtGlassShade', at(left, .025), at(right, .025), glassLow, glassTop);
+      batch.wall('courtGlass', at(left, .038), at(right, .038), glassLow + .03, roof - .94);
+      for (let k = 1; k < 3; k++) {
+        const x = left + (right - left) * k / 3;
+        batch.wall('courtFrame', at(x - .038, .05), at(x + .038, .05), glassLow, roof - .94);
+      }
+      const x = left - .33;
+      batch.prism('courtStone', 'courtStone', rectangular(at, Math.max(0, x - .24), -.06, x + .25, .15), low, roof - .35);
+    }
+    // Subtle metal rails on the park edge. They do not cross the lift enclosure.
+    for (let x = .4; x < span - .33; x += 1.06) {
+      const p = at(x, -.13);
+      if (COMMUNITY_ONE_LIFTS.some(({ center, width }) => Math.hypot(p[0] - center[0], p[1] - center[1]) < width * .65)) continue;
+      batch.wall('courtFrame', at(x - .025, -.13), at(x + .025, -.13), roof + .10, roof + .65);
+      batch.wall('courtFrame', p, at(Math.min(x + 1.06, span - .25), -.13), roof + .608, roof + .65);
+    }
+  }
+  for (const lift of COMMUNITY_ONE_LIFTS) communityOneLift(batch, outline, lift, low, roof);
+  const mainWing = unit(plan(530, 685), plan(620, 605));
+  const returnWing = unit(plan(623, 618), plan(687, 687));
+  communityOneRoofRectangle(batch, outline, plan(580.5, 635.5), mainWing, 12.25, 4.6, roof, true);
+  for (const [center, along, width] of [
+    [plan(528, 689), mainWing, 7.5], [plan(564, 651), mainWing, 6.4], [plan(603, 617), mainWing, 6.3],
+    [plan(645, 626), returnWing, 9.4], [plan(677, 663), returnWing, 8.1],
+  ] as const) communityOneRoofRectangle(batch, outline, center, along, width, 1.07, roof);
+  communityOnePavers(batch, model, [plan(521, 712), plan(552, 685), plan(572, 668), plan(609, 637)], 1.66, low);
+  communityOnePavers(batch, model, [plan(572, 668), plan(583, 675), plan(591, 671)], 1.40, low);
+}
+
 function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
   const marker = SITE_FACILITIES.find(item => item.id === 'elevator-community-2');
   if (!marker) return;
@@ -486,7 +587,11 @@ function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
 }
 
 function communityExteriors(model: Object3D): void {
-  retainApprovedElevators(model);
+  // Only the Community I baked terrace, lifts and stale detailing are superseded.
+  // Hide its meshes individually so visibility-independent terrain probes don’t use old roofs.
+  model.getObjectByName('SM_Community_Grade_And_Elevators')?.traverse(object => {
+    if (isMesh(object)) object.visible = false;
+  });
   removeLegacy109Podium(model);
   const group = new Group();
   group.name = FACADE;
@@ -500,9 +605,12 @@ function communityExteriors(model: Object3D): void {
     terrace.name = `${FACADE}_${id}`;
     terrace.userData.castsSiteShadow = true;
     const batch = new SurfaceBatch();
-    if (id === 'community-2') lowerCommunityTwoFrontage(model, facility.footprint.outline);
-    steppedTerrace(batch, facility.footprint.outline, roof, low);
-    if (id === 'community-2') communityTwoElevator(batch, roof);
+    if (id === 'community-1') communityOneExterior(batch, model, facility.footprint.outline, roof, low);
+    else {
+      lowerCommunityTwoFrontage(model, facility.footprint.outline);
+      steppedTerrace(batch, facility.footprint.outline, roof, low);
+      communityTwoElevator(batch, roof);
+    }
     batch.attachTo(terrace);
     group.add(terrace);
   }
@@ -512,11 +620,10 @@ function communityExteriors(model: Object3D): void {
 function daycareEntrance(model: Object3D): void {
   const original = model.getObjectByName('SM_Public_Daycare_2F');
   if (!original) return;
-  const mid = plan(428, 581);
-  const angle = 46 * Math.PI / 180;
-  const longSide: XZ = [Math.cos(angle), -Math.sin(angle)];
-  const southFace: XZ = [Math.sin(angle), Math.cos(angle)];
-  const halfWidth = 53 * .52 / 2, halfDepth = 30 * .52 / 2;
+  const { centerPlanPx, widthMeters, wallMidpoint, gableCenterOffsetMeters } = DAYCARE_ENTRY_FRONTAGE;
+  const mid = plan(...centerPlanPx);
+  const outward: XZ = DAYCARE_ENTRY_OUTWARD;
+  const across: XZ = [-outward[1], outward[0]];
   original.traverse(object => {
     if (!isMesh(object)) return;
     const name = finishName(object);
@@ -526,8 +633,8 @@ function daycareEntrance(model: Object3D): void {
       // behind it and the complete two-floor roof remain as baked.
       keepTriangles(object, (...points) => !points.every(p => {
         const x = p.x - mid[0], z = p.z - mid[1];
-        const depth = x * southFace[0] + z * southFace[1];
-        const along = x * longSide[0] + z * longSide[1];
+        const depth = x * across[0] + z * across[1];
+        const along = x * outward[0] + z * outward[1];
         return p.y >= 4.60 && p.y <= 4.94 && depth >= 5.42 && depth <= 11.82
           && along >= -7.22 && along <= -3.24;
       }));
@@ -537,51 +644,57 @@ function daycareEntrance(model: Object3D): void {
   group.name = DAYCARE;
   group.userData.castsSiteShadow = true;
   const batch = new SurfaceBatch();
-  // In north-up coordinates X is east and Z is south. Chamfer the junction
-  // into the diagonal limestone body, but set the entry/front span along
-  // north–south so the actual threshold faces +X, not the old south wing.
-  const east = add(add(mid, longSide, halfWidth), southFace, halfDepth);
-  const at = (offset: number, depth: number): XZ => [east[0] + depth, east[1] + offset];
-  const rear = (offset: number): number => Math.min(
-    -offset * longSide[1] / longSide[0], -offset * southFace[1] / southFace[0],
-  ) - .24;
-  const center = 0, x0 = -3.10, x1 = 3.10;
-  const front = 2.74, eave = 5.22, ridge = 6.63;
-  const sill = terrainAt(model, mid, 1.63) + .27;
-  const level = (x: number): number => eave + (ridge - eave) * (1 - Math.abs(x) / x1);
-  const landing: XZ[] = [at(x0 - .18, rear(x0 - .18)), at(center, rear(center)), at(x1 + .18, rear(x1 + .18)),
-    at(x1 + .18, front + .21), at(x0 - .18, front + .21)];
-  batch.prism('limestone', 'path', landing, sill - .28, sill);
-  // The existing graded promenade skirts the toddler playground. Tie into
-  // that promenade without putting a separate path through the play surface.
-  const pathEnd = plan(467, 574);
+  // The mock-up and P5 show a centered portal on the diagonal body's SHORT
+  // end. Use that end's outward normal, not a due-east cut at its corner.
+  const at = (offset: number, depth: number): XZ => add(add(wallMidpoint, across, offset), outward, depth);
+  const center = gableCenterOffsetMeters, halfGable = 2.54;
+  const x0 = center - halfGable, x1 = center + halfGable, shelfHalf = widthMeters / 2 - .17;
+  const back = -.18, shelfFront = 2.20, front = 3.54;
+  const sill = terrainAt(model, wallMidpoint, 1.63) + .20;
+  const shelfTop = sill + 2.80, eave = sill + 2.44, ridge = sill + 3.57;
+  const level = (x: number): number => eave + (ridge - eave) * (1 - Math.abs(x - center) / halfGable);
+  batch.prism('limestone', 'path', rectangular(at, -shelfHalf - .12, back, shelfHalf + .12, shelfFront + .42), sill - .21, sill);
+  batch.prism('stoneInset', 'path', rectangular(at, x0 - .15, shelfFront + .39, x1 + .15, front + .40), sill - .16, sill);
+  // One continuous shallow stone porch arm, with the small zinc gable
+  // emerging from its middle. Keep every part below the principal 2F roof.
+  batch.prism('limestone', 'path', rectangular(at, -shelfHalf, back, shelfHalf, shelfFront), shelfTop - .25, shelfTop);
+  for (const [a, b] of [[-shelfHalf, x0 + .06], [x1 - .06, shelfHalf]]) {
+    batch.wall('limestone', at(a, shelfFront), at(b, shelfFront), sill, shelfTop - .16);
+  }
+  for (const edge of [-shelfHalf, shelfHalf]) batch.wall('limestone', at(edge, back), at(edge, shelfFront), sill, shelfTop - .16);
+  for (const offset of [-6.38, -3.82, 3.82, 6.38]) {
+    batch.wall('stoneInset', at(center + offset - .63, shelfFront + .007), at(center + offset + .63, shelfFront + .007), sill + .34, sill + 1.79);
+    batch.wall('facadeGlass', at(center + offset - .55, shelfFront + .015), at(center + offset + .55, shelfFront + .015), sill + .41, sill + 1.71);
+  }
+  for (let x = -shelfHalf + .24; x < shelfHalf; x += .45) {
+    batch.plate('stoneJoint', rectangular(at, x, back + .12, x + .017, shelfFront - .07), shelfTop + .007);
+  }
+  // Follow the playground edge rather than drawing across the play surface.
+  const pathEnd = plan(455, 554);
   const promenade = model.getObjectByName('SM_Graded_Pedestrian_Routes');
   const down = new Raycaster(new Vector3(pathEnd[0], 25, pathEnd[1]), new Vector3(0, -1, 0));
   const join = (promenade && down.intersectObject(promenade, true)[0]?.point.y)
     || terrainAt(model, pathEnd, sill) + .13;
-  const walk: { center: XZ; half: number; y: number }[] = [
-    {center: at(0, front + .20), half: 1.45, y: sill + .008},
-    {center: mix(at(0, front + .20), pathEnd, .52), half: 1.22, y: (sill + join) * .5 + .009},
-    {center: pathEnd, half: 1.38, y: join - .008},
-  ];
+  const threshold = at(center, front + .34);
+  const walk = [[threshold, 1.43, sill + .009],
+    [mix(threshold, pathEnd, .52), 1.31, (sill + join) * .5 + .009], [pathEnd, 1.32, join + .009]] as const;
   for (let i = 1; i < walk.length; i++) {
-    const a = walk[i - 1], b = walk[i];
-    batch.quad('path', groundPoint(add(a.center, [0, -1], a.half), a.y),
-      groundPoint(add(a.center, [0, 1], a.half), a.y), groundPoint(add(b.center, [0, 1], b.half), b.y),
-      groundPoint(add(b.center, [0, -1], b.half), b.y));
+    const [a, aWidth, aY] = walk[i - 1], [b, bWidth, bY] = walk[i];
+    batch.quad('path', groundPoint(add(a, across, -aWidth), aY), groundPoint(add(a, across, aWidth), aY),
+      groundPoint(add(b, across, bWidth), bY), groundPoint(add(b, across, -bWidth), bY));
   }
-  for (const x of [x0, x1]) batch.wall('zinc', at(x, rear(x)), at(x, front), sill, eave);
-  const portalLeft = -1.43, portalRight = 1.43, lintel = sill + 2.38;
+  for (const x of [x0, x1]) batch.wall('zinc', at(x, shelfFront - .12), at(x, front), sill, eave);
+  const portalLeft = center - 1.16, portalRight = center + 1.16, lintel = sill + 2.12;
   batch.wall('zinc', at(x0, front), at(portalLeft, front), sill, eave);
   batch.wall('zinc', at(portalRight, front), at(x1, front), sill, eave);
   batch.wall('zinc', at(portalLeft, front), at(portalRight, front), lintel, eave);
   batch.tri('zinc', groundPoint(at(x0, front), eave),
     groundPoint(at(center, front), ridge), groundPoint(at(x1, front), eave));
   for (const [a, b] of [[x0, center], [center, x1]]) {
-    batch.quad('zinc', groundPoint(at(a, rear(a) - .13), level(a) + .072),
+    batch.quad('zinc', groundPoint(at(a, shelfFront - .44), level(a) + .072),
       groundPoint(at(a, front + .19), level(a) + .072),
       groundPoint(at(b, front + .19), level(b) + .072),
-      groundPoint(at(b, rear(b) - .13), level(b) + .072));
+      groundPoint(at(b, shelfFront - .44), level(b) + .072));
     batch.quad('door', groundPoint(at(a, front + .19), level(a) - .05),
       groundPoint(at(b, front + .19), level(b) - .05), groundPoint(at(b, front + .19), level(b) + .09),
       groundPoint(at(a, front + .19), level(a) + .09));

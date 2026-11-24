@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DAYCARE_ENTRY_OUTWARD } from './facility-daycare-placement';
 import { FACILITY_DETAIL_PLANS, type FacilityFloor, type FacilityPoint, type FacilityWall } from './facility-detail-data';
 
 function fraction(point: FacilityPoint, { start, end }: Pick<FacilityWall, 'start' | 'end'>): number {
@@ -89,22 +90,30 @@ describe('page 5 facility plans', () => {
     expect(byId(first,'entry').center[0]).toBeGreaterThan(byId(first,'nursery-sw').center[0]);
   });
 
-  it('opens the 1F daycare directly from its east porch into the vestibule and then into the central hall', () => {
+  it('opens at the center of the short playground façade into the vestibule and central hall', () => {
     const [first, second] = FACILITY_DETAIL_PLANS['daycare-104'].floors;
     const vestibule = byId(first, 'entry');
     const hall = byId(first, 'hall-1');
     const midpoint = (a: FacilityPoint, b: FacilityPoint): FacilityPoint => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    const exteriorIds = new Set(first.walls.filter(wall => wall.exterior).map(wall => wall.id));
-    const doors = first.openings.filter(door => door.kind === 'door' && exteriorIds.has(door.wallId));
+    const exterior = new Map(first.walls.filter(wall => wall.exterior).map(wall => [wall.id, wall]));
+    const doors = first.openings.filter(door => door.kind === 'door' && exterior.has(door.wallId));
     expect(doors).toHaveLength(1);
     const [door] = doors;
-    const width = distance(door.start, door.end);
-    const [x, z] = midpoint(door.start, door.end);
-    // +X is real east and -Z north for both the district and the cutaway.
-    expect((door.end[1] - door.start[1]) / width).toBeCloseTo(1, 7);
-    expect((door.end[0] - door.start[0]) / width).toBeCloseTo(0, 7);
-    expect(contains([x - .3, z], vestibule.polygon)).toBe(true);
-    expect(contains([x + .3, z], first.outline)).toBe(false);
+    const facade = exterior.get(door.wallId)!;
+    const doorCenter = midpoint(door.start, door.end);
+    expect(distance(doorCenter, midpoint(facade.start, facade.end))).toBeLessThan(1e-7);
+    expect(distance(facade.start, facade.end)).toBeCloseTo(4.16);
+    expect(distance(door.start, door.end)).toBeCloseTo(2.08);
+    expect(vestibule.polygon).toEqual(expect.arrayContaining([facade.start, facade.end]));
+    const [x, z] = doorCenter;
+    const length = distance(facade.start, facade.end);
+    const nx = (facade.end[1] - facade.start[1]) / length;
+    const nz = -(facade.end[0] - facade.start[0]) / length;
+    // +X is east and -Z is north. The p.5 cutaway and p.4 exterior must share the entry bearing.
+    expect(nx).toBeCloseTo(DAYCARE_ENTRY_OUTWARD[0], 7);
+    expect(nz).toBeCloseTo(DAYCARE_ENTRY_OUTWARD[1], 7);
+    expect(contains([x - .3 * nx, z - .3 * nz], vestibule.polygon)).toBe(true);
+    expect(contains([x + .3 * nx, z + .3 * nz], first.outline)).toBe(false);
     expect(first.openings.some(opening => {
       const passage = midpoint(opening.start, opening.end);
       return opening.kind === 'passage' && contains(passage, vestibule.polygon) && contains(passage, hall.polygon);

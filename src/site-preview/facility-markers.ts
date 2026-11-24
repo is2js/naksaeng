@@ -1,3 +1,5 @@
+import { DAYCARE_ENTRY_FRONTAGE } from './facility-daycare-placement';
+
 export type SiteFacilityKind = 'main-entrance' | 'sub-entrance' | 'recycling' | 'elevator' | 'stairs'
   | 'community' | 'guesthouse' | 'daycare' | 'kids-station' | 'senior' | 'security';
 
@@ -89,7 +91,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   // The 112 B1 label is printed over the high-rise footprint. Keep it at grade just beside the same wing.
   at('guesthouse-112', 'guesthouse', '112동 게스트하우스 (B1)', 336, 104),
   // The renderer takes the complete roof footprint from this specific model building.
-  { ...at('daycare-104', 'daycare', '어린이집 (1·2F)', 428, 581), footprint: { surface: 'daycare-roof' } },
+  { ...at('daycare-104', 'daycare', '어린이집 (1·2F)', ...DAYCARE_ENTRY_FRONTAGE.centerPlanPx), footprint: { surface: 'daycare-roof' } },
   at('kids-station-101', 'kids-station', '키즈스테이션', 654.4, 921.4),
   at('kids-station-110', 'kids-station', '키즈스테이션', 326.4, 210),
   at('senior-102', 'senior', '시니어라운지', 511.8, 903.2),

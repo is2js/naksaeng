@@ -15,9 +15,13 @@ export const PARK_PATHS: readonly (readonly PlanPoint[])[] = [
   [[562, 692], [556, 714], [557, 730], [563, 745], [570, 757], [575, 768],
     [573, 780], [574, 790], [573, 798], [567, 806], [559, 812]],
   [[574, 790], [587, 790], [601, 786], [612, 782], [625, 781], [633, 784], [641, 806]],
-  [[574, 777], [578, 777], [580, 777]], // West porch landing of the east–west café.
+  [[574, 788], [577, 787], [579, 786]], // Southwest landing, away from the water.
 ];
 
+// Register the pale gable on the plan against the 106 and 103 recycling symbols.
+// The long axis points toward the fountains and 106/107, not due east on the world grid.
+const cafeBearing = Math.hypot(24, 21);
 export const CAFE_PLAN = {
-  oldCenter: [569, 768], center: [589, 777], axis: [1, 0], length: 10.4, depth: 6.24,
+  oldCenter: [569, 768], center: [586, 782], axis: [24 / cafeBearing, -21 / cafeBearing], length: 10.4, depth: 6.24,
+  fountain: [600, 753],
 } as const;

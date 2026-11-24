@@ -19,11 +19,15 @@ const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Northwest_Entry_Portals_
 const DAYCARE = /^SM_Public_Daycare_2F$/;
 const DAYCARE_STRUCTURE = /^SM_(?:Public_Daycare_2F|Rebuilt_Daycare_Pavilion)$/;
 
-function symbolGeometry(shape: Shape, color: string): BufferGeometry {
+function symbolGeometry(shape: Shape, color: string, roofMark = false): BufferGeometry {
   const count = shape === 'pentagon' ? 5 : shape === 'triangle' ? 3 : shape === 'circle' ? 24 : 4;
   const phase = shape === 'square' ? Math.PI / 4 : 0;
   const mint = new Color(color), shade = new Color('#121f29');
-  const rings = [
+  const rings = roofMark ? [
+    { radius: 1.04, color: mint, alpha: 0 }, { radius: 1.0, color: mint, alpha: .88 },
+    { radius: .95, color: mint, alpha: .88 }, { radius: .90, color: mint, alpha: .29 },
+    { radius: 0, color: mint, alpha: .29 },
+  ] : [
     { radius: 1.38, color: mint, alpha: 0 }, { radius: 1.12, color: mint, alpha: .35 },
     { radius: 1.095, color: shade, alpha: .86 }, { radius: 1.0, color: shade, alpha: .95 },
     { radius: .98, color: mint, alpha: 1 }, { radius: .71, color: mint, alpha: 1 },
@@ -73,7 +77,7 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
         : kind === 'guesthouse' || kind === 'community' || kind === 'senior' || kind === 'elevator'
           ? siteSurfaces : ground;
     const surfaceY = ('y' in facility ? facility.y : undefined) ?? down.intersectObjects(meshes, false)[0]?.point.y ?? .48;
-    return { facility, xyz: new Vector3(x, surfaceY + .16, z) };
+    return { facility, xyz: new Vector3(x, surfaceY + (facility.roofMark ? .04 : .16), z) };
   });
   const areas = new Map(anchors.flatMap(({ facility }) => {
     const mesh = createFacilityFootprint(facility, siteSurfaces, daycare);
@@ -85,25 +89,28 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
   for (const [id, { mesh }] of areas) if (isSiteFacilityDetail(id)) clickableAreas.set(mesh, id);
   const areaMeshes = [...clickableAreas.keys()];
   const pinAnchors = anchors.filter(({ facility }) => !areas.has(facility.id));
-  const batches = new Map<Facility['kind'], { mesh: InstancedMesh; sites: typeof anchors }>();
+  const batches = new Map<string, { kind: Facility['kind']; mesh: InstancedMesh; sites: typeof anchors }>();
   const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide, forceSinglePass: true });
   for (const anchor of pinAnchors) {
     const kind = anchor.facility.kind;
-    let batch = batches.get(kind);
+    const markedRoof = !!anchor.facility.roofMark;
+    const key = markedRoof ? `${kind}-roof` : kind;
+    let batch = batches.get(key);
     if (!batch) {
       const style = FACILITY_STYLES[kind];
-      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color), material, pinAnchors.filter((item) => item.facility.kind === kind).length);
+      const mesh = new InstancedMesh(symbolGeometry(style.shape, style.color, markedRoof), material,
+        pinAnchors.filter(({ facility }) => facility.kind === kind && !!facility.roofMark === markedRoof).length);
       mesh.frustumCulled = false;
       mesh.renderOrder = 1;
       scene.add(mesh);
-      batch = { mesh, sites: [] };
-      batches.set(kind, batch);
+      batch = { kind, mesh, sites: [] };
+      batches.set(key, batch);
     }
     batch.sites.push(anchor);
   }
 
   const occluders = [...buildingMeshes.keys(), ...daycareStructure].map((mesh) => ({ mesh, box: new Box3().setFromObject(mesh) }));
-  const matrix = new Matrix4(), projected = new Vector3(), label = new Vector3(), delta = new Vector3(), slabHit = new Vector3();
+  const matrix = new Matrix4(), roofScale = new Vector3(), projected = new Vector3(), label = new Vector3(), delta = new Vector3(), slabHit = new Vector3();
   const ndc = new Vector2(), sight = new Raycaster(), hits: Intersection[] = [];
 
   function isOccluded(worldPoint: Vector3, camera: OrthographicCamera): boolean {
@@ -138,12 +145,18 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
         if (mesh.visible) areaIds.push(id);
       }
       let hasMarks = areaIds.length > 0;
-      for (const [kind, { mesh, sites }] of batches) {
+      for (const { kind, mesh, sites } of batches.values()) {
         mesh.visible = kindVisible(kind);
         if (!mesh.visible) continue;
         hasMarks = true;
         const scale = radius * (kind === 'main-entrance' ? 1.13 : 1);
-        sites.forEach(({ xyz }, index) => mesh.setMatrixAt(index, matrix.makeScale(scale, 1, scale).setPosition(xyz)));
+        sites.forEach(({ xyz, facility }, index) => {
+          const roof = facility.roofMark;
+          if (roof) matrix.makeRotationY(Math.atan2(-roof.axis[1], roof.axis[0]))
+            .scale(roofScale.set(roof.halfWidth * Math.SQRT2, 1, roof.halfDepth * Math.SQRT2));
+          else matrix.makeScale(scale, 1, scale);
+          mesh.setMatrixAt(index, matrix.setPosition(xyz));
+        });
         mesh.instanceMatrix.needsUpdate = true;
       }
       for (const { xyz, facility } of anchors) {

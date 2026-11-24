@@ -18,7 +18,11 @@ export interface SiteFacility {
   /** Optional explicit model height; ordinary markers use the rendered terrain or a facility roof. */
   readonly y?: number;
   readonly footprint?: SiteFacilityFootprint;
+  /** Real roof shape for the two guardhouses at the ends of the same district seam. */
+  readonly roofMark?: { readonly axis: PlanPoint; readonly halfWidth: number; readonly halfDepth: number };
 }
+
+const seamGuardAxis = [Math.SQRT1_2, -Math.SQRT1_2] as const;
 
 // Source: supplied 260707_단지배치도.pdf, page 4, left site-plan image, north rotated 90° clockwise.
 // These are approximate diagram pixels, not surveyed coordinates. The same 989 × 1058 frame,
@@ -98,7 +102,9 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
 
   // Both upper guards retain their separate plan footprints beside the road.
   at('security-101', 'security', '경비실', 706.2, 940.2),
-  at('security-105', 'security', '경비실', 608, 531),
-  at('security-109', 'security', '경비실', 457.1, 454.3),
+  { ...at('security-105', 'security', '경비실', 608, 531),
+    roofMark: { axis: seamGuardAxis, halfWidth: 1.81, halfDepth: 1.44 } },
+  { ...at('security-109', 'security', '경비실', 457.1, 454.3),
+    roofMark: { axis: seamGuardAxis, halfWidth: 1.89, halfDepth: 1.48 } },
   at('security-110', 'security', '경비실', 344.9, 276.1),
 ];

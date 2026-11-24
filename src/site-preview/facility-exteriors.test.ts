@@ -47,7 +47,7 @@ it('adds the Community I pavilion palette only to its own terrace', () => {
   expect(materials(second as Group).every(name => !name.startsWith('MAT_Rebuilt_court'))).toBe(true);
 });
 
-it('centers the 105 and 109 guardhouses on cardinal axes without deleting the ramp', () => {
+it('aligns the 105 and 109 guardhouse roofs with their matching seam-side markers without deleting the ramp', () => {
   const model = new Group(), entries = new Group();
   entries.name = 'SM_Entry_Portals_And_Parking_Ramp';
   model.add(entries);
@@ -72,11 +72,12 @@ it('centers the 105 and 109 guardhouses on cardinal axes without deleting the ra
   for (const marker of markers) {
     const roof = model.getObjectByName(`SM_Rebuilt_Upper_Guardhouse_${marker.id}_zinc`) as Mesh;
     const points = roof.geometry.getAttribute('position');
-    const distinct = (read: (i: number) => number) => [...new Set(Array.from({ length: points.count }, (_, i) => read(i)))].sort((a, b) => a - b);
-    const xs = distinct(i => points.getX(i)), zs = distinct(i => points.getZ(i));
-    expect(xs).toHaveLength(2);
-    expect(zs).toHaveLength(2);
-    expect((xs[0] + xs[1]) / 2).toBeCloseTo(marker.x, 4);
-    expect((zs[0] + zs[1]) / 2).toBeCloseTo(marker.z, 4);
+    const { axis: [dx, dz], halfWidth, halfDepth } = marker.roofMark!;
+    for (let i = 0; i < points.count; i++) {
+      const x = points.getX(i) - marker.x, z = points.getZ(i) - marker.z;
+      expect(Math.abs(x * dx + z * dz)).toBeCloseTo(halfWidth, 4);
+      expect(Math.abs(-x * dz + z * dx)).toBeCloseTo(halfDepth, 4);
+    }
+    expect(dx + dz).toBeCloseTo(0, 6);
   }
 });

@@ -2092,6 +2092,8 @@ export class ShowcaseApp {
                 ? '세대 바닥 안쪽을 가리키세요.'
                 : measurement?.valid !== true
                   ? '열린 구간입니다. 2점 실측으로 시작 면과 공간 방향을 선택하세요.'
+                  : measurement.measurementMode === 'one-sided'
+                    ? '한쪽이 열려 있어 마우스 기준점부터 닿는 면까지만 측정합니다.'
                   : measurement.anchorSnapped
                     ? '구조물 가장자리 빈 폭으로 자동 맞춤 · J 한 번 더 2점 실측 · Esc 종료'
                     : '현재 배치 가구 포함 · Shift+휠 방향 전환 · J 한 번 더 2점 실측 · Esc 종료';

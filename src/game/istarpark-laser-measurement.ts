@@ -2,6 +2,7 @@
 // Bunfirvil 130 mm 자동·2점 레이저: 렌더링된 실제 표면을 기준으로 접점과 거리를 계산한다.
 import { bundangEffectiveKitchenFixtures } from './bundang-option-layout';
 import { apartmentSolidBlockVisualFootprint } from './apartment-transform';
+import { apartmentWindowPaneProfile } from './apartment-window-pane';
 import { entrySlidingPanelSectionPolygon } from './entry-partition-profile';
 export type InspectionLaserAxis = "x" | "y";
 export type InspectionLaserPhase = "hover" | "pick-start" | "await-second" | "complete";
@@ -277,6 +278,15 @@ export function istarparkLaserObstacles({
       centerLine: [point(wall.a), point(wall.b)],
     });
   }
+  // A low sill does not leave an exterior gap: the visible pane above it can
+  // cross the laser plane. Ordinary raised windows are already backed by their
+  // actual sill at that height; open doorways still have no imaginary wall.
+  for (const opening of Array.isArray(geometry.openings) ? geometry.openings : []) {
+    if (!String(opening.type || '').includes('window')) continue;
+    const profile = apartmentWindowPaneProfile(opening, geometry.cellSizeMeters ?? .5);
+    const polygon = wallPolygon({ ...opening, ...profile }, measurementHeight);
+    if (polygon.length >= 3) rows.push({ id: String(opening.id || 'window'), kind: 'window', label: '창', polygon });
+  }
   for (const block of Array.isArray(geometry.solidBlocks) ? geometry.solidBlocks : []) {
     if (!rowCrossesLaserHeight(block, measurementHeight, finite(geometry.clearHeightMeters, 2.3))) continue;
     const polygon = apartment
@@ -497,6 +507,28 @@ function intervalIsPositiveContact(interval = {}, along = 0) {
   return interval.start > along + EPSILON;
 }
 
+function oneSidedLaserMeasurement(axis, anchor, measurementHeight, negative, positive, cross) {
+  const surface = negative?.endObstacle || positive.startObstacle;
+  const point = contactPoint(axis, negative?.end ?? positive.start, cross);
+  const distanceMeters = Math.hypot(anchor[0] - point[0], anchor[1] - point[1]);
+  const distanceMm = Math.round(distanceMeters * 1000);
+  const surfaceHit = { valid: true, point, obstacleId: surface.id, kind: surface.kind, label: surface.label };
+  const cursorHit = { valid: true, point: anchor, kind: 'cursor', label: '기준점' };
+  return {
+    valid: true,
+    axis,
+    measurementMode: 'one-sided',
+    anchorPlanPoint: anchor,
+    sourceAnchorPlanPoint: anchor,
+    laserHeightMeters: measurementHeight,
+    negativeHit: negative ? surfaceHit : cursorHit,
+    positiveHit: positive ? surfaceHit : cursorHit,
+    distanceMeters: Number(distanceMeters.toFixed(6)),
+    distanceMm,
+    label: `${distanceMm}mm · 기준점 → ${surface.label}`,
+  };
+}
+
 
 export function measureIstarparkLaserGap({
   anchorPlanPoint = [],
@@ -550,6 +582,11 @@ export function measureIstarparkLaserGap({
     .filter((interval) => intervalIsPositiveContact(interval, along))
     .sort((left, right) => left.start - right.start)[0];
   if (!negative || !positive) {
+    // If a ray really exits at an open entrance, show the available distance
+    // from the cursor without pretending the door's opening is a wall.
+    if (negative || positive) {
+      return oneSidedLaserMeasurement(normalizedAxis, anchor, measurementHeight, negative, positive, cross);
+    }
     return { valid: false, reason: "incomplete-contact", axis: normalizedAxis, anchorPlanPoint: anchor, laserHeightMeters: measurementHeight };
   }
   const negativeObstacle = negative.endObstacle;

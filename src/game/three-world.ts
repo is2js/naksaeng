@@ -4,6 +4,7 @@ import { fetchJson, resolveProjectUrl, resolveReferencedUrl } from './base';
 import { cameraZoomAfterWheel, clampCameraZoom, RPG_CAMERA_BASE_ZOOM, RPG_CAMERA_MOBILE_MEDIA_QUERY } from './camera';
 import { CeilingActorMask, isCeilingActorOccluder, isFadeableCeilingAppliance, prepareCeilingFade, updateCeilingFade } from './ceiling-actor-mask';
 import { laserPointerWorldPoint } from './laser-pointer-projection';
+import { apartmentWindowPaneProfile } from './apartment-window-pane';
 import { createEntrySlidingPanel, createEntrySlidingRail } from './entry-partition-model';
 import { bundangServiceDoorInwardNormalWorld, doorVisualHingeEndpoint, doorVisualSwingAngleDeg } from './door-visual-pose';
 import {
@@ -1244,8 +1245,12 @@ export class ThreeWorldRenderer {
     this.positionApartmentInspectionLaserBeam(group.userData.glow as THREE.Mesh, start, end);
     this.positionApartmentInspectionLaserBeam(group.userData.outline as THREE.Mesh, start, end);
     this.positionApartmentInspectionLaserBeam(group.userData.core as THREE.Mesh, start, end);
-    this.positionApartmentInspectionLaserContact(group.userData.negative as THREE.Mesh, start, direction, cellSize);
-    this.positionApartmentInspectionLaserContact(group.userData.positive as THREE.Mesh, end, direction, cellSize);
+    const negativeContact = group.userData.negative as THREE.Mesh;
+    const positiveContact = group.userData.positive as THREE.Mesh;
+    if (measurement.negativeHit?.kind === 'cursor') negativeContact.visible = false;
+    else this.positionApartmentInspectionLaserContact(negativeContact, start, direction, cellSize);
+    if (measurement.positiveHit?.kind === 'cursor') positiveContact.visible = false;
+    else this.positionApartmentInspectionLaserContact(positiveContact, end, direction, cellSize);
     const anchor = group.userData.anchor as THREE.Mesh;
     const anchorMaterial = anchor.material as THREE.MeshBasicMaterial;
     anchor.visible = true;
@@ -1945,14 +1950,17 @@ export class ThreeWorldRenderer {
       const length = Math.max(0.1, Math.hypot(end.x - start.x, end.z - start.z));
       const isWindow = String(opening.type || '').includes('window');
       if (isWindow) {
-        const height = Math.max(0.15, finite(opening.heightMeters, 1.2) / cellSize);
+        const profile = apartmentWindowPaneProfile(opening, cellSize);
+        const height = profile.heightMeters / cellSize;
         const pane = new THREE.Mesh(
-          new THREE.BoxGeometry(length, height, Math.max(0.035, finite(opening.frameThicknessMeters, 0.06) / cellSize)),
+          new THREE.BoxGeometry(length, height, profile.thicknessMeters / cellSize),
           this.material('#a9c9d4', { glass: true }),
         );
-        pane.position.set((start.x + end.x) / 2, finite(opening.baseMeters, 0.9) / cellSize + height / 2, (start.z + end.z) / 2);
+        pane.position.set((start.x + end.x) / 2, profile.baseMeters / cellSize + height / 2, (start.z + end.z) / 2);
         pane.rotation.y = -Math.atan2(end.z - start.z, end.x - start.x);
         pane.userData.structureKind = 'window-glass';
+        pane.userData.laserObstacleId = String(opening.id || 'window');
+        pane.userData.laserObstacleKind = 'window';
         pane.userData.naturalGlassTransparency = true;
         this.structureRoot.add(pane);
         continue;

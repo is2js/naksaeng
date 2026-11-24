@@ -2,7 +2,7 @@
   position: relative;
   isolation: isolate;
   width: 100%;
-  height: var(--building-map-height, clamp(330px, 53svh, 500px));
+  height: var(--building-map-height, clamp(390px, 64svh, 610px));
   min-width: 0;
   overflow: hidden;
   border-radius: 10px;
@@ -21,6 +21,7 @@
 .household-building-map-list[data-facility-mode] { visibility: hidden; }
 .building-map:not([data-building-map-state="ready"]) .building-map-viewport { pointer-events: none; }
 .building-map .preview-canvas { display: block; cursor: grab; touch-action: none; }
+.building-map .preview-canvas[data-hover-facility] { cursor: pointer; }
 .building-map .preview-canvas:active { cursor: grabbing; }
 .building-map-markers, .building-map .preview-leader-layer { pointer-events: none; }
 .building-map .preview-leader-layer line { stroke: #effaf2; stroke-width: 1; opacity: .68; }
@@ -90,7 +91,7 @@
 }
 @keyframes building-map-spin { to { transform: rotate(360deg); } }
 @media (max-width: 640px) {
-  .building-map { height: var(--building-map-height, clamp(305px, 47svh, 415px)); }
+  .building-map { height: var(--building-map-height, clamp(380px, 64svh, 535px)); }
   .building-map .building-map-button { min-height: 34px; }
   .building-map .building-map-confirm { font-size: 12px; }
 }

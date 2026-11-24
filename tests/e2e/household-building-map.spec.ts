@@ -124,6 +124,21 @@ async function expectInlineFacility(page: Page, id: string, floor: 'b1' | '1f' |
   return detail;
 }
 
+async function findFacilitySurfacePoint(page: Page, id: string) {
+  const layer = await canvas(page).boundingBox();
+  expect(layer).not.toBeNull();
+  const line = map(page).locator(`[data-facility-leader="${id}"]`);
+  const x = Number(await line.getAttribute('x1'));
+  const y = Number(await line.getAttribute('y1'));
+  for (let i = 0; i < 57; i++) {
+    const distance = 6 * Math.sqrt(i), angle = 2.4 * i;
+    const point = { x: layer!.x + x + distance * Math.cos(angle), y: layer!.y + y + distance * Math.sin(angle) };
+    await page.mouse.move(point.x, point.y);
+    if (await canvas(page).getAttribute('data-hover-facility') === id) return point;
+  }
+  throw new Error(`Could not find the visible coloured mesh for ${id}`);
+}
+
 test('main desktop wizard stays on its map while loading, outlines a single building and confirms the unit step', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 });
   await openWhileModelIsDelayed(page, testInfo.outputPath('desktop-in-map-loading.png'));
@@ -148,6 +163,7 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
   const sceneBounds = await canvas(page).boundingBox();
   const listBounds = await desktopList.boundingBox();
   expect(sceneBounds).not.toBeNull();
+  expect(sceneBounds!.height).toBeGreaterThanOrEqual(600);
   expect(listBounds?.x ?? 0).toBeGreaterThan(sceneBounds!.x + sceneBounds!.width * .5);
 
   await marker(page, '105').click();
@@ -156,10 +172,7 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
   const facilityName = map(page).locator('span[data-site-facility-label]:visible').first();
   await expect(facilityName).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(facilityName).toHaveCSS('font-size', '8.5px');
-  const legendBox = await map(page).locator('[data-site-facility-legend]').boundingBox();
-  const resetBox = await reset(page).boundingBox();
-  expect(legendBox!.x + legendBox!.width).toBeCloseTo(resetBox!.x + resetBox!.width, 0);
-  expect(legendBox!.y).toBeGreaterThan(resetBox!.y + resetBox!.height);
+  await expect(map(page).locator('[data-site-facility-legend]')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('desktop-105-outline.png'), animations: 'disabled' });
   await expect(step(page, 'building')).toHaveAttribute('aria-current', 'step');
   await expect(page.locator('#household-building-detail')).toBeHidden();
@@ -192,46 +205,26 @@ test('main desktop wizard stays on its map while loading, outlines a single buil
   await expect(page).toHaveURL(/#building=105$/);
 });
 
-test('facility legend works on a touch viewport without moving the camera or selecting a building', async ({ browser }, testInfo) => {
+test('facility areas and buttons work on a taller touch map without showing the legend', async ({ browser }, testInfo) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   try {
     await page.goto('./');
     await expect(map(page)).toBeVisible({ timeout: 30_000 });
     await expectOverview(page);
-    const legend = map(page).getByRole('button', { name: '시설 범례' });
-    await expect(legend).toHaveAttribute('aria-expanded', 'false');
+    await expect(map(page).locator('[data-site-facility-legend]')).toBeHidden();
+    expect((await canvas(page).boundingBox())!.height).toBeGreaterThanOrEqual(525);
     await expect(map(page).locator('[data-site-facility-label]')).toHaveCount(35);
     await expect(map(page).locator('button[data-site-facility-detail]:visible')).toHaveCount(3);
     await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2 daycare-104');
     await page.screenshot({ path: testInfo.outputPath('mobile-facilities.png'), animations: 'disabled' });
-    await legend.tap();
-    const panel = map(page).locator('[data-site-facility-panel]');
-    await expect(panel).toBeVisible();
-    await expect(panel.getByRole('button')).toHaveCount(12);
-    const elevator = panel.getByRole('button', { name: '외부 E/V' });
-    await elevator.tap();
-    await expect(panel).toBeHidden();
-    await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(canvas(page)).toHaveAttribute('data-facility-areas', '');
-    await expect(map(page).locator('[data-site-facility-label]:visible:not([data-facility-kind="elevator"])')).toHaveCount(0);
-    await expect(map(page).locator('[data-facility-kind="elevator"]:visible')).toHaveCount(0);
-    await expectOverview(page);
     await expect(action(page)).toBeHidden();
-    await legend.tap();
-    await panel.getByRole('button', { name: '커뮤니티센터' }).tap();
-    await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'community-1 community-2');
-    await legend.tap();
-    await panel.getByRole('button', { name: /어린이집/ }).tap();
-    await expect(canvas(page)).toHaveAttribute('data-facility-areas', 'daycare-104');
-    await legend.tap();
-    await panel.getByRole('button', { name: '전체 보기' }).tap();
-    await expect(panel.locator('[data-site-facility-filter="elevator"]')).toHaveAttribute('aria-pressed', 'false');
-    await expect(panel).toBeHidden();
     const before = page.url();
-    const communityTwo = facilityTrigger(page, 'community-2');
-    await communityTwo.tap();
+    const surface = await findFacilitySurfacePoint(page, 'community-2');
+    await page.touchscreen.tap(surface.x, surface.y);
     const detail = await expectInlineFacility(page, 'community-2', 'b1', before);
+    await expect(detail.getByRole('button', { name: '다함께돌봄센터', exact: true })).toHaveCount(1);
+    await expect(detail.locator('[data-facility-room="care-rooms"]')).toHaveCount(0);
     const room = detail.locator('button[data-facility-room]:visible:not([data-unplaced])').first();
     const communityApproach = await readFacilityApproach(page);
     const name = (await room.textContent())!.trim();
@@ -251,6 +244,11 @@ test('facility legend works on a touch viewport without moving the camera or sel
     // The third detail is also reachable directly from the unzoomed 390px overview.
     await facilityTrigger(page, 'daycare-104').tap();
     const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+    const roomLabels = school.locator('button[data-facility-room]:visible:not([data-unplaced])');
+    await expect(roomLabels.filter({ hasText: /^보육실$/ })).toHaveCount(7);
+    await expect(roomLabels.filter({ hasText: /^화장실$/ })).toHaveCount(2);
+    await expect(roomLabels.filter({ hasText: /^유아화장실$/ })).toHaveCount(4);
+    await expect(roomLabels.filter({ hasText: /^조리실$/ })).toHaveCount(1);
     const schoolApproach = await readFacilityApproach(page);
     await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).tap();
     await expect(school).toHaveAttribute('data-active-facility-floor', '2f');
@@ -276,7 +274,11 @@ test('desktop site right click keeps the selection, right drag pans, and the res
   const before = await canvas(page).getAttribute('data-camera-target');
   const bounds = await canvas(page).boundingBox();
   const start = { x: bounds!.x + bounds!.width * .81, y: bounds!.y + bounds!.height * .31 };
+  await page.evaluate(() => document.addEventListener('contextmenu', (event) => {
+    document.body.dataset.mapContextMenuPrevented = String(event.defaultPrevented);
+  }));
   await page.mouse.click(start.x, start.y, { button: 'right' });
+  await expect(page.locator('body')).toHaveAttribute('data-map-context-menu-prevented', 'true');
   await expect(canvas(page)).toHaveAttribute('data-camera-target', before!);
   await expect(canvas(page)).toHaveAttribute('data-outline-building', '105');
   await page.mouse.move(start.x, start.y);
@@ -295,8 +297,8 @@ test('all three facilities open in the same map; daycare stairs change floors an
   await expectOverview(page);
   const before = page.url();
   const overviewZoom = await zoom(page);
-  const communityOne = facilityTrigger(page, 'community-1');
-  await communityOne.click();
+  const firstSurface = await findFacilitySurfacePoint(page, 'community-1');
+  await page.mouse.click(firstSurface.x, firstSurface.y);
   const one = await expectInlineFacility(page, 'community-1', 'b1', before);
   await expect.poll(() => zoom(page)).toBeGreaterThan(overviewZoom * 1.5);
   const firstApproach = await readFacilityApproach(page);
@@ -337,8 +339,13 @@ test('all three facilities open in the same map; daycare stairs change floors an
   await expect(daycare).toBeVisible();
   await map(page).screenshot({ path: testInfo.outputPath('daycare-exterior.png'), animations: 'disabled' });
   const previousTarget = await canvas(page).getAttribute('data-camera-target');
-  await daycare.click();
+  const schoolSurface = await findFacilitySurfacePoint(page, 'daycare-104');
+  await page.mouse.click(schoolSurface.x, schoolSurface.y);
   const school = await expectInlineFacility(page, 'daycare-104', '1f', before);
+  await expect(canvas(page)).toHaveAttribute('data-faded-building', '104');
+  await expect(school.locator('canvas')).toBeVisible();
+  expect(await school.locator('canvas').evaluate(node =>
+    !node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))).toBe(true);
   const schoolApproach = await readFacilityApproach(page);
   expect(schoolApproach.target).not.toBe(previousTarget);
   await school.locator('[data-facility-stair]').filter({ hasText: '2층으로' }).click();
@@ -350,6 +357,7 @@ test('all three facilities open in the same map; daycare stairs change floors an
   await expect(school).toHaveAttribute('data-active-facility-floor', '1f');
   await school.locator('[data-facility-return]').click();
   await expect(school).toHaveCount(0);
+  await expect(canvas(page)).not.toHaveAttribute('data-faded-building');
   await expect(canvas(page)).toHaveAttribute('data-outline-building', '104');
   await expectFacilityApproach(page, schoolApproach);
   await expect(action(page)).toHaveText(/104동 세대 선택/);

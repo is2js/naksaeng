@@ -81,6 +81,9 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   let pagePaused = false;
   let retryRequiresReload = false;
   const mapList = host.parentElement?.querySelector<HTMLElement>('.household-building-map-list');
+  // OrbitControls may be disabled mid-interaction (e.g. during the cutaway).
+  // Keep context-menu suppression local to the map even then.
+  shell.addEventListener('contextmenu', (event) => event.preventDefault(), listeners);
 
   for (const id of options.buildingIds) {
     const marker = document.createElement('button');

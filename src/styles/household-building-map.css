@@ -1,5 +1,5 @@
 .household-building-map-stage {
-  --building-map-height: clamp(340px, 54svh, 500px);
+  --building-map-height: clamp(390px, 64svh, 610px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(110px, 142px);
   align-items: start;
@@ -62,7 +62,7 @@
 
 @media (pointer: coarse), (max-width: 760px) {
   .household-building-map-stage {
-    --building-map-height: clamp(310px, 53svh, 460px);
+    --building-map-height: clamp(380px, 64svh, 535px);
     grid-template-columns: minmax(0, 1fr);
   }
 

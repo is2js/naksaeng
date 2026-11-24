@@ -10,6 +10,8 @@ export interface FacilityRoom {
   readonly polygon: readonly FacilityPoint[];
   readonly center: FacilityPoint;
   readonly kind: FacilityRoomKind;
+  /** A subdivision shares this room's printed caption and selection. */
+  readonly labelGroup?: string;
 }
 
 export interface FacilityWall {
@@ -45,7 +47,7 @@ export interface FacilityDetailPlan {
   readonly floors: readonly FacilityFloor[];
 }
 
-type DraftRoom = { id: string; label: string; description: string; polygon: readonly FacilityPoint[]; center: FacilityPoint; kind: FacilityRoomKind };
+type DraftRoom = FacilityRoom;
 type DraftOpening = readonly [from: number, to: number, kind: FacilityOpening['kind']];
 type DraftWall = readonly [start: FacilityPoint, end: FacilityPoint, openings?: readonly DraftOpening[]];
 type OutlineRun = { readonly segment: number; readonly openings: readonly DraftOpening[] };
@@ -118,7 +120,7 @@ const communityOneRooms: readonly DraftRoom[] = [
   room('information','인포메이션','program','운동 시설과 커뮤니티라운지를 잇는 안내 공간입니다.',[349,22,425,84]),
   room('community-lounge','커뮤니티라운지','program','인포메이션과 라운지카페 사이에 접한 휴게 공간입니다.',[374,84,452,137]),
   room('lockers','라커룸','service','긴 연결 복도 안쪽에 표시된 라커룸입니다.',[453,-8,535,40]),
-  room('wc-long-wing','화장실(남/여) · 라커룸 옆','service','라커룸과 샤워룸 사이의 공용 화장실입니다.',[535,-8,612,40]),
+  room('wc-long-wing','화장실','service','라커룸과 샤워룸 사이의 공용 화장실입니다.',[535,-8,612,40]),
   room('lounge-library','라운지카페(작은도서관)','program','긴 날개의 유리 입면을 따라 테이블과 작은도서관이 이어지는 공간입니다.',[492,59,730,135]),
   room('showers','샤워룸(남/여)','service','화장실 이후, 골프 시설 쪽까지 이어지는 샤워 공간입니다.',[612,-8,871,40]),
   room('screen-golf','스크린골프룸','program','두 날개가 꺾이는 끝의 스크린골프 공간입니다.',[871,-8,970,47]),
@@ -130,7 +132,7 @@ const communityOneRooms: readonly DraftRoom[] = [
   room('housing-welfare','생애안심주거복지센터','service','생활지원센터와 같은 날개 안쪽에 이어지는 주거복지 공간입니다.',[798,306,886,391]),
   room('staff-break','근로자휴게실(남/여)','service','생활지원 구역 맨 끝에 표시된 근로자 휴게 공간입니다.',
     [[887,475],[994,475],[994,497],[985,517],[887,517]],[941,499]),
-  room('wc-office-wing','화장실(남/여) · 주민회의실 옆','service','주민회의실 위쪽에 별도로 표시된 공용 화장실입니다.',[898,283,994,331]),
+  room('wc-office-wing','화장실','service','주민회의실 위쪽에 별도로 표시된 공용 화장실입니다.',[898,283,994,331]),
   room('long-passage','연결 복도','circulation','라커룸·샤워룸과 라운지카페 사이를 지나 골프 시설 쪽으로 이어지는 동선입니다.',[453,40,854,58]),
 ];
 
@@ -171,18 +173,18 @@ const communityOutline: readonly FacilityPoint[] = [
 
 const communityRooms: readonly DraftRoom[] = [
   room('edu-lounge','에듀라운지','program','커뮤니티센터 Ⅱ의 북서쪽 끝에 있는 교육·교류 공간입니다.',[[146,674],[250,674],[250,706],[211,706],[211,731],[146,731]],[196,701]),
-  room('wc-edu','화장실(남/여) · 에듀라운지 쪽','service','도면에서 에듀라운지 가까이에 표시된 화장실입니다.',[210,610,321,674]),
+  room('wc-edu','화장실','service','도면에서 에듀라운지 가까이에 표시된 화장실입니다.',[210,610,321,674]),
   room('multi-room','멀티룸','program','에듀라운지와 같은 날개에 있는 다목적 활동 공간입니다.',[321,610,492,674]),
   room('private-office','프라이빗오피스룸','program','수변 쪽 긴 창을 따라 작은 업무 칸들이 배치된 공간입니다.',[318,706,559,775]),
-  room('care-center','다함께돌봄센터','program','긴 동선 중앙의 돌봄 공간입니다. 큰 활동 공간과 안쪽 구획이 연결됩니다.',[[559,698],[864,698],[864,723],[817,723],[817,775],[796,775],[796,803],[621,803],[621,745],[559,745]],[721,756]),
-  room('care-rooms','돌봄센터 안쪽 구획','program','큰 돌봄 공간 안쪽의 구획입니다. 이 구획별 세부 명칭은 안내도에 없어 표시하지 않았습니다.',[624,633,782,698]),
-  room('wc-care','화장실(남/여) · 돌봄센터 쪽','service','중앙 돌봄 공간 옆에 표시된 화장실입니다.',[782,633,864,698]),
+  room('care-center','다함께돌봄센터','program','긴 동선 중앙의 돌봄 공간입니다. 큰 활동 공간과 안쪽 구획이 이어집니다.',[[559,698],[864,698],[864,723],[817,723],[817,775],[796,775],[796,803],[621,803],[621,745],[559,745]],[711,720]),
+  { ...room('care-rooms','다함께돌봄센터','program','',[624,633,782,698]), labelGroup: 'care-center' },
+  room('wc-care','화장실','service','중앙 돌봄 공간 옆에 표시된 화장실입니다.',[782,633,864,698]),
   room('side-room','연결부 부속 구획','service','꺾이는 복도에 접한 작은 구획입니다. 상세 용도는 원본에서 확인되지 않습니다.',[864,633,984,721]),
   room('kids-lab','키즈랩','program','키즈라운지와 나란히 있는 작은 활동 공간입니다.',[870,722,1018,803]),
   room('kids-lounge','키즈라운지(공동육아공간)','program','남동쪽 모서리의 공동육아 공간입니다. 큰 놀이기구가 도면에 표시되어 있습니다.',[[984,635],[1106,635],[1106,603],[1218,603],[1218,803],[1096,803],[1096,766],[1018,766],[1018,721],[984,721]],[1129,718]),
   room('sports-court','스포츠코트','program','긴 복도가 꺾여 들어가는 북동쪽 날개 끝의 실내 코트입니다.',[1018,390,1272,494]),
-  room('wc-sports','화장실(남/여) · 스포츠코트 쪽','service','스포츠코트 입구에 인접한 화장실입니다.',[934,390,1018,490]),
-  room('wc-junction','화장실(남/여) · 연결 복도 쪽','service','스포츠코트로 이어지는 복도에 인접한 화장실입니다.',[925,490,1018,581]),
+  room('wc-sports','화장실','service','스포츠코트 입구에 인접한 화장실입니다.',[934,390,1018,490]),
+  room('wc-junction','화장실','service','스포츠코트로 이어지는 복도에 인접한 화장실입니다.',[925,490,1018,581]),
   room('main-hall','연결 복도','circulation','에듀라운지와 돌봄센터 쪽으로 이어지는 긴 동선입니다.',[250,674,553,706]),
   room('sports-hall','스포츠코트 연결 복도','circulation','코트와 키즈라운지를 잇는 꺾인 동선입니다.',[[1018,494],[1176,494],[1176,530],[1106,530],[1106,634],[984,634],[984,581],[1018,581]],[1068,555]),
 ];
@@ -215,7 +217,7 @@ const childRoom = (id: string, shape: Parameters<typeof room>[4], at?: FacilityP
 const childWc = (id: string, a: number, b: number, c: number, d: number) =>
   room(id, '유아화장실', 'service', '보육실 가까이에 도면으로 구분된 어린이용 화장실입니다.', [a,b,c,d]);
 const adultWc = (id: string, a: number, b: number, c: number, d: number) =>
-  room(id, '화장실(남/여)', 'service', '중앙 동선에 접한 공용 화장실입니다.', [a,b,c,d]);
+  room(id, '화장실', 'service', '중앙 동선에 접한 공용 화장실입니다.', [a,b,c,d]);
 const stair = (a: number, b: number, c: number, d: number) =>
   room('stairs', '계단', 'circulation', '절개 투시도에서 계단 단이 보이는 층간 동선입니다.', [a,b,c,d]);
 const lift = (a: number, b: number, c: number, d: number) =>

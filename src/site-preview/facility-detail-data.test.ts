@@ -36,7 +36,7 @@ describe('page 5 facility plans', () => {
       '샤워룸(남/여)', '스크린골프룸', '미니짐', '실내골프연습장', '멀티룸(주민회의실)', '생활지원센터',
       '생애안심주거복지센터', '근로자휴게실(남/여)',
     ]));
-    expect(floor.rooms.filter(({ label }) => label.startsWith('화장실(남/여)'))).toHaveLength(2);
+    expect(floor.rooms.filter(({ label }) => label === '화장실')).toHaveLength(2);
     const [fitnessX, fitnessZ] = byId(floor, 'fitness').center;
     const [cornerX, cornerZ] = byId(floor, 'screen-golf').center;
     const [supportX, supportZ] = byId(floor, 'life-support').center;
@@ -55,10 +55,24 @@ describe('page 5 facility plans', () => {
     expect(b1.rooms.map((room) => room.label)).toEqual(expect.arrayContaining([
       '에듀라운지','멀티룸','프라이빗오피스룸','다함께돌봄센터','키즈랩','키즈라운지(공동육아공간)','스포츠코트',
     ]));
-    expect(b1.rooms.filter((room) => room.label.startsWith('화장실(남/여)'))).toHaveLength(4);
+    expect(b1.rooms.filter((room) => room.label === '화장실')).toHaveLength(4);
     expect(first.rooms.filter((room) => room.label === '보육실')).toHaveLength(7);
     expect(second.rooms.filter((room) => room.label === '보육실')).toHaveLength(5);
     for (const coreId of ['stairs','elevator']) expect(distance(byId(first, coreId).center, byId(second, coreId).center)).toBeLessThan(.35);
+  });
+
+  it('uses the printed childcare names, shortens general restrooms, and gives the care centre one caption', () => {
+    const [community] = FACILITY_DETAIL_PLANS['community-2'].floors;
+    const [first, second] = FACILITY_DETAIL_PLANS['daycare-104'].floors;
+    const named = (floor: FacilityFloor) => [...new Set(floor.rooms.filter(room => room.kind === 'program' || room.kind === 'service').map(room => room.label))].sort();
+    expect(named(first)).toEqual(['보육실','원장실','유아화장실','화장실','조리실','식당'].sort());
+    expect(named(second)).toEqual(['보육실','교사실','유아화장실','화장실'].sort());
+    expect(community.rooms.filter(room => room.label === '다함께돌봄센터' && !room.labelGroup)).toHaveLength(1);
+    expect(byId(community, 'care-rooms').labelGroup).toBe('care-center');
+    for (const { floors } of Object.values(FACILITY_DETAIL_PLANS)) for (const floor of floors) {
+      expect(floor.rooms.filter(room => room.id.startsWith('wc-') || room.id.startsWith('adult-wc-')).every(room => room.label === '화장실')).toBe(true);
+      expect(floor.rooms.filter(room => room.label.startsWith('보육실')).every(room => room.label === '보육실')).toBe(true);
+    }
   });
 
   it('keeps the community arms and the playground-side daycare entry in their north-up relation', () => {

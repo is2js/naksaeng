@@ -52,6 +52,7 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
   const surfaces = new Map<string, Mesh<ShapeGeometry, MeshStandardMaterial>>();
   const outlines = new Map<string, Line>();
   const baseColor = new Map<string, Color>();
+  const labelGroups = new Map<string, string>();
   const paint = new Map<FacilityRoom['kind'], CanvasTexture>();
   const palette: Record<FacilityRoom['kind'], string> = {
     program: '#dcba8c', circulation: '#e3e2ce', service: '#bdcecd', outdoor: '#a8b78c',
@@ -250,7 +251,9 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
     const surface = addMesh(new ShapeGeometry(shapeOf(room.polygon)).rotateX(-Math.PI / 2), mat);
     surface.position.y = .018;
     surface.castShadow = false;
-    surface.userData.facilityRoom = room.id;
+    const labelId = room.labelGroup ?? room.id;
+    surface.userData.facilityRoom = labelId;
+    labelGroups.set(room.id, labelId);
     surfaces.set(room.id, surface);
     baseColor.set(room.id, mat.color.clone());
 
@@ -324,8 +327,8 @@ export function createFacilityFloorModel(floor: FacilityFloor, accent: string) {
     select(id?: string) {
       for (const [key, surface] of surfaces) {
         surface.material.color.copy(baseColor.get(key)!);
-        if (id === key) surface.material.color.lerp(highlight, .56);
-        outlines.get(key)!.visible = id === key;
+        if (id === labelGroups.get(key)) surface.material.color.lerp(highlight, .56);
+        outlines.get(key)!.visible = id === labelGroups.get(key);
       }
     },
     dispose() {

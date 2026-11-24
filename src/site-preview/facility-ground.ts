@@ -6,14 +6,15 @@ import {
 import { FACILITY_STYLES, isSiteFacilityDetail, type FacilityScreenPoint } from './facility-overlay';
 import { SITE_FACILITIES } from './facility-markers';
 import { createFacilityFootprint } from './facility-footprints';
+import type { FacilityDetailId } from './facility-detail-data';
 
 type Facility = typeof SITE_FACILITIES[number];
 type Shape = typeof FACILITY_STYLES[Facility['kind']]['shape'];
 
 // Surface batches from the approved model. Foliage and occupied tower roofs
 // are never eligible height samples for public-space and basement facilities.
-const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach|Rebuilt_Upper_Open_Entry)$/;
-const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Main_Gate_Life_Support_Terrace|Rebuilt_Community_Terraces)$/;
+const GROUND = /^SM_(?:Woodland_Terrain|Parcels_Roads_And_Stream|Graded_Pedestrian_Routes|District_Arterial_Road_And_Sidewalk|Courtyard_Lawns_And_Play|Approach_Promenades_106_107|105_Rear_Pedestrian_Approach|Rebuilt_Upper_Open_Entry|Rebuilt_Upper_Main_Entry|Rebuilt_Seam_Park)$/;
+const TERRACE = /^SM_(?:Terraces_And_Community|Community_Grade_And_Elevators|Main_Gate_Life_Support_Terrace|Rebuilt_Community_Terraces|Rebuilt_Upper_Retail_Frontage)$/;
 const ENTRANCE = /^SM_(?:Entry_Portals_And_Parking_Ramp|Northwest_Entry_Portals_And_Guardhouses|Rebuilt_Upper_Guardhouse)$/;
 const DAYCARE = /^SM_Public_Daycare_2F$/;
 const DAYCARE_STRUCTURE = /^SM_(?:Public_Daycare_2F|Rebuilt_Daycare_Pavilion)$/;
@@ -80,6 +81,9 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
     scene.add(mesh);
     return [[facility.id, { kind: facility.kind, mesh }]] as const;
   }));
+  const clickableAreas = new Map<Object3D, FacilityDetailId>();
+  for (const [id, { mesh }] of areas) if (isSiteFacilityDetail(id)) clickableAreas.set(mesh, id);
+  const areaMeshes = [...clickableAreas.keys()];
   const pinAnchors = anchors.filter(({ facility }) => !areas.has(facility.id));
   const batches = new Map<Facility['kind'], { mesh: InstancedMesh; sites: typeof anchors }>();
   const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide, forceSinglePass: true });
@@ -116,6 +120,12 @@ export function createGroundFacilities(model: Object3D, buildingMeshes: Readonly
 
   return {
     anchorFor(id: string): Vector3 | undefined { return anchors.find(({ facility }) => facility.id === id)?.xyz.clone(); },
+    hitDetail(ray: Raycaster) {
+      const hit = ray.intersectObjects(areaMeshes, false).find(({ object }) => object.visible);
+      if (!hit) return;
+      const id = clickableAreas.get(hit.object);
+      if (id) return { id, distance: hit.distance };
+    },
     draw(renderer: WebGLRenderer, camera: OrthographicCamera, width: number, height: number, emphasized: boolean,
       kindVisible: (kind: Facility['kind']) => boolean,
     ) {

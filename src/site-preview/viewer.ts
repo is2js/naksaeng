@@ -162,7 +162,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     gpu.toneMapping = ACESFilmicToneMapping;
     gpu.toneMappingExposure = 1.12;
     canvas.dataset.siteCanvas = '';
-    canvas.setAttribute('aria-label', '3D 단지 모형. 키보드로는 동 번호 목록을 사용하세요.');
+    canvas.setAttribute('aria-label', '3D 단지 모형. 동이나 색칠된 시설을 눌러 선택할 수 있습니다. 키보드로는 동 번호와 시설 이름 버튼을 사용하세요.');
     canvas.className = 'preview-canvas';
 
     const ambient = new HemisphereLight(0xf4faff, 0x687c58, 1.75);
@@ -251,10 +251,47 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       onVisibilityChange: queueRender,
       onOpenDetail: enterFacility,
     });
+    const fadedBuilding = '104';
+    const fadedParts: { mesh: Mesh; original: Mesh['material']; castShadow: boolean }[] = [];
+    const fadeMaterials = new Map<Material, Material>();
+    function setDaycareReveal(show: boolean): void {
+      if (show === Boolean(fadedParts.length)) return;
+      if (show) {
+        const translucent = (original: Material): Material => {
+          const cached = fadeMaterials.get(original);
+          if (cached) return cached;
+          const material = original.clone();
+          material.transparent = true;
+          material.opacity *= .19;
+          material.depthWrite = false;
+          material.forceSinglePass = true;
+          fadeMaterials.set(original, material);
+          return material;
+        };
+        for (const [mesh, id] of owners) {
+          if (id !== fadedBuilding) continue;
+          fadedParts.push({ mesh, original: mesh.material, castShadow: mesh.castShadow });
+          mesh.material = Array.isArray(mesh.material) ? mesh.material.map(translucent) : translucent(mesh.material);
+          mesh.castShadow = false;
+        }
+        if (!fadedParts.length) return;
+        canvas.dataset.fadedBuilding = fadedBuilding;
+      } else {
+        for (const { mesh, original, castShadow } of fadedParts.splice(0)) {
+          mesh.material = original;
+          mesh.castShadow = castShadow;
+        }
+        delete canvas.dataset.fadedBuilding;
+      }
+      gpu.shadowMap.needsUpdate = true;
+    }
     destroyFacilities = () => {
       facilityVisit?.detail?.dispose();
       if (facilityVisit) setFacilityMode(null);
       facilityVisit = null;
+      setDaycareReveal(false);
+      fadeMaterials.forEach((material) => material.dispose());
+      fadeMaterials.clear();
       facilityStatus.remove();
       facilityOverlay.dispose();
       groundFacilities.dispose();
@@ -291,6 +328,8 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         id, trigger, before, previousPhase: previous === 'facility' ? 'manual' : previous, returning: false,
       };
       facilityVisit = visit;
+      delete canvas.dataset.hoverFacility;
+      if (id === 'daycare-104') setDaycareReveal(true);
       trigger.setAttribute('aria-busy', 'true');
       facilityStatus.hidden = true;
       facilityStatus.textContent = '시설 공간을 불러오는 중입니다.';
@@ -317,6 +356,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       visit.trigger.removeAttribute('aria-busy');
       visit.detail?.dispose();
       visit.detail = undefined;
+      setDaycareReveal(false);
       facilityStatus.hidden = true;
       setFacilityMode('returning');
       if (explored) {
@@ -433,7 +473,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         applyPose(motionTarget, motionOrbit, move.from.zoom * (move.to.zoom / move.from.zoom) ** t);
       }
       gpu.render(world, camera);
-      if (selectedId) {
+      if (selectedId && !(fadedParts.length && selectedId === fadedBuilding)) {
         outline ??= createBuildingOutline(gpu, owners);
         outline.resize(w, h);
         outline.render(world, camera, selectedId);
@@ -533,12 +573,31 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       queueRender();
     }
 
-    function pick(clientX: number, clientY: number): void {
+    function aimAt(clientX: number, clientY: number): boolean {
       const rect = canvas.getBoundingClientRect();
-      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return;
+      if (!rect.width || !rect.height || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
       pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(pointer, camera);
-      const hit = ray.intersectObjects(pickables, false).find(({ object }) => object instanceof Mesh);
+      return true;
+    }
+
+    function facilityAtPointer() {
+      const area = groundFacilities.hitDetail(ray);
+      if (!area) return;
+      // Colour is projected onto the real roof/terrain. Ignore its own
+      // coplanar surface, while keeping real foreground towers in front.
+      ray.far = area.distance - .04;
+      try {
+        if (!ray.intersectObjects(pickables, false).some(({ object }) => object.visible)) return area.id;
+      } finally { ray.far = Infinity; }
+    }
+
+    function pick(clientX: number, clientY: number): void {
+      if (!aimAt(clientX, clientY)) return;
+      const facility = facilityAtPointer();
+      const trigger = facility && facilityOverlay.detailButton(facility);
+      if (facility && trigger) { enterFacility(facility, trigger); return; }
+      const hit = ray.intersectObjects(pickables, false).find(({ object }) => object.visible);
       const id = hit && owners.get(hit.object as Mesh);
       if (id) options.onSelect(id);
     }
@@ -555,6 +614,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     }, { signal });
     options.viewport.addEventListener('pointerdown', (event) => {
       if (facilityVisit || (event.target instanceof Element && event.target.closest('[data-site-facility-controls],[data-site-facility-detail]'))) return;
+      delete canvas.dataset.hoverFacility;
       if (!activePointers.size) {
         suppressClick = false;
         const marker = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-building-marker]') : null;
@@ -565,9 +625,13 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
       activePointers.add(event.pointerId);
     }, capture);
     options.viewport.addEventListener('pointermove', (event) => {
-      if (press?.id !== event.pointerId) return;
-      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) suppressClick = true;
+      if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) suppressClick = true;
+      if (event.pointerType !== 'mouse' || event.buttons || facilityVisit) return;
+      const id = event.target === canvas && aimAt(event.clientX, event.clientY) ? facilityAtPointer() : undefined;
+      if (id) canvas.dataset.hoverFacility = id;
+      else delete canvas.dataset.hoverFacility;
     }, capture);
+    options.viewport.addEventListener('pointerleave', () => { delete canvas.dataset.hoverFacility; }, { signal });
     window.addEventListener('pointerup', (event) => {
       if (!activePointers.delete(event.pointerId)) return;
       if (press?.id === event.pointerId) {

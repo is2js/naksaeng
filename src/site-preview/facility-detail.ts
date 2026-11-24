@@ -9,6 +9,12 @@ import './facility-detail.css';
 
 const CARDINALS = [[0, 0, -1], [1, 0, 0], [0, 0, 1], [-1, 0, 0]] as const;
 const DIRECTIONS = ['위', '오른쪽 위', '오른쪽', '오른쪽 아래', '아래', '왼쪽 아래', '왼쪽', '왼쪽 위'];
+const SVG_NS = 'http://www.w3.org/2000/svg';
+// Try the room center first, then progressively nearby free cells. A small
+// sideways penalty favors shorter vertical callouts for long horizontal tags.
+const LABEL_STEP = 8;
+const LABEL_OFFSETS = Array.from({ length: 23 * 23 }, (_, i) => [(i % 23 - 11) * LABEL_STEP, (Math.floor(i / 23) - 11) * LABEL_STEP] as const)
+  .sort(([x1, y1], [x2, y2]) => x1 * x1 * 1.11 + y1 * y1 - x2 * x2 * 1.11 - y2 * y2);
 let nextTitleId = 0;
 
 export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onBack: () => void): { dispose(): void } {
@@ -23,6 +29,7 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
     <div class="facility-detail-stage">
       <div class="facility-detail-model-layer">
         <canvas data-facility-detail-canvas tabindex="0" aria-label="시설 3D 단면 모형. 방 바닥이나 방 이름을 누르면 공간을 확인할 수 있습니다."></canvas>
+        <svg class="facility-detail-leaders" aria-hidden="true"></svg>
         <div class="facility-detail-labels" role="group" aria-label="이 공간의 방"></div>
         <button type="button" class="facility-detail-stair" data-facility-stair hidden>
           <span aria-hidden="true" class="facility-detail-stair-icon"></span><span></span>
@@ -52,6 +59,7 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
   const layer = query('.facility-detail-model-layer');
   const canvas = query<HTMLCanvasElement>('canvas');
   const labels = query('.facility-detail-labels');
+  const leaders = section.querySelector<SVGSVGElement>('.facility-detail-leaders')!;
   const level = query('.facility-detail-level');
   const message = query('.facility-detail-stage-message');
   const compass = query('.facility-detail-compass');
@@ -59,12 +67,14 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
   const stair = query<HTMLButtonElement>('[data-facility-stair]');
   const back = query<HTMLButtonElement>('[data-facility-return]');
   const roomStatus = query('.facility-detail-current');
+  const title = query('.facility-detail-title');
+  const source = query('.facility-detail-source');
   const accent = hasFloors ? '#fbd16d' : '#ec8f91';
   section.style.setProperty('--facility-accent', accent);
   let current = plan.floors[0];
   let selected: string | undefined;
   let roomLabels = new Map<string, HTMLButtonElement>();
-  let roomNames = new Map<string, string>();
+  let roomLeaders = new Map<string, { group: SVGGElement; line: SVGLineElement; pin: SVGCircleElement }>();
   let model: ReturnType<typeof createFacilityFloorModel> | undefined;
   let renderer: WebGLRenderer | undefined;
   let controls: OrbitControls | undefined;
@@ -106,17 +116,17 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
     if (disposed || !renderer || !model || graphicsLost) return;
     renderer.render(world, camera);
     const w = stage.clientWidth, h = stage.clientHeight;
-    const compact = w < 450;
-    const occupied: BadgePosition[] = [
-      { x: 60, y: 24, w: 120, h: 48 }, { x: w - 79, y: 28, w: 158, h: 56 },
-      { x: 22, y: h - 25, w: 45, h: 50 },
-    ];
-    if (!roomStatus.hidden) occupied.push({
-      x: w - roomStatus.offsetWidth / 2 - 9, y: h - roomStatus.offsetHeight / 2 - 9,
-      w: roomStatus.offsetWidth + 12, h: roomStatus.offsetHeight + 12,
+    const stageBox = stage.getBoundingClientRect();
+    const occupied: BadgePosition[] = [back, title, compass, roomStatus.hidden ? source : roomStatus].map(element => {
+      const box = element.getBoundingClientRect();
+      return { x: box.left - stageBox.left + box.width / 2, y: box.top - stageBox.top + box.height / 2, w: box.width + 5, h: box.height + 5 };
     });
-    const place = (a: BadgePosition) => occupied.every(b =>
-      Math.abs(a.x - b.x) > (a.w + b.w) / 2 + 2 || Math.abs(a.y - b.y) > (a.h + b.h) / 2 + 2);
+    const labelSizes = new Map([...roomLabels].map(([key, badge]) => [key, { w: badge.offsetWidth, h: badge.offsetHeight }]));
+    function free(a: BadgePosition): boolean {
+      return a.x - a.w / 2 >= 4 && a.y - a.h / 2 >= 4 && a.x + a.w / 2 <= w - 4 && a.y + a.h / 2 <= h - 4
+        && occupied.every(b => Math.abs(a.x - b.x) > (a.w + b.w) / 2 + 2 || Math.abs(a.y - b.y) > (a.h + b.h) / 2 + 2);
+    }
+    leaders.setAttribute('viewBox', `0 0 ${w} ${h}`);
     const stairRoom = hasFloors ? current.rooms.find(room => room.id === 'stairs') : undefined;
     if (stairRoom) {
       const p = point(stairRoom.center[0], .75, stairRoom.center[1], w, h);
@@ -127,20 +137,49 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
       snapBadge(stair, visible ? centerX : 52, visible ? centerY : h - 72, !visible);
       if (visible) occupied.push({ x: centerX, y: centerY, w: 84, h: 42 });
     }
-    const chosen = current.rooms.find(room => room.id === selected);
-    const captions = chosen ? [chosen, ...current.rooms.filter(room => room !== chosen)] : current.rooms;
+    const priority = (room: typeof current.rooms[number]) => room.id === selected ? 0 : room.kind === 'program' ? 1 : room.kind === 'service' ? 2 : 3;
+    const captions = [...current.rooms].sort((a, b) => priority(a) - priority(b));
     for (const room of captions) {
       const badge = roomLabels.get(room.id);
       if (!badge) continue;
-      const width = Math.min(125, (badge.textContent?.length ?? room.label.length) * (compact ? 8 : 9.5) + 12);
+      const dims = labelSizes.get(room.id)!;
       const p = point(room.center[0], .32, room.center[1], w, h);
-      const card = { x: p.x, y: p.y, w: width, h: compact ? 20 : 22 };
-      const clear = p.inDepth && p.x > width / 2 + 5 && p.x < w - width / 2 - 5 && p.y > 18 && p.y < h - 21;
-      const fit = clear && place(card);
-      const labelX = Math.max(width / 2 + 8, Math.min(w - width / 2 - 8, p.x));
-      const labelY = Math.max(54, Math.min(h - 37, p.y));
-      snapBadge(badge, fit ? p.x : labelX, fit ? p.y : labelY, !fit);
-      if (fit) occupied.push(card);
+      const inFrame = p.inDepth && p.x >= 0 && p.x <= w && p.y >= 0 && p.y <= h;
+      let placed: BadgePosition | undefined;
+      if (inFrame) {
+        // Use the measured, wrapped text rather than character-based estimates.
+        for (const [dx, dy] of LABEL_OFFSETS) {
+          const card = { x: p.x + dx, y: p.y + dy, ...dims };
+          if (free(card)) { placed = card; break; }
+        }
+        // Large room lists on very narrow displays can exhaust nearby slots.
+        // At the overview scale use the closest remaining spot instead of
+        // hiding an in-frame room; a leader still identifies the correct floor.
+        if (!placed && camera.zoom <= 1.05) {
+          let closest = Infinity;
+          for (let y = dims.h / 2 + 4; y < h; y += LABEL_STEP) for (let x = dims.w / 2 + 4; x < w; x += LABEL_STEP) {
+            const dist = (x - p.x) ** 2 + (y - p.y) ** 2;
+            if (dist >= closest || !free({ x, y, ...dims })) continue;
+            closest = dist;
+            placed = { x, y, ...dims };
+          }
+        }
+      }
+      snapBadge(badge, placed?.x ?? Math.max(dims.w / 2 + 8, Math.min(w - dims.w / 2 - 8, p.x)),
+        placed?.y ?? Math.max(54, Math.min(h - 37, p.y)), !placed);
+      if (placed) occupied.push(placed);
+      const { group, line, pin } = roomLeaders.get(room.id)!;
+      if (placed) {
+        const toX = Math.max(placed.x - dims.w / 2, Math.min(placed.x + dims.w / 2, p.x));
+        const toY = Math.max(placed.y - dims.h / 2, Math.min(placed.y + dims.h / 2, p.y));
+        const shifted = Math.hypot(toX - p.x, toY - p.y) > 3;
+        group.toggleAttribute('data-visible', shifted);
+        if (shifted) {
+          line.setAttribute('x1', String(p.x)); line.setAttribute('y1', String(p.y));
+          line.setAttribute('x2', String(toX)); line.setAttribute('y2', String(toY));
+          pin.setAttribute('cx', String(p.x)); pin.setAttribute('cy', String(p.y));
+        }
+      } else group.removeAttribute('data-visible');
     }
     CARDINALS.forEach(([x, y, z], i) => {
       markerPosition.set(x, y, z).transformDirection(camera.matrixWorldInverse);
@@ -173,10 +212,11 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
   }
 
   function setRoom(roomId?: string): void {
-    const room = current.rooms.find(({ id }) => id === roomId);
+    const hitRoom = current.rooms.find(({ id }) => id === roomId);
+    const room = hitRoom?.labelGroup ? current.rooms.find(({ id }) => id === hitRoom.labelGroup) : hitRoom;
     selected = room?.id;
     roomStatus.hidden = !room;
-    query('.facility-detail-current-name').textContent = room ? roomNames.get(room.id)! : '';
+    query('.facility-detail-current-name').textContent = room?.label ?? '';
     query('.facility-detail-current-description').textContent = room?.description ?? '';
     for (const [key, badge] of roomLabels) badge.setAttribute('aria-pressed', String(key === selected));
     model?.select(selected);
@@ -194,25 +234,31 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
       stair.dataset.direction = up ? 'up' : 'down';
       stair.lastElementChild!.textContent = up ? '2층으로' : '1층으로';
     }
-    const totals = new Map<string, number>(), counts = new Map<string, number>();
-    for (const { label } of floor.rooms) totals.set(label, (totals.get(label) ?? 0) + 1);
-    roomNames = new Map(floor.rooms.map(({ id: key, label }) => {
-      if (totals.get(label) === 1) return [key, label];
-      const number = (counts.get(label) ?? 0) + 1;
-      counts.set(label, number);
-      return [key, `${label} ${number}`];
-    }));
-    roomLabels = new Map(floor.rooms.filter(room => !hasFloors || room.id !== 'stairs').map((room) => {
+    const captions = floor.rooms.filter(room => !room.labelGroup && (!hasFloors || room.id !== 'stairs'));
+    roomLabels = new Map(captions.map((room) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'facility-detail-room';
       button.dataset.facilityRoom = room.id;
       button.dataset.kind = room.kind;
-      button.textContent = roomNames.get(room.id)!;
-      button.title = button.textContent;
+      const qualifier = room.label.indexOf('(');
+      if (qualifier > 0) {
+        button.append(room.label.slice(0, qualifier), document.createElement('wbr'), room.label.slice(qualifier));
+        button.setAttribute('aria-label', room.label);
+      } else button.textContent = room.label;
+      button.title = room.label;
       button.toggleAttribute('data-unplaced', Boolean(renderer && !graphicsLost));
       return [room.id, button] as const;
     }));
+    roomLeaders = new Map(captions.map(room => {
+      const group = document.createElementNS(SVG_NS, 'g');
+      const line = document.createElementNS(SVG_NS, 'line');
+      const pin = document.createElementNS(SVG_NS, 'circle');
+      pin.setAttribute('r', '1.7');
+      group.append(line, pin);
+      return [room.id, { group, line, pin }] as const;
+    }));
+    leaders.replaceChildren(...[...roomLeaders.values()].map(({ group }) => group));
     labels.replaceChildren(...roomLabels.values());
     if (renderer && !graphicsLost) {
       model?.dispose();
@@ -266,6 +312,7 @@ export function mountFacilityDetail(host: HTMLElement, id: FacilityDetailId, onB
     graphicsLost = true;
     canvas.hidden = true;
     compass.hidden = true;
+    leaders.setAttribute('hidden', '');
     message.hidden = false;
     section.toggleAttribute('data-graphics-lost', true);
     for (const badge of roomLabels.values()) badge.removeAttribute('data-unplaced');

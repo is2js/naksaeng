@@ -64,6 +64,7 @@
   font: 720 11px/1.25 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   pointer-events: none;
 }
+.site-facility-controls[hidden] { display: none; }
 .preview-stage .site-facility-controls { top: 66px; right: 14px; }
 .site-facility-controls button:focus-visible { outline: 2px solid #adf5dc; outline-offset: 2px; }
 .site-facility-controls button {

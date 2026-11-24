@@ -85,6 +85,8 @@ export function createFacilityOverlay(
   const controls = document.createElement('div');
   controls.className = 'site-facility-controls';
   controls.dataset.siteFacilityControls = '';
+  // The annotations stay on the map; only the optional legend/filter UI is hidden.
+  controls.hidden = true;
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'site-facility-trigger';
@@ -191,13 +193,18 @@ export function createFacilityOverlay(
       tag.dataset.siteFacilityDetail = id;
       tag.setAttribute('aria-label', `${facility.label} 3D 공간 보기`);
       for (const type of ['pointerdown', 'pointerup', 'wheel', 'contextmenu'] as const) {
-        tag.addEventListener(type, (event) => { event.stopPropagation(); if (type === 'contextmenu') event.preventDefault(); }, listeners);
+        tag.addEventListener(type, (event) => {
+          if ((type === 'pointerdown' || type === 'pointerup') && (event as PointerEvent).button === 2) return;
+          event.stopPropagation();
+          if (type === 'contextmenu') event.preventDefault();
+        }, listeners);
       }
       tag.addEventListener('click', () => onOpenDetail(id, tag), listeners);
     } else tag.setAttribute('aria-hidden', 'true');
     annotations.append(tag);
     const line = document.createElementNS(SVG_NS, 'line');
     line.setAttribute('stroke', FACILITY_STYLES[facility.kind].color);
+    if (isSiteFacilityDetail(facility.id)) line.dataset.facilityLeader = facility.id;
     line.style.display = 'none';
     leaders.append(line);
     return [facility.id, { tag, line }] as const;
@@ -223,8 +230,8 @@ export function createFacilityOverlay(
     const occupied: Rect[] = [
       { x: 0, y: 0, w: 74, h: 72 },
       { x: width - 59, y: height - 118, w: 59, h: 118 },
-      { x: controls.offsetLeft - 4, y: controls.offsetTop - 4, w: controls.offsetWidth + 8, h: controls.offsetHeight + 8 },
     ];
+    if (!controls.hidden) occupied.push({ x: controls.offsetLeft - 4, y: controls.offsetTop - 4, w: controls.offsetWidth + 8, h: controls.offsetHeight + 8 });
     if (reset && !reset.hidden && !reset.disabled) occupied.push({ x: width - 143, y: 0, w: 143, h: 48 });
     if (confirm && !confirm.hidden) occupied.push({ x: 0, y: height - confirm.offsetHeight - 20, w: confirm.offsetWidth + 23, h: confirm.offsetHeight + 20 });
     for (const badge of buildingMarkers) {
@@ -238,8 +245,7 @@ export function createFacilityOverlay(
       const { tag, line } = labels.get(id)!;
       const point = byId.get(id);
       let rect: Rect | undefined;
-      // Long legend names are already visible in the key. Shorten their repeat
-      // labels on narrow maps so their anchors stay legible around tower badges.
+      // Shorten long utility names on narrow maps so their anchors fit around tower badges.
       const text = compact && UTILITY.has(kind) ? FACILITY_STYLES[kind].shortLabel : label;
       // The three enterable facilities remain discoverable in the overview.
       const nameVisible = isSiteFacilityDetail(id) || OVERVIEW_NAMES.has(kind) || point?.emphasized;
@@ -294,6 +300,10 @@ export function createFacilityOverlay(
 
   return {
     update, isKindVisible,
+    detailButton(id: FacilityDetailId): HTMLButtonElement | undefined {
+      const tag = labels.get(id)?.tag;
+      return tag instanceof HTMLButtonElement ? tag : undefined;
+    },
     setInteractive(interactive: boolean): void {
       annotations.inert = controls.inert = !interactive;
       if (!interactive) setOpen(false);

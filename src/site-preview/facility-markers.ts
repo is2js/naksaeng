@@ -50,9 +50,9 @@ const COMMUNITY_TWO: readonly PlanPoint[] = [
 export const SITE_FACILITIES: readonly SiteFacility[] = [
   // The triangles sit outside the property line in the PDF. Anchor the labels at the matching modeled drive approaches.
   at('main-101', 'main-entrance', '주출입구', 715.4, 925.7),
-  at('main-110', 'main-entrance', '주출입구', 354, 266.3),
+  at('main-110', 'main-entrance', '주출입구', 349.2, 248.9),
   at('sub-105', 'sub-entrance', '부출입구', 630, 543.7),
-  at('sub-109', 'sub-entrance', '부출입구', 446.4, 432.8),
+  at('sub-109', 'sub-entrance', '부출입구', 445.2, 433.4),
 
   // The red residential pentagons only; the three gray-blue retail recycling symbols are a different category.
   at('recycling-106', 'recycling', '쓰레기 분리수거장', 686.5, 671.5),
@@ -94,7 +94,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   at('kids-station-110', 'kids-station', '키즈스테이션', 326.4, 210),
   at('senior-102', 'senior', '시니어라운지', 511.8, 903.2),
 
-  // Three guards are modeled as roofs; the fourth uses the plan location by the 109 ramp, not a nearby tower.
+  // Both upper guards retain their separate plan footprints beside the road.
   at('security-101', 'security', '경비실', 706.2, 940.2),
   at('security-105', 'security', '경비실', 608, 531),
   at('security-109', 'security', '경비실', 457.1, 454.3),

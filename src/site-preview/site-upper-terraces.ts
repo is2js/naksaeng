@@ -36,8 +36,8 @@ export function upperTerraceGrade([x, z]: XZ, original: number): number {
 type Sampler = ReturnType<typeof siteTerrainSampler>;
 const materialName = (node: Mesh) => Array.isArray(node.material) ? '' : node.material.name;
 
-/** Long archived paving triangles can cut straight through a curved grade. Split their slope-side edges before draping. */
-function addPavingSamples(mesh: Mesh): void {
+/** Split oversized source triangles before draping them over a new grade, preserving authored UVs. */
+export function subdivideSurfaceInPlan(mesh: Mesh, affected: (x: number, z: number) => boolean, maxStep: number): void {
   const geometry = mesh.geometry, position = geometry.getAttribute('position'), oldIndex=geometry.getIndex();
   const point = new Vector3();
   const world = Array.from({length:position.count},(_,i): XZ => {
@@ -46,13 +46,7 @@ function addPavingSamples(mesh: Mesh): void {
   });
   const attrs = Object.entries(geometry.attributes).map(([key,attr]) => ({key,attr,added:[] as number[]}));
   const result: number[] = [], edges = new Map<string,number>();
-  function edgeLength(a: XZ,b: XZ): number {
-    const x=(a[0]+b[0])/2, z=(a[1]+b[1])/2, pz=z/.52+540;
-    const clearance=upperDistrictRoadX(z)-x;
-    if (x<bounds[0][0] || x>bounds[1][0] || pz<32 || pz>390 || clearance<3.5) return 0;
-    if (!((pz>194 && pz<271) || clearance<16)) return 0;
-    return (a[0]-b[0])**2+(a[1]-b[1])**2;
-  }
+  const minSplit = maxStep**2;
   function midpoint(a: number,b: number) {
     const key = a<b ? `${a}:${b}` : `${b}:${a}`;
     const existing = edges.get(key);
@@ -65,16 +59,20 @@ function addPavingSamples(mesh: Mesh): void {
     edges.set(key,i);
     return i;
   }
-  function emit(a:number,b:number,c:number): void {
+  function emit(a:number,b:number,c:number,depth = 0): void {
+    // A triangle straddling a scope boundary can otherwise keep bisecting a
+    // needle tip while its longest (out-of-scope) edge stays intact.
+    if (depth >= 16) { result.push(a,b,c); return; }
     const pairs = [[a,b,c],[b,c,a],[c,a,b]];
-    let longest = 1.15**2, candidate: number[] | undefined;
+    let longest = minSplit, candidate: number[] | undefined;
     for (const edge of pairs) {
-      const length=edgeLength(world[edge[0]],world[edge[1]]);
-      if (length>longest) { longest=length; candidate=edge; }
+      const p=world[edge[0]], q=world[edge[1]];
+      const length=(p[0]-q[0])**2+(p[1]-q[1])**2;
+      if (length>longest && affected((p[0]+q[0])/2,(p[1]+q[1])/2)) { longest=length; candidate=edge; }
     }
     if (!candidate) { result.push(a,b,c); return; }
     const [p,q,r]=candidate, m=midpoint(p,q);
-    emit(p,m,r); emit(m,q,r);
+    emit(p,m,r,depth+1); emit(m,q,r,depth+1);
   }
   for (let i=0,count=oldIndex?.count ?? position.count;i+2<count;i+=3) {
     emit(oldIndex?.getX(i) ?? i,oldIndex?.getX(i+1) ?? i+1,oldIndex?.getX(i+2) ?? i+2);
@@ -87,6 +85,14 @@ function addPavingSamples(mesh: Mesh): void {
     geometry.setAttribute(key,new Float32BufferAttribute(values,attr.itemSize));
   }
   geometry.setIndex(result);
+}
+
+function addPavingSamples(mesh: Mesh): void {
+  subdivideSurfaceInPlan(mesh, (x,z) => {
+    const pz=z/.52+540, clearance=upperDistrictRoadX(z)-x;
+    return x>=bounds[0][0] && x<=bounds[1][0] && pz>=32 && pz<=390 && clearance>=3.5
+      && ((pz>194 && pz<271) || clearance<16);
+  },1.15);
 }
 
 function blendNorthernShoulder(model: Object3D, lawn: Sampler, tint: Color): void {

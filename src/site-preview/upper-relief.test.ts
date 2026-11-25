@@ -82,7 +82,12 @@ it('sets the park above the gate, lift landing and kids station without covering
     const group = site.getObjectByName(`SM_Rebuilt_Upper_${id}_Entry`)!;
     const asphalt = group.getObjectByName(`${group.name}_asphalt`)!;
     const roof = group.getObjectByName(`${group.name}_siteGrass`)!;
-    expect(new Box3().setFromObject(asphalt).min.y).toBeLessThan(id === 'Main' ? UPPER_DISTRICT_GRADE.arrivalY - 1.7 : -1.25);
+    const road = new Box3().setFromObject(asphalt);
+    if (id === 'Main') expect(road.min.y).toBeLessThan(UPPER_DISTRICT_GRADE.arrivalY - 1.7);
+    else {
+      expect(road.min.y).toBeGreaterThan(.26);
+      expect(road.max.y-road.min.y).toBeLessThan(.42);
+    }
     expect(new Box3().setFromObject(roof).max.y).toBeGreaterThan(3.1);
   }
 });

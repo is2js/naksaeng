@@ -1,5 +1,5 @@
 import {
-  BufferGeometry, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial,
+  BufferGeometry, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, Matrix3, Matrix4, Mesh, MeshStandardMaterial,
   Raycaster, ShapeUtils, Vector2, Vector3,
   type Object3D,
 } from 'three';
@@ -13,7 +13,7 @@ import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } 
 import { refineBrochureGround } from './facility-brochure-ground';
 import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
-import { gradeUpperTerraces } from './site-upper-terraces';
+import { gradeUpperTerraces, subdivideSurfaceInPlan } from './site-upper-terraces';
 import { raiseUpperTerraceAmenities } from './upper-terrace-amenities';
 
 type XZ = readonly [number, number];
@@ -188,8 +188,8 @@ const upperMainFrame: EntryFrame = {
 const upperAuxFrame: EntryFrame = {
   origin: plan(454.8202, 421.2464), inward: [-.588649, .808389], across: [.808389, .588649],
   stations: [
-    [4.34, .58, 0, 5.6, 5.7], [7.55, .63, 1.05, 4.0, 5.45], [10.7, .84, 2.15, 3.4, 5.55],
-    [14.5, 1.02, 2.25, 3.25, 8.2], [18.7, 1.14, 1.9, 3.35, 7.4], [20.9, 1.19, 1.75, 3.30, 3.30],
+    [4.34, .555, 0, 5.6, 5.7], [7.55, .584, 1.05, 4.65, 4.95],
+    [10.7, .613, 1.5, 4.5, 4.32], [12.4, .628, 1.4, 4.45, 4.1],
   ],
 };
 
@@ -255,20 +255,6 @@ function gradeUpperDistrictRoad(model: Object3D): void {
   reshape(street,'street');
   reshape(model.getObjectByName('SM_Parcels_Roads_And_Stream'),'terrain');
   reshape(model.getObjectByName('SM_East_West_Retaining_And_Main_Gate_Break'),'edge');
-}
-
-function cutForEntry(model: Object3D, frame: EntryFrame): void {
-  lowerEntryGround(model, pos => {
-    const x = pos[0] - frame.origin[0], z = pos[1] - frame.origin[1];
-    const depth = x * frame.inward[0] + z * frame.inward[1];
-    const cross = x * frame.across[0] + z * frame.across[1];
-    const last = frame.stations[frame.stations.length - 1][0];
-    if (depth < 4 || depth > last + 5) return null;
-    const [, y, center, left, right] = entryProfile(frame, depth);
-    const shoulder = Math.max(center - left - cross, cross - center - right, 0);
-    if (shoulder > 5) return null;
-    return y - .10 + smoothStep((shoulder - .4) / 4.6) * 8 + smoothStep((depth - last) / 5) * 8;
-  });
 }
 
 /** Cross streets remain at the original road datum; only the gate approaches gain a new plan trace. */
@@ -485,7 +471,7 @@ const upperRetailOutline: readonly XZ[] = [[393.0,442.2],[405.0,429.8],[426.5,45
 const upperPodiumWalk = [[274,385], [271.5,394], [273.6,402], [279.9,415],
   [285.1,423], [297.4,441], [307.6,456], [316.0,470], [327.9,489], [335.4,503],
   [344.0,515], [352.3,520.4], [363.3,522.0], [373.5,520.1], [385,514],
-  [401.8,501], [417.5,487], [433.1,474], [437.3,467], [435.7,461]]
+  [401.8,501], [417.5,487], [432.9,474.4], [437.4,467.5], [435.7,460.5], [435.7,454.5]]
   .map(([x, z]) => plan(x, z));
 
 // Baked v9 route, retained here only to remove its old triangles. The source
@@ -494,6 +480,7 @@ const archivedPodiumWalk = [[274,385], [298,422], [320,459], [342,493], [359,518
   [373,522], [390,511], [416,488], [431,475], [432,463]]
   .map(([x, z]) => plan(x, z));
 const PODIUM_WALK_HALF_WIDTH = 1.78;
+const RETAIL_ACCESS_WALK_Y = .76;
 
 function stationAlongPolylines(route: readonly XZ[]) {
   const stations = [0];
@@ -539,11 +526,28 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
   const route = roundedRoute(upperPodiumWalk);
   const { stations, total, nearest } = stationAlongPolylines(route);
   const legacy = stationAlongPolylines(roundedRoute(archivedPodiumWalk));
-  const level = COMMUNITY_TWO_ROOF - PODIUM_VISIBLE_FLOOR;
-  const endGrade = terrainAt(model, route.at(-1)!, UPPER_RETAIL_ROOF - PODIUM_VISIBLE_FLOOR) + .16;
-  const startGrade = terrainAt(model, route[0], level) + .22;
-  const pavingY = (station: number) => level + (startGrade - level) * (1 - smoothStep(station / 11))
-    + (endGrade - level) * smoothStep((station - total + 14.1) / 14.1);
+  const level = COMMUNITY_TWO_ROOF - PODIUM_VISIBLE_FLOOR + .06;
+  const bakedPaths = model.getObjectByName('SM_Graded_Pedestrian_Routes');
+  const originalWalk = siteTerrainSampler(bakedPaths ? [bakedPaths] : [], plan(260,374), plan(290,402));
+  const startGrade = originalWalk(route[0], terrainAt(model, route[0], level-.19)+.19);
+  // One longitudinal datum, independent of the irregular archived grass.
+  // Spread the two level changes along the full approaches; the long west
+  // retail frontage stays level and the return meets the low access apron.
+  const northRun = Math.max(29, Math.abs(startGrade-level)*15);
+  const southRun = 48, easeLength = 5;
+  const accessBlend = (station: number): number => {
+    const s = Math.max(0, Math.min(southRun, station - total + southRun));
+    const gradedRun = southRun - easeLength;
+    const distance = s < easeLength ? s*s/(2*easeLength) : s > southRun-easeLength
+      ? gradedRun-(southRun-s)**2/(2*easeLength) : s-easeLength/2;
+    return distance / gradedRun;
+  };
+  const pavingY = (station: number) => level + (startGrade - level) * (1 - smoothStep(station / northRun))
+    + (RETAIL_ACCESS_WALK_Y - level) * accessBlend(station);
+  const halfWidth = (station: number) => PODIUM_WALK_HALF_WIDTH
+    - (PODIUM_WALK_HALF_WIDTH - 1.2) * smoothStep((station - total + 7.5) / 7.5);
+  const first = route[0], last = route.at(-1)!;
+  const firstAxis = unit(first,route[1]), lastAxis = unit(route[route.length-2],last);
   const podiumRoofs = [[outline, COMMUNITY_TWO_ROOF], [upperRetailOutline, UPPER_RETAIL_ROOF]] as const;
   const roofAreas = podiumRoofs.map(([ring, height]) => ({
     ring, height,
@@ -580,9 +584,11 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
       }
     }
     const { distance, station } = nearest(v.x, v.z);
-    const weight = (1 - smoothStep((distance - 2.65) / 3.4))
-      * smoothStep(station / 4.2) * smoothStep((total - station) / 4.2);
-    return v.y - (capped + (pavingY(station) - .105 - capped) * weight);
+    const lateral = 1 - smoothStep((distance - halfWidth(station) - .64) / 2.55);
+    const before = station < EPSILON ? (first[0]-v.x)*firstAxis[0]+(first[1]-v.z)*firstAxis[1] : 0;
+    const beyond = station > total-EPSILON ? (v.x-last[0])*lastAxis[0]+(v.z-last[1])*lastAxis[1] : 0;
+    const tie = 1 - smoothStep(Math.max(0,before,beyond) / 1.7);
+    return v.y - (capped + (pavingY(station) - .085 - capped) * lateral * tie);
   };
   const point = new Vector3(), inverse = new Matrix4();
   const moveVertices = (mesh: Mesh, shift: (p: Vector3) => number) => {
@@ -606,7 +612,31 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
     }
   };
   model.getObjectByName('SM_Parcels_Roads_And_Stream')?.traverse(node => {
-    if (isMesh(node) && finishName(node) === 'MAT_Site_Grass') moveVertices(node, point => lower(point, true));
+    if (!isMesh(node) || finishName(node) !== 'MAT_Site_Grass') return;
+    // Subdivide only the local verge. The previous coarse triangles left
+    // little humps inside the path even when their outer vertices were reset.
+    subdivideSurfaceInPlan(node, (x,z) => nearest(x,z).distance < 5.08, .92);
+    moveVertices(node, point => lower(point, true));
+    // The original GLB has split vertices for its broad flat-shaded hills.
+    // Along this narrow graded verge, use the same continuous normal on both
+    // sides of those edges rather than exposing an artificial sawtooth.
+    const surface = siteTerrainSampler([node], plan(254,371), plan(454,539));
+    const pos = node.geometry.getAttribute('position'), nor = node.geometry.getAttribute('normal');
+    if (!nor) return;
+    const normal = new Vector3(), previous = new Vector3();
+    const toLocal = new Matrix3().getNormalMatrix(inverse.copy(node.matrixWorld).invert());
+    for (let i = 0; i < pos.count; i++) {
+      point.fromBufferAttribute(pos,i).applyMatrix4(node.matrixWorld);
+      const { x,y,z } = point, { distance } = nearest(x,z);
+      if (distance > 5.3) continue;
+      const step = .64;
+      const dx = surface([x-step,z],y)-surface([x+step,z],y);
+      const dz = surface([x,z-step],y)-surface([x,z+step],y);
+      normal.set(dx,2*step,dz).applyNormalMatrix(toLocal);
+      previous.fromBufferAttribute(nor,i).lerp(normal,1-smoothStep((distance-4.4)/.9)).normalize();
+      nor.setXYZ(i,previous.x,previous.y,previous.z);
+    }
+    nor.needsUpdate = true;
   });
 
   // Remove the old arc at its own location, and remove any baked strip
@@ -614,13 +644,15 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
   const withinRebuiltWalk = (p: Vector3) => {
     const old = legacy.nearest(p.x, p.z), next = nearest(p.x, p.z);
     return (old.distance < 2.58 && old.station > .10)
-      || (next.distance < PODIUM_WALK_HALF_WIDTH + .52 && next.station > .55 && next.station < total - .14);
+      || (next.distance < halfWidth(next.station) + .52 && next.station > .55 && next.station < total - .14);
   };
   const midpoint = new Vector3();
-  model.getObjectByName('SM_Graded_Pedestrian_Routes')?.traverse(node => {
-    if (!isMesh(node)) return;
+  bakedPaths?.traverse(node => {
+    if (!isMesh(node) || !/^(?:MAT_Sandstone_Pedestrian_Pavers|MAT_Promenade_Paver_Coping)$/.test(finishName(node))) return;
     keepTriangles(node, (a, b, c) => !withinRebuiltWalk(midpoint.copy(a).add(b).add(c).multiplyScalar(1/3)));
     moveVertices(node, p => {
+      const tie = nearest(p.x,p.z);
+      if (tie.station < 1.8 && tie.distance < 3.2) return 0;
       const limit = floorLimit([p.x, p.z]);
       return p.y > limit ? Math.max(0, p.y - terrainAt(model, [p.x, p.z], p.y) - .105) : 0;
     });
@@ -650,7 +682,7 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
       node.computeBoundingSphere();
     }
   });
-  return route.map((p, i) => ({ position: p, y: pavingY(stations[i]) }));
+  return route.map((p, i) => ({ position: p, y: pavingY(stations[i]), halfWidth: halfWidth(stations[i]) }));
 }
 
 function steppedTerrace(batch: SurfaceBatch, outline: readonly XZ[], top: number, gradeLow: number,
@@ -835,7 +867,7 @@ function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
   batch.wall('facadeGlass', at(-.61, 1.455), at(.61, 1.455), roof + .54, top - .39);
 }
 
-type PodiumWalkPoint = { position: XZ; y: number };
+type PodiumWalkPoint = { position: XZ; y: number; halfWidth: number };
 
 function upperPodiumPavers(model: Object3D, route: readonly PodiumWalkPoint[]): void {
   const terrace = model.getObjectByName(`${FACADE}_community-2`);
@@ -849,17 +881,15 @@ function upperPodiumPavers(model: Object3D, route: readonly PodiumWalkPoint[]): 
     const b = route[i + 1];
     if (!b) return [a];
     const count = Math.ceil(Math.hypot(b.position[0] - a.position[0], b.position[1] - a.position[1]) / .55);
-    return Array.from({ length: count }, (_, j) => ({ position: mix(a.position, b.position, j/count), y: a.y + (b.y - a.y) * j/count }));
+    return Array.from({ length: count }, (_, j) => ({ position: mix(a.position, b.position, j/count),
+      y: a.y + (b.y - a.y) * j/count, halfWidth: a.halfWidth + (b.halfWidth - a.halfWidth) * j/count }));
   });
-  const sections = course.map(({ position: p, y }, i) => {
+  const sections = course.map(({ position: p, y, halfWidth: w }, i) => {
     const [dx, dz] = unit(course[Math.max(0, i - 1)].position, course[Math.min(course.length - 1, i + 1)].position);
-    const w = PODIUM_WALK_HALF_WIDTH;
-    const offsets = [-w, -w + .12, -1.12, -.55, 0, .55, 1.12, w - .12, w];
+    const offsets = [-w, -w + .09, -w*.63, -w*.31, 0, w*.31, w*.63, w - .09, w];
     const edges = offsets.map(offset => add(p, [dz, -dx], offset));
-    // Give the ribbon a single cross-section (rather than draping separate
-    // strips with mismatched tops at the two curbs).
-    const elevation = Math.max(y, ...edges.map(edge => groundY(edge, y - .1) + .10));
-    return edges.map(edge => groundPoint(edge, elevation));
+    // No highest-edge probing: one profile carries the center and curbs.
+    return edges.map(edge => groundPoint(edge, y));
   });
   for (let i = 1; i < sections.length; i++) {
     for (let j = 1; j < sections[i].length; j++) {
@@ -1707,11 +1737,10 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
   return cuts;
 }
 
-/** 109 line 1 has a recessed B1 throat below the Misty Forêt park, beyond the street gate. */
+/** Shared surface apron; the two branches separate before the garage and retail walk. */
 function upperOpenEntry(model: Object3D): void {
   const oldRamp = model.getObjectByName('SM_Seam_North_Covered_Parking_Ramp');
   if (oldRamp) oldRamp.visible = false;
-  cutForEntry(model, upperAuxFrame);
   const group = new Group();
   group.name = DRIVE;
   group.userData.castsSiteShadow = true;
@@ -1719,22 +1748,42 @@ function upperOpenEntry(model: Object3D): void {
   paveEntry(batch, model, upperAuxFrame, false);
   entryPortal(batch, upperAuxFrame, 10.25, 7.65);
   // Crescent-shaped planted shoulder, following the gray turnout around it.
-  const island = [[439.2,424.2],[435.7,426.2],[430.0,429.2],[428.0,432.7],[429.5,434.5],
-    [435.4,436.0],[439.0,436.0],[441.0,431.4]].map(([x, z]) => plan(x, z));
-  batch.prism('limestone', 'siteGrass', island, .55, 1.57);
-  // New PDF detail locates the dark end behind the planted island, beside
-  // 109's first line. Use the demonstrated surface curve, then descend.
+  const island = [[440.2,421.8],[436.3,424.4],[432.9,427.6],[433.9,429.1],
+    [437.6,431.6],[440.2,430.9],[442.3,427.3]].map(([x, z]) => plan(x, z));
+  batch.prism('limestone', 'siteGrass', island, .54, 1.03);
   const terminal = upperAuxFrame.stations.at(-1)!;
-  const lead = entryAt(upperAuxFrame, terminal[0], terminal[2]);
-  const face = plan(405.7, 414.6), axis = unit(plan(412, 423), face);
+  const apronGrade = (p: XZ) => terminal[1] + .009 * ((p[0]-upperAuxFrame.origin[0])*upperAuxFrame.inward[0]
+    + (p[1]-upperAuxFrame.origin[1])*upperAuxFrame.inward[1] - terminal[0]);
+  const face = plan(405.7, 414.6), axis = unit(plan(413.8, 426.1), face);
   const cross: XZ = [axis[1], -axis[0]];
   const portalAt = (depth: number, lateral: number): XZ => add(add(face, axis, depth), cross, lateral);
-  const rear = portalAt(7.4, 0);
-  const course: readonly (readonly [XZ, number, number])[] = [
-    [lead, terminal[1], 3.30], [plan(432,450), 1.13, 3.45], [plan(427,444), .95, 3.40],
-    [plan(420,434.5), .49, 3.34], [plan(412,423), -.17, 3.27], [face, -.74, 3.23],
-    [rear, -1.38, 3.23],
-  ];
+  const throatY = apronGrade(face);
+  const garage: readonly [XZ, number][] = [[plan(432.5,438.8),3.10],[plan(426,435.6),3.22],
+    [plan(418.6,431.7),3.24],[plan(413.8,426.1),3.24],[face,3.23],[portalAt(2.6,0),3.23],[portalAt(7.4,0),3.23]];
+  const turnout: readonly [XZ, number][] = [[plan(442.8,449.9),2.48],[plan(441.4,454.3),2.25],[plan(440.2,458.1),1.67]];
+  const makeRibbon = (route: readonly [XZ, number][], covered = false) => route.map(([p,w],i) => {
+    const v = unit(route[Math.max(0,i-1)][0],route[Math.min(route.length-1,i+1)][0]);
+    const n: XZ = [v[1],-v[0]];
+    const base = (q: XZ) => covered && i >= route.length-2 ? throatY - (i === route.length-1 ? .31 : 0) : apronGrade(q);
+    return { p, n, w, base, sides: [add(p,n,-w),add(p,n,w)] as const };
+  });
+  const garageRows = makeRibbon(garage,true), turnoutRows = makeRibbon(turnout);
+  const [gSouth,gNorth] = [...garageRows[0].sides].reverse();
+  const [tWest,tEast] = turnoutRows[0].sides;
+  const [stemLeft,stemRight] = [entryAt(upperAuxFrame,terminal[0],terminal[2]-terminal[3]),
+    entryAt(upperAuxFrame,terminal[0],terminal[2]+terminal[4])];
+  const junction = [stemLeft,gNorth,gSouth,plan(437.7,444.9),tWest,tEast,stemRight];
+  for (const [a,b,c] of ShapeUtils.triangulateShape(junction.map(p=>new Vector2(...p)),[])) {
+    batch.tri('asphalt',...[a,b,c].map(i=>groundPoint(junction[i],apronGrade(junction[i]))) as [XYZ,XYZ,XYZ]);
+  }
+  // Close the hole left by the archived sunken driveway. This pad stays
+  // below both asphalt and the pavers tied into the west side of the fork.
+  const pad = [[430.3,442],[437.7,444.4],[445,449.8],[446,458.3],[442.4,463.3],
+    [435.4,466.5],[426,467],[421.1,458.6],[423.6,450.6]].map(([x,z])=>plan(x,z));
+  for (const [a,b,c] of ShapeUtils.triangulateShape(pad.map(p=>new Vector2(...p)),[])) {
+    const at=(i:number)=>groundPoint(pad[i],apronGrade(pad[i])-.077);
+    batch.tri('siteGrass',at(a),at(b),at(c));
+  }
   const deckHeight = MISTY_ROOF;
   const vergeCuts = buildMistyForet(model, [portalAt(7.43,-3.49), portalAt(7.43,3.49)]);
   // The v9 tree at the new tunnel mouth must sit on the planted roof, not
@@ -1761,15 +1810,13 @@ function upperOpenEntry(model: Object3D): void {
       node.computeBoundingSphere();
     }
   });
-  const norm = (pointIndex: number): XZ => {
-    if (pointIndex === 0) return [-upperAuxFrame.across[0], -upperAuxFrame.across[1]];
-    const left = course[Math.max(0,pointIndex-1)][0], right = course[Math.min(course.length-1,pointIndex+1)][0];
-    const tangent = unit(left,right);
-    return [tangent[1],-tangent[0]];
-  };
-  const cutSections = course.slice(1).map(([b, , w1], i) => {
-    const [a, , w0] = course[i], n0 = norm(i), n1 = norm(i+1);
-    return [add(a,n0,w0),add(a,n0,-w0),add(b,n1,-w1),add(b,n1,w1)] as const;
+  const cutSections: (readonly XZ[])[] = [];
+  const stemRows = upperAuxFrame.stations.map(([d,,c,l,r])=>[entryAt(upperAuxFrame,d,c-l-.92),entryAt(upperAuxFrame,d,c+r+.92)] as const);
+  stemRows.slice(1).forEach((r,i)=>cutSections.push([stemRows[i][0],stemRows[i][1],r[1],r[0]]));
+  for (const ids of ShapeUtils.triangulateShape(junction.map(p=>new Vector2(...p)),[])) cutSections.push(ids.map(i=>junction[i]));
+  for (const rows of [garageRows,turnoutRows]) rows.slice(1).forEach((r,i)=>{
+    const a=rows[i];
+    cutSections.push([a.sides[0],a.sides[1],r.sides[1],r.sides[0]]);
   });
   // Trim the decoded grass triangles on the exact corridor edges. Lowering
   // the corners of the coarse source triangles instead drapes grass across
@@ -1777,6 +1824,34 @@ function upperOpenEntry(model: Object3D): void {
   const grass = model.getObjectByName('SM_Parcels_Roads_And_Stream')?.children.find((node): node is Mesh =>
     isMesh(node) && finishName(node) === 'MAT_Site_Grass');
   if (grass) {
+    // Keep an even planted shoulder around the new low apron. Trimmed road
+    // cut edges and the adjacent ground use the same gently sloped datum.
+    const localLo=plan(397,409), localHi=plan(462,467), guard=plan(450.4,453.1);
+    const shoulderDistance = (x: number, z: number) => {
+      if (x<localLo[0] || x>localHi[0] || z<localLo[1] || z>localHi[1]) return Infinity;
+      let result=Infinity;
+      for (const ring of cutSections) for (let i=0;i<ring.length;i++) {
+        const a=ring[i], b=ring[(i+1)%ring.length], dx=b[0]-a[0], dz=b[1]-a[1];
+        const t=Math.max(0,Math.min(1,((x-a[0])*dx+(z-a[1])*dz)/(dx*dx+dz*dz || 1)));
+        result=Math.min(result,Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t));
+      }
+      return result;
+    };
+    const guardWeight = (x: number, z: number) => (1-smoothStep((Math.hypot(x-guard[0],z-guard[1])-3.1)/3.25))
+      * (1-smoothStep((z-plan(0,459)[1])/3.6));
+    subdivideSurfaceInPlan(grass,(x,z)=>shoulderDistance(x,z)<3.9 || guardWeight(x,z)>.005,1.05);
+    const lanePosition=grass.geometry.getAttribute('position'), world=new Vector3(), inverse=grass.matrixWorld.clone().invert();
+    for (let i=0;i<lanePosition.count;i++) {
+      world.fromBufferAttribute(lanePosition,i).applyMatrix4(grass.matrixWorld);
+      const distance=shoulderDistance(world.x,world.z);
+      const weight = Math.max(1-smoothStep((distance-.66)/2.49),guardWeight(world.x,world.z));
+      if (weight < EPSILON) continue;
+      const front=apronGrade([world.x,world.z])-.042;
+      world.y+=(front-world.y)*weight;
+      world.applyMatrix4(inverse);
+      lanePosition.setXYZ(i,world.x,world.y,world.z);
+    }
+    grass.geometry.computeVertexNormals();
     type ClipVertex = { readonly x: number; readonly z: number; readonly attrs: readonly (readonly number[])[] };
     const source = grass.geometry, position = source.getAttribute('position');
     const attributes = Object.entries(source.attributes);
@@ -1839,31 +1914,44 @@ function upperOpenEntry(model: Object3D): void {
     grass.geometry = clipped;
     source.dispose();
   }
-  for (let i = 1; i < course.length; i++) {
-    const [a, y0, w0] = course[i-1], [b, y1, w1] = course[i];
-    const n0 = norm(i-1), n1=norm(i);
-    batch.quad('asphalt', groundPoint(add(a,n0,w0),y0), groundPoint(add(a,n0,-w0),y0),
-      groundPoint(add(b,n1,-w1),y1), groundPoint(add(b,n1,w1),y1));
-    batch.quad('roadAmber', groundPoint(add(a,n0,.055), y0+.022), groundPoint(add(a,n0,-.055),y0+.022),
-      groundPoint(add(b,n1,-.055),y1+.022), groundPoint(add(b,n1,.055),y1+.022));
-    for (const s of [-1,1]) {
-      const p = add(a,n0,w0*s), q = add(b,n1,w1*s);
-      const wallTop = (point: XZ, base: number, index: number): number => index >= course.length-2 ? deckHeight
-        : Math.min(deckHeight, Math.max(base+.18, terrainAt(model, point, base)+.08));
-      const pTop = wallTop(add(p,n0,s*.4),y0,i-1) - .06, qTop = wallTop(add(q,n1,s*.4),y1,i) - .06;
-      batch.quad('stoneInset', groundPoint(p,y0-.22), groundPoint(p,pTop), groundPoint(q,qTop), groundPoint(q,y1-.22));
-      batch.quad('coping', groundPoint(p,pTop), groundPoint(q,qTop), groundPoint(add(q,n1,s*.24),qTop+.02), groundPoint(add(p,n0,s*.24),pTop+.02));
+  const edge = (p: XZ, q: XZ, out: XZ) => {
+    const a = apronGrade(p), b = apronGrade(q), r = add(q,out,.17), s = add(p,out,.17);
+    batch.quad('coping',groundPoint(p,a+.029),groundPoint(q,b+.029),groundPoint(r,b+.024),groundPoint(s,a+.024));
+    batch.quad('stoneInset',groundPoint(p,a-.13),groundPoint(q,b-.13),groundPoint(q,b+.028),groundPoint(p,a+.028));
+  };
+  const connectEdge = (p: XZ, q: XZ) => { const [dx,dz]=unit(p,q); edge(p,q,[-dz,dx]); };
+  connectEdge(stemLeft,gNorth);
+  connectEdge(gSouth,junction[3]);
+  connectEdge(junction[3],tWest);
+  connectEdge(tEast,stemRight);
+  for (const [route,garage] of [[garageRows,true],[turnoutRows,false]] as const) {
+    for (let i=1;i<route.length;i++) {
+      const a=route[i-1], b=route[i];
+      const at = (r: typeof a, x: number, dy = 0): XYZ => {
+        const p=add(r.p,r.n,x);
+        return groundPoint(p,r.base(p)+dy);
+      };
+      batch.quad('asphalt',at(a,-a.w),at(a,a.w),at(b,b.w),at(b,-b.w));
+      if (garage && i < route.length-2) batch.quad('roadAmber',at(a,-.05,.022),at(a,.05,.022),at(b,.05,.022),at(b,-.05,.022));
+      if (!garage || i <= route.length-3) for (const s of [-1,1] as const) {
+        const j=s===-1?0:1, [dx,dz]=unit(a.p,b.p);
+        edge(a.sides[j],b.sides[j],[s*dz,-s*dx]);
+      }
     }
   }
   // White structural entrance face as on 105; above it the same park turf
-  // carries to Misty Forêt, rather than capping the opening with an island.
+  // carries to Misty Forêt. The dark opening ends at a normal garage
+  // lintel; the actual drop begins several metres inside the cover.
+  const lintel = throatY+3.45;
   batch.prism('courtStone', 'siteGrass', rectangular(portalAt, .03, -3.49, 7.43, 3.49), deckHeight-.37, deckHeight);
-  batch.prism('courtStone', 'coping', rectangular(portalAt, -.19, -3.61, .47, 3.61), deckHeight - .59, deckHeight + .018);
+  batch.prism('courtStone', 'coping', rectangular(portalAt, -.19, -3.61, .47, 3.61), lintel, deckHeight + .018);
+  batch.prism('stoneInset','coping',rectangular(portalAt,-.23,-3.61,.04,3.61),lintel-.08,lintel+.15);
+  batch.plate('courtFrame',rectangular(portalAt, .04,-3.23,7.44,3.23),lintel);
   for (const side of [-1, 1]) {
-    batch.prism('courtStone', 'coping', rectangular(portalAt, -.20, side * 3.19, .62, side * 3.61), -.84, deckHeight - .55);
-    batch.wall('courtFrame', portalAt(.48, side * 3.53), portalAt(7.46, side * 3.53), deckHeight - .56, deckHeight - .28);
+    batch.prism('courtStone', 'coping', rectangular(portalAt, -.20, side * 3.19, .62, side * 3.61), throatY-.11, lintel+.03);
+    batch.wall('courtFrame', portalAt(.48, side * 3.31), portalAt(7.46, side * 3.31), throatY-.32, lintel);
   }
-  batch.wall('door', portalAt(7.44,-3.23), portalAt(7.44,3.23), -1.38, deckHeight-.37);
+  batch.wall('door', portalAt(7.44,-3.23), portalAt(7.44,3.23), throatY-.33, lintel);
   // The small pedestrian approach on the planted lid joins the upper park
   // paving on the same datum. The low vehicle lane remains open below.
   const parkWalk: XZ[] = [portalAt(2.7, -.55), portalAt(5.2, -.55), portalAt(7.55, -.62), plan(395, 400)];
@@ -1901,7 +1989,7 @@ function rebuildGuardhouses(model: Object3D): void {
   group.name = GUARD;
   group.userData.castsSiteShadow = true;
   for (const [id, preferred] of [
-    ['security-105', null], ['security-109', 1.23], ['security-110', UPPER_DISTRICT_GRADE.arrivalY],
+    ['security-105', null], ['security-109', .83], ['security-110', UPPER_DISTRICT_GRADE.arrivalY],
   ] as const) {
     const security = SITE_FACILITIES.find(item => item.id === id);
     if (!security) continue;

@@ -21,7 +21,7 @@ it('makes the road edge a storey-high stone face and joins a flat Misty Forêt r
   ray.ray.origin.copy(point(399,414,30));
   expect(ray.intersectObject(lid)[0].point.y).toBeCloseTo(first,4);
   const asphalt = ramp.getObjectByName(`${ramp.name}_asphalt`)!;
-  expect(ray.intersectObject(asphalt)[0].point.y).toBeLessThan(-.6);
+  expect(ray.intersectObject(asphalt)[0].point.y).toBeCloseTo(.63,1);
   const fascia = park.getObjectByName(`${name}_courtStone`)!;
   const front = new Raycaster(point(406,341,first-1.9),new Vector3(-1,0,0));
   expect(front.intersectObject(fascia).length).toBeGreaterThan(0);
@@ -37,6 +37,27 @@ it('makes the road edge a storey-high stone face and joins a flat Misty Forêt r
   expect(Math.abs(lowGrass-(UPPER_DISTRICT_GRADE.lowerRoadY+upperDistrictStreetRise(ray.ray.origin.z)))).toBeLessThan(.24);
   ray.ray.origin.copy(point(385.5,380,30));
   expect(lowGrass - ray.intersectObject(verge)[0].point.y).toBeGreaterThan(2);
+});
+
+it('splits a nearly level apron into garage and turnout branches; the descent begins under cover', () => {
+  const scene = new Group();
+  refineFacilityExteriors(scene);
+  const entry = scene.getObjectByName('SM_Rebuilt_Upper_Open_Entry')!;
+  const asphalt = entry.getObjectByName(`${entry.name}_asphalt`)!;
+  const lid = entry.getObjectByName(`${entry.name}_siteGrass`)!;
+  const ray = new Raycaster(point(451,429,30),new Vector3(0,-1,0));
+  const at = (object: typeof asphalt, x: number, z: number) => {
+    ray.ray.origin.copy(point(x,z,30));
+    return ray.intersectObject(object)[0]?.point.y;
+  };
+  const exposed = [[451,429],[444,440],[439,443],[432,438],[420,435],[412,423],[406,415],[441,454],[440,458]] as const;
+  for (const [x,z] of exposed) expect(at(asphalt,x,z)).toBeGreaterThanOrEqual(.54);
+  const grades = exposed.map(([x,z])=>at(asphalt,x,z)!);
+  expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.16);
+  expect(at(asphalt,429,451)).toBeUndefined();
+  expect(at(lid,429,451)).toBeGreaterThan(.52); // infills the former driveway cut, below the new junction
+  expect(at(lid,399,407)).toBeCloseTo(UPPER_DISTRICT_GRADE.mistyRoofY,4);
+  expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);
 });
 
 it('models the plan’s interior spine and both paved pockets separately from its planting beds', () => {

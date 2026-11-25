@@ -2,6 +2,7 @@ import {
   BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial, Raycaster,
   ShapeUtils, Vector2, Vector3, type Object3D,
 } from 'three';
+import { UPPER_MAIN_DECK } from './site-upper-main-layout';
 
 type XZ = readonly [number, number];
 type XYZ = readonly [number, number, number];
@@ -152,46 +153,32 @@ function rebuildDeForetPark(model: Object3D, ground: ReturnType<typeof sampling>
   model.add(batch.make('SM_Brochure_DeForet_Park'));
 }
 
-function rebuildDeForetPlay(model: Object3D, ground: ReturnType<typeof sampling>): void {
-  const center = plan(POINTS.play), a = 18 * Math.PI / 180, at = frame(center, a);
+function rebuildDeForetPlay(model: Object3D): void {
+  const legacyCenter = plan(POINTS.play), center = plan(UPPER_MAIN_DECK.play.centerPx);
+  const a = 18 * Math.PI / 180, at = frame(center, a);
   omitLegacy(model, ['SM_Courtyard_Lawns_And_Play'], (p, material) => {
     if (!material.startsWith('MAT_Garden_')) return false;
-    const dx = p.x - center[0], dz = p.z - center[1];
+    const dx = p.x - legacyCenter[0], dz = p.z - legacyCenter[1];
     const x = dx * Math.cos(a) + dz * Math.sin(a), z = -dx * Math.sin(a) + dz * Math.cos(a);
     // Remove only the upper play inset; lower blue figure-eight and walks keep their materials.
     return Math.hypot(x / 18.9, z / 20.2) < 1;
   });
   const batch = new BrochureBatch();
-  const turf = (p: XZ) => ground(p, 3.6) + .10;
+  const turf = () => UPPER_MAIN_DECK.roofY + .032;
   const outer = orbit(at, 17, 17.5, 42, true), inner = orbit(at, 15.75, 16.29, 42, true);
-  const innerLevels = inner.map(turf), centerLevel = turf(center);
-  ring(batch, 'bed', inner, outer, (p) => turf(p) + .02);
+  const innerLevels = inner.map(turf), centerLevel = turf();
+  ring(batch, 'bed', inner, outer, () => turf() + .02);
   inner.forEach((p, i) => {
     const j = (i + 1) % inner.length;
     batch.tri('turf', pointAt(center, centerLevel), pointAt(inner[j], innerLevels[j]), pointAt(p, innerLevels[i]));
   });
-  const floorAt = (p: XZ): number => {
-    const x = p[0] - center[0], z = p[1] - center[1];
-    for (let i = 0; i < inner.length; i++) {
-      const j = (i + 1) % inner.length;
-      const ax = inner[i][0] - center[0], az = inner[i][1] - center[1];
-      const bx = inner[j][0] - center[0], bz = inner[j][1] - center[1];
-      const cross = ax * bz - az * bx;
-      const t = (x * bz - z * bx) / cross, s = (ax * z - az * x) / cross;
-      if (t >= -1e-4 && s >= -1e-4 && t + s <= 1.0001) {
-        return Math.max(turf(p), centerLevel + (innerLevels[i] - centerLevel) * t + (innerLevels[j] - centerLevel) * s);
-      }
-    }
-    return turf(p);
-  };
-  for (const [i, u, v, r] of [[0, -6.3, 4.20, 4.61], [1, -7.4, -4.20, 2.88], [2, 1, -6.40, 2.37],
-    [3, 6.1, 4.60, 2.83], [4, 8.5, -3.40, 3.51]] as const) {
-    const pad = at(u, v), locate = frame(pad, a);
+  for (const [i, [x, z, r]] of UPPER_MAIN_DECK.play.pads.entries()) {
+    const pad = plan([x, z]), locate = frame(pad, a);
     const rim = orbit(locate, r, r, 24);
-    const padLevel = Math.max(floorAt(pad), ...rim.map(floorAt), ...rim.map(p => floorAt(lerp(pad, p, .52))));
+    const padLevel = turf();
     rim.forEach((p, j) => {
       const q = rim[(j + 1) % rim.length];
-      batch.quad('bed', pointAt(p, floorAt(p) - .045), pointAt(q, floorAt(q) - .045),
+      batch.quad('bed', pointAt(p, padLevel - .025), pointAt(q, padLevel - .025),
         pointAt(q, padLevel + .095), pointAt(p, padLevel + .095));
     });
     for (const [factor, finish, rise] of [[1, i === 4 ? 'sand' : 'aqua', .095],
@@ -233,7 +220,7 @@ function rebuildDeForetPlay(model: Object3D, ground: ReturnType<typeof sampling>
   for (let i = 0; i < 34; i++) {
     const angle = Math.PI * 2 * i / 34, scale = .82 + .12 * (i % 3);
     const p = at(Math.cos(angle) * 16.1 * scale, Math.sin(angle) * 17 * scale);
-    shrub(batch, p, .62 + .15 * (i % 4), turf(p) + .014, i % 4 === 0 ? 'petals' : 'leaf');
+    shrub(batch, p, .62 + .15 * (i % 4), turf() + .014, i % 4 === 0 ? 'petals' : 'leaf');
   }
   model.add(batch.make('SM_Brochure_DeForet_Play', true));
 }
@@ -312,6 +299,6 @@ export function refineBrochureGround(model: Object3D): void {
   model.updateMatrixWorld(true);
   const ground = sampling(model);
   rebuildDeForetPark(model, ground);
-  rebuildDeForetPlay(model, ground);
+  rebuildDeForetPlay(model);
   rebuild101Retail(model, ground);
 }

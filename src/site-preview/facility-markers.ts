@@ -1,5 +1,6 @@
 import { DAYCARE_ENTRY_FRONTAGE } from './facility-daycare-placement';
 import { MAIN_GATE_101 } from './facility-gate101-layout';
+import { UPPER_MAIN_DECK } from './site-upper-main-layout';
 
 export type SiteFacilityKind = 'main-entrance' | 'sub-entrance' | 'recycling' | 'elevator' | 'stairs'
   | 'community' | 'guesthouse' | 'daycare' | 'kids-station' | 'senior' | 'security';
@@ -78,7 +79,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   { ...at('elevator-101', 'elevator', '외부 E/V', ...MAIN_GATE_101.elevator.planPx), y: MAIN_GATE_101.elevator.roofY },
   at('elevator-community-1', 'elevator', '외부 E/V', 552.6, 666.5),
   at('elevator-community-2', 'elevator', '외부 E/V', 386.7, 480),
-  at('elevator-110', 'elevator', '외부 E/V', 317.6, 208.8),
+  { ...at('elevator-110', 'elevator', '외부 E/V', ...UPPER_MAIN_DECK.elevator.planPx), y: UPPER_MAIN_DECK.elevator.roofY },
   at('elevator-t202', 'elevator', '외부 E/V', 293.7, 380.8),
   // These markers show printed symbols; they do not add stairs or attest to walkable connections in the model.
   at('stairs-106', 'stairs', '지하 출입 계단', 658.8, 641.4),
@@ -99,7 +100,8 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   { ...at('daycare-104', 'daycare', '어린이집 (1·2F)', ...DAYCARE_ENTRY_FRONTAGE.centerPlanPx), footprint: { surface: 'daycare-roof' } },
   { ...at('kids-station-101', 'kids-station', '키즈스테이션', ...MAIN_GATE_101.kids.planPx), y: MAIN_GATE_101.kids.surfaceY,
     roofMark: { axis: MAIN_GATE_101.kids.axis, halfWidth: MAIN_GATE_101.kids.halfWidth, halfDepth: MAIN_GATE_101.kids.halfDepth } },
-  at('kids-station-110', 'kids-station', '키즈스테이션', 326.4, 210),
+  { ...at('kids-station-110', 'kids-station', '키즈스테이션', ...UPPER_MAIN_DECK.kids.planPx), y: UPPER_MAIN_DECK.kids.surfaceY,
+    roofMark: { axis: UPPER_MAIN_DECK.kids.axis, halfWidth: UPPER_MAIN_DECK.kids.halfWidth, halfDepth: UPPER_MAIN_DECK.kids.halfDepth } },
   at('senior-102', 'senior', '시니어라운지', 511.8, 903.2),
 
   // Both upper guards retain their separate plan footprints beside the road.

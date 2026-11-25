@@ -1,4 +1,4 @@
-import { Box3, Group, Raycaster, Vector3 } from 'three';
+import { Box3, Group, Mesh, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { refineFacilityExteriors } from './facility-exteriors';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
@@ -72,6 +72,26 @@ it('holds the black road outline, including its tapered end and separate gate si
   expect(at(lid,432,465)).toBeGreaterThan(.52);
   expect(at(lid,399,407)).toBeCloseTo(UPPER_DISTRICT_GRADE.mistyRoofY,4);
   expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);
+});
+
+it('uses one joint line for the road and each of the two sidewalks', () => {
+  const scene = new Group();
+  refineFacilityExteriors(scene);
+  const vertices = (name: string) => {
+    const keys=new Set<string>();
+    scene.traverse(mesh=>{
+      if (mesh.name!==name || !(mesh instanceof Mesh)) return;
+      const points=mesh.geometry.getAttribute('position');
+      for (let i=0;i<points.count;i++) keys.add([points.getX(i),points.getZ(i)].map(x=>x.toFixed(4)).join(','));
+    });
+    return keys;
+  };
+  const asphalt=vertices('SM_Rebuilt_Upper_Open_Entry_asphalt');
+  for (const name of ['SM_Rebuilt_Upper_Open_Entry_coping',
+    'SM_Rebuilt_Community_Terraces_community-2_coping']) {
+    const exactJoins=[...vertices(name)].filter(p=>asphalt.has(p));
+    expect(exactJoins.length,`curb vertices shared with ${name}`).toBeGreaterThan(5);
+  }
 });
 
 it('models the plan’s interior spine and both paved pockets separately from its planting beds', () => {

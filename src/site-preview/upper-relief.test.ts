@@ -2,6 +2,7 @@ import { Box3, DoubleSide, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Raycas
 import { expect, it } from 'vitest';
 import { refineFacilityExteriors } from './facility-exteriors';
 import { SITE_FACILITIES } from './facility-markers';
+import { COMMUNITY_TWO_PLAN, podiumAxis, RETAIL_THREE_PLAN } from './site-109-podium-layout';
 import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
 
 const atPlan = (px: number, pz: number, y = 12) => new Vector3((px - 490) * .52, y, (pz - 540) * .52);
@@ -46,8 +47,52 @@ it('keeps the Community II and retail façades at one exposed storey with a walk
   };
   expect(findFace(community,-.12)).toBeCloseTo(2,3);
   expect(findFace(retail,.37)).toBeCloseTo(2,3);
-  expect(findFace(retail,7.9)).toBeCloseTo(2,3);
+  expect(findFace(retail,7.6)).toBeCloseTo(2,3);
+  expect(findFace(retail,8.1)).toBeUndefined();
   expect(findFace(retail,.11)).toBeUndefined();
+});
+
+it('keeps the retail rectangle and stepped community on the same perpendicular axes without roofing the sidewalk', () => {
+  const site = new Group();
+  const garden = new Group();
+  garden.name = 'SM_Courtyard_Lawns_And_Play';
+  site.add(garden);
+  const material = new MeshBasicMaterial({ side: DoubleSide });
+  material.name = 'MAT_Garden_fresh';
+  for (const [x,z] of [[399,444],[437,481]]) {
+    const patch = new Mesh(new PlaneGeometry(2,2).rotateX(-Math.PI/2),material);
+    patch.position.copy(atPlan(x,z,7.84));
+    garden.add(patch);
+  }
+  refineFacilityExteriors(site);
+  const retail = site.getObjectByName('SM_Rebuilt_Upper_Retail_Frontage_roofLawn') as Mesh;
+  const sidewalk = site.getObjectByName('SM_Rebuilt_Community_Terraces_community-2_courtPaver') as Mesh;
+  const [ux, uz] = podiumAxis;
+  for (const ring of [RETAIL_THREE_PLAN, COMMUNITY_TWO_PLAN]) {
+    const axes = ring.map(([x,z],i) => {
+      const [a,b] = ring[(i + 1) % ring.length];
+      const dx = a-x, dz = b-z;
+      expect(Math.hypot(dx,dz)).toBeGreaterThan(2);
+      return Math.abs(dx*ux + dz*uz) > Math.abs(-dx*uz + dz*ux) ? [ux,uz] : [-uz,ux];
+    });
+    axes.forEach(([x,z],i) => {
+      const [a,b] = ring[i], [c,d] = ring[(i + 1) % ring.length], [u,v] = axes[(i + 1) % axes.length];
+      expect((c-a)*z - (d-b)*x).toBeCloseTo(0,8);
+      expect(x*u+z*v).toBeCloseTo(0,8);
+    });
+  }
+  const roof = retail.geometry.getAttribute('position');
+  expect(roof.count).toBe(6); // two triangles, no diagonal return
+  const down = new Raycaster(atPlan(399,444),new Vector3(0,-1,0));
+  expect(down.intersectObject(garden,true)[0]?.point.y).toBeLessThan(down.intersectObject(retail)[0].point.y);
+  down.ray.origin.copy(atPlan(437,481));
+  expect(down.intersectObject(garden,true)[0]?.point.y).toBeCloseTo(7.84);
+  const paving = sidewalk.geometry.getAttribute('position'), base = atPlan(415.8,475.8);
+  for (let i = 0; i < paving.count; i++) {
+    const x = paving.getX(i)-base.x, z = paving.getZ(i)-base.z;
+    const along = x*ux+z*uz, outward = -x*uz+z*ux;
+    expect(along > .19 && along < 7.89 && outward > -21.49 && outward < .04).toBe(false);
+  }
 });
 
 it('sets the park above the gate, lift landing and kids station without covering the descending ramp', () => {

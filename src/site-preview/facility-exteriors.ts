@@ -16,9 +16,10 @@ import { UPPER_AUX_GUARD, UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperAuxGrade, 
 import { create109WalkGrade, lay109WalkGrade } from './site-109-walk-grade';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
 import { gradeUpperTerraces, subdivideSurfaceInPlan } from './site-upper-terraces';
-import { AUX_109, outsideApron } from './site-109-apron-walk';
+import { AUX_109 } from './site-109-apron-walk';
 import { raiseUpperTerraceAmenities } from './upper-terrace-amenities';
 import { rebuild109DeckWalks } from './site-109-deck-walk';
+import { podiumAxis, RETAIL_THREE_PLAN } from './site-109-podium-layout';
 
 type XZ = readonly [number, number];
 type XYZ = readonly [number, number, number];
@@ -442,16 +443,8 @@ function removeBakedFacilityProxy(model: Object3D, center: XZ, angleDegrees: num
 }
 
 const communityTwoGlazedEdges = [2, 3, 4, 5, 6, 7, 8, 9];
-const retailGlazedEdges = [1, 2, 3];
-// Continue the existing southern Community II wall from its outer corner.
-// A narrow movement seam separates the footprints without breaking the façade.
-const communityTwoSouthCorner = plan(415.8,475.8);
-const communityTwoSouthAxis = unit(plan(402.8,486.2),communityTwoSouthCorner);
-const upperRetailOutline: readonly XZ[] = [
-  plan(393.0,442.2),plan(405.0,429.8),plan(422.9,457.8),
-  add(communityTwoSouthCorner,communityTwoSouthAxis,8.52),
-  add(communityTwoSouthCorner,communityTwoSouthAxis,.235),
-];
+const retailGlazedEdges = [1, 2];
+const upperRetailOutline = RETAIL_THREE_PLAN.map(([x,z]) => plan(x,z));
 // Page 4, north-up site plan: one creek-side walk, outside both the red
 // Community II outline and the separate retail return. Keep the planted verge
 // between its inside curb and the podium, including at the narrow NW shoulder.
@@ -543,6 +536,13 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
     minZ: Math.min(...ring.map(p => p[1])) - 2.2, maxZ: Math.max(...ring.map(p => p[1])) + 2.2,
     outline: stationAlongPolylines([...ring, ring[0]]),
   }));
+  const roofLimit = ([x,z]: XZ, edge: number): number => {
+    for (const a of roofAreas) {
+      if (x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ
+        && (polygonContains([x,z],a.ring) || a.outline.nearest(x,z).distance < edge)) return a.height-.16;
+    }
+    return Infinity;
+  };
   // Set the low street face independently from the tower pad. Only the visible
   // wing and its path are cut back; the surrounding grade and roof stay put.
   const floorLimit = (p: XZ): number => {
@@ -562,15 +562,10 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
     return allowed;
   };
   const lower = (v: Vector3, keepRoofsClear = false): number => {
-    let capped = Math.min(v.y, floorLimit([v.x, v.z]));
+    const p: XZ = [v.x,v.z];
     // The original hill's coarse triangles can otherwise emerge as
     // triangular patches on the podium's planted roof.
-    if (keepRoofsClear) for (const area of roofAreas) {
-      if (v.x >= area.minX && v.x <= area.maxX && v.z >= area.minZ && v.z <= area.maxZ
-        && (polygonContains([v.x, v.z], area.ring) || area.outline.nearest(v.x, v.z).distance < 2.0)) {
-        capped = Math.min(capped, area.height - .16);
-      }
-    }
+    const capped = Math.min(v.y, floorLimit(p), keepRoofsClear ? roofLimit(p,2) : Infinity);
     const { distance, station } = nearest(v.x, v.z);
     const lateral = 1 - smoothStep((distance - halfWidth(station) - .64) / 2.55);
     const before = station < EPSILON ? (first[0]-v.x)*firstAxis[0]+(first[1]-v.z)*firstAxis[1] : 0;
@@ -625,6 +620,12 @@ function levelUpperPodiumFrontage(model: Object3D, outline: readonly XZ[]) {
       nor.setXYZ(i,previous.x,previous.y,previous.z);
     }
     nor.needsUpdate = true;
+  });
+  // The baked low garden patches are separate from the main grass mesh.
+  model.getObjectByName('SM_Courtyard_Lawns_And_Play')?.traverse(node => {
+    if (!isMesh(node) || !/^MAT_Garden_(border_green|fresh)$/.test(finishName(node))) return;
+    subdivideSurfaceInPlan(node,(x,z)=>roofLimit([x,z],.72)<Infinity,.53);
+    moveVertices(node,p=>Math.max(0,p.y-roofLimit([p.x,p.z],.35)));
   });
 
   // Remove the old arc at its own location, and remove any baked strip
@@ -843,7 +844,7 @@ function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
   const marker = SITE_FACILITIES.find(item => item.id === 'elevator-community-2');
   if (!marker) return;
   const mid: XZ = [marker.x, marker.z];
-  const across = unit(plan(361.8, 512.4), plan(394.6, 476.5));
+  const across = podiumAxis;
   const outward: XZ = [-across[1], across[0]];
   const at = (x: number, z: number): XZ => add(add(mid, across, x), outward, z);
   const top = roof + 2.64;
@@ -856,29 +857,29 @@ function communityTwoElevator(batch: SurfaceBatch, roof: number): void {
 }
 
 type PodiumWalkPoint = { position: XZ; y: number; halfWidth: number };
+const planXZ = ([x,,z]: XYZ): XZ => [x,z];
 
-function upperPodiumPavers(model: Object3D, route: readonly PodiumWalkPoint[]): void {
+function walkSide<T>(route: readonly T[], i: number, position: (a: T) => XZ): XZ {
+  const [x,z]=unit(position(route[Math.max(0,i-1)]),position(route[Math.min(i+1,route.length-1)]));
+  return [z,-x];
+}
+
+function podiumWalkSections(route: readonly PodiumWalkPoint[]): XYZ[][] {
+  return route.map(({position:p,y,halfWidth:w},i) => {
+    const side=walkSide(route,i,a=>a.position);
+    return [-w,-w+.09,-w*.63,-w*.31,0,w*.31,w*.63,w-.09,w]
+      .map(l=>groundPoint(add(p,side,l),y));
+  });
+}
+
+function upperPodiumPavers(model: Object3D, sections: readonly XYZ[][]): void {
   const terrace = model.getObjectByName(`${FACADE}_community-2`);
-  if (!(terrace instanceof Group) || route.length < 2) return;
+  if (!(terrace instanceof Group) || sections.length < 2) return;
   const batch = new SurfaceBatch();
   const surfaces = ['SM_Parcels_Roads_And_Stream', `${SEAM_PARK}_siteGrass`]
     .map(name => model.getObjectByName(name)).filter((object): object is Object3D => object !== undefined);
   model.updateMatrixWorld(true);
   const groundY = siteTerrainSampler(surfaces, plan(262,374), plan(450,532));
-  const course = route.flatMap((a, i) => {
-    const b = route[i + 1];
-    if (!b) return [a];
-    const count = Math.ceil(Math.hypot(b.position[0] - a.position[0], b.position[1] - a.position[1]) / .55);
-    return Array.from({ length: count }, (_, j) => ({ position: mix(a.position, b.position, j/count),
-      y: a.y + (b.y - a.y) * j/count, halfWidth: a.halfWidth + (b.halfWidth - a.halfWidth) * j/count }));
-  });
-  const sections = course.map(({ position: p, y, halfWidth: w }, i) => {
-    const [dx, dz] = unit(course[Math.max(0, i - 1)].position, course[Math.min(course.length - 1, i + 1)].position);
-    const offsets = [-w, -w + .09, -w*.63, -w*.31, 0, w*.31, w*.63, w - .09, w];
-    const edges = offsets.map(offset => add(p, [dz, -dx], offset));
-    // No highest-edge probing: one profile carries the center and curbs.
-    return edges.map(edge => groundPoint(edge, y));
-  });
   for (let i = 1; i < sections.length; i++) {
     for (let j = 1; j < sections[i].length; j++) {
       const edge = j === 1 || j === sections[i].length - 1;
@@ -1726,7 +1727,7 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
 }
 
 /** Shared surface apron; the two branches separate before the garage and retail walk. */
-function upperOpenEntry(model: Object3D): void {
+function upperOpenEntry(model: Object3D, podiumSections: readonly XYZ[][]): void {
   const oldRamp = model.getObjectByName('SM_Seam_North_Covered_Parking_Ramp');
   if (oldRamp) oldRamp.visible = false;
   const group = new Group();
@@ -1742,25 +1743,31 @@ function upperOpenEntry(model: Object3D): void {
   const px = (points: readonly XZ[]) => points.map(([x,z])=>plan(x,z));
   const [depth,, center, left,right]=upperAuxFrame.stations[0];
   const stem=(lateral:number)=>entryAt(upperAuxFrame,depth,lateral);
-  // One asphalt polygon with the marked kerb line, including the gate stem.
+  const guard=roundedRoute(px(AUX_109.guardWalk));
+  const guardEdges=guard.map((p,i)=>{
+    const side=walkSide(guard,i,a=>a);
+    return [.94,.82,-.94].map(l=>add(p,side,l));
+  });
+  // One set of vertices per curb: the asphalt and both walks share the same
+  // edge, instead of two loosely traced lines leaving slivers of grass.
+  const guardCut=plan(455.7,0)[0], [retailX,retailZ]=plan(430,468.4);
+  const guardJoin=guard.findIndex(p=>p[0]>=guardCut);
+  const retailJoin=podiumSections.findIndex(([p])=>p[0]>retailX&&p[2]<retailZ);
+  const retailEdge=podiumSections.slice(retailJoin).map(([p])=>planXZ(p));
   const road=[portalAt(0,-3.23),...px(AUX_109.garageSide),stem(center-left),
-    stem(center+right),...px(AUX_109.retailSide),portalAt(0,3.23)];
+    stem(center+right),plan(455.5,440.1),...guardEdges.slice(0,guardJoin).reverse().map(([p])=>p),
+    ...px(AUX_109.turnEnd),...retailEdge,...px(AUX_109.garageReturn),portalAt(0,3.23)];
   const triangles=ShapeUtils.triangulateShape(road.map(p=>new Vector2(...p)),[]);
   const roadMasks=triangles.map(ids=>ids.map(i=>road[i]));
   for (const cell of roadMasks) batch.tri('asphalt',...cell.map(p=>groundPoint(p,apronGrade(p))) as [XYZ,XYZ,XYZ]);
-  const rows=roundedRoute(px(AUX_109.guardWalk));
   const walkMasks: XZ[][]=[];
-  for (let i=1;i<rows.length;i++) {
-    const a=rows[i-1], b=rows[i];
-    const side=([x,z]:XZ):XZ=>[z,-x];
-    const n=side(unit(rows[Math.max(0,i-2)],b)), m=side(unit(a,rows[Math.min(i+1,rows.length-1)]));
-    let tiles=[ [add(a,n,-.94),add(a,n,.94),add(b,m,.94),add(b,m,-.94)] ];
-    for (const mask of roadMasks) tiles=tiles.flatMap(tile=>outsideApron(tile,mask));
-    for (const tile of tiles) {
-      walkMasks.push(tile);
-      const at=(j:number)=>groundPoint(tile[j],apronGrade(tile[j])+.076);
-      for (let j=2;j<tile.length;j++) batch.tri('path',at(0),at(j-1),at(j));
-    }
+  for (let i=1;i<guardEdges.length;i++) {
+    const [a,b,c]=guardEdges[i-1], [d,e,f]=guardEdges[i];
+    const at=(p:XZ,h=.10)=>groundPoint(p,apronGrade(p)+h);
+    batch.quad('coping',at(a),at(b),at(e),at(d));
+    batch.quad('path',at(b),at(c),at(f),at(e));
+    batch.quad('stoneInset',at(a,0),at(d,0),at(d),at(a));
+    walkMasks.push([a,c,f,d]);
   }
   const stripeAt=(s:number,d:number)=>entryAt(upperAuxFrame,d,s+entryProfile(upperAuxFrame,d)[2]);
   for (let i=-3;i<=3;i++) {
@@ -2425,15 +2432,16 @@ export function refineFacilityExteriors(model: Object3D): void {
   gradeUpperDistrictRoad(model);
   raiseUpperTerraceAmenities(model, gradeUpperTerraces(model));
   const podiumWalk = communityExteriors(model);
+  const podiumSections = podiumWalkSections(podiumWalk);
   const daycareEntry = daycareEntrance(model);
   mainUpperEntry(model);
-  upperOpenEntry(model);
+  upperOpenEntry(model,podiumSections);
   rebuildGuardhouses(model);
   rebuildLowerMainPortal(model);
   mainGate101Landings(model);
   rebuildSeamPark(model,podiumWalk);
   rebuildUpperRetail(model);
-  upperPodiumPavers(model, podiumWalk);
+  upperPodiumPavers(model,podiumSections);
   rebuild109DeckWalks(model, COMMUNITY_TWO_ROOF);
   southPromenades(model);
   daycareCourtyard(model, daycareEntry);

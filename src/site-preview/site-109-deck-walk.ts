@@ -2,6 +2,7 @@ import { BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Matrix4, Mes
   type Object3D } from 'three';
 import { siteTerrainSampler } from './site-terrain-sampler';
 import { subdivideSurfaceInPlan } from './site-upper-terraces';
+import { COMMUNITY_TWO_PLAN, podiumAxis } from './site-109-podium-layout';
 
 type Point = readonly [x: number, z: number];
 type Position = readonly [number, number, number];
@@ -22,15 +23,14 @@ export const COMMUNITY_109_DECK = {
   liftLink: readonly Point[]; outerTie: Point; approach: readonly Point[];
 };
 
-// Where the existing shaft's axis meets the community's canted outside wall.
+// Where the existing shaft's axis meets the orthogonal outside wall.
 // The two visible doors belong to the same E/V, not a second freestanding lift.
-const eastWall = [world([361.8,512.4]),world([394.6,476.5])] as const;
-const span = Math.hypot(eastWall[1][0]-eastWall[0][0],eastWall[1][1]-eastWall[0][1]);
-const axis: Point=[(eastWall[1][0]-eastWall[0][0])/span,(eastWall[1][1]-eastWall[0][1])/span];
+const [wallX,wallZ] = world(COMMUNITY_TWO_PLAN[4]);
+const axis = podiumAxis;
 const normal: Point=[-axis[1],axis[0]];
 const marker=world([386.7,480]);
-const t=(marker[0]-eastWall[0][0])*axis[0]+(marker[1]-eastWall[0][1])*axis[1];
-const lowerDoor: Point=[eastWall[0][0]+axis[0]*t,eastWall[0][1]+axis[1]*t];
+const t=(marker[0]-wallX)*axis[0]+(marker[1]-wallZ)*axis[1];
+const lowerDoor: Point=[wallX+axis[0]*t,wallZ+axis[1]*t];
 const threshold=(offset: number, depth: number): Point=>
   [lowerDoor[0]+offset*axis[0]+depth*normal[0],lowerDoor[1]+offset*axis[1]+depth*normal[1]];
 

@@ -1,5 +1,6 @@
 import { DAYCARE_ENTRY_FRONTAGE } from './facility-daycare-placement';
 import { MAIN_GATE_101 } from './facility-gate101-layout';
+import { COMMUNITY_TWO_PLAN } from './site-109-podium-layout';
 import { UPPER_AUX_GUARD, UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK } from './site-upper-main-layout';
 
 export type SiteFacilityKind = 'main-entrance' | 'sub-entrance' | 'recycling' | 'elevator' | 'stairs'
@@ -46,15 +47,6 @@ const COMMUNITY_ONE: readonly PlanPoint[] = [
   [709.4, 672.3], [690.8, 689.6], [621.8, 611.3], [567.8, 658.5], [567.2, 661.4],
   [516.8, 705.7], [512.6, 707.6], [507.5, 706.6], [492.4, 689.9], [624.3, 574.7],
 ];
-// The adjacent 근생3 wedge has its own solid red divider in the plan and is
-// not part of this community overlay. Keep the two uses visually separate.
-const COMMUNITY_TWO: readonly PlanPoint[] = [
-  [389.3, 444.0], [415.8, 475.8], [402.8, 486.2], [394.6, 476.5], [361.8, 512.4],
-  [312.3, 455.8], [316.3, 451.5], [286.7, 417.8], [291.5, 413.5], [283.8, 404.3],
-  [293.7, 394.9], [299.0, 400.7], [303.1, 397.1], [330.3, 431.3], [335.1, 436.3],
-  [332.0, 438.7], [352.9, 463.1], [358.2, 456.8], [363.1, 462.3], [371.5, 454.4], [374.6, 458.5],
-];
-
 export const SITE_FACILITIES: readonly SiteFacility[] = [
   // The triangles sit outside the property line in the PDF. Anchor the labels at the matching modeled drive approaches.
   at('main-101', 'main-entrance', '주출입구', 715.4, 925.7),
@@ -92,7 +84,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   },
   {
     ...at('community-2', 'community', '커뮤니티센터 Ⅱ', 366, 490.7),
-    footprint: { surface: 'terrain', outline: COMMUNITY_TWO.map(siteXZ) },
+    footprint: { surface: 'terrain', outline: COMMUNITY_TWO_PLAN.map(siteXZ) },
   },
   // The 112 B1 label is printed over the high-rise footprint. Keep it at grade just beside the same wing.
   at('guesthouse-112', 'guesthouse', '112동 게스트하우스 (B1)', 336, 104),

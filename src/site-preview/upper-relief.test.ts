@@ -52,10 +52,11 @@ it('sets the park above the gate, lift landing and kids station without covering
   const group = site.getObjectByName('SM_Rebuilt_Upper_Main_Entry')!;
   const roof = group.getObjectByName(`${group.name}_siteGrass`)!;
   const play = site.getObjectByName('SM_Brochure_DeForet_Play')!;
-  expect(down.intersectObject(roof)[0]?.point.y).toBeCloseTo(UPPER_MAIN_DECK.roofY, 4);
+  expect(down.intersectObject(roof)).toHaveLength(0); // garage cap does not blanket the park lawn
+  expect(down.intersectObject(grass)[0]?.point.y).toBeCloseTo(UPPER_MAIN_DECK.roofY, 4);
   expect(down.intersectObject(play, true)[0]?.point.y).toBeGreaterThan(UPPER_MAIN_DECK.roofY);
   down.ray.origin.copy(atPlan(310, 241)); // covered part of approach, exactly on the deck level
-  expect(down.intersectObject(roof)[0]?.point.y).toBeCloseTo(UPPER_MAIN_DECK.roofY, 4);
+  expect(down.intersectObject(roof)[0]?.point.y).toBeCloseTo(UPPER_MAIN_DECK.roofY, 1);
   down.ray.origin.copy(atPlan(329, 244)); // exposed part: asphalt only, not green triangles or roof
   expect(down.intersectObject(roof)).toHaveLength(0);
   expect(down.intersectObject(grass, true)).toHaveLength(0);
@@ -74,7 +75,9 @@ it('sets the park above the gate, lift landing and kids station without covering
   expect(kids.y).toBeLessThan(UPPER_MAIN_DECK.roofY);
   expect(kids.roofMark?.halfWidth).toBe(UPPER_MAIN_DECK.kids.halfWidth);
   down.ray.origin.copy(atPlan(250, 272));
-  expect(down.intersectObject(grass)[0]?.point.y).toBeCloseTo(3, 4);
+  expect(down.intersectObject(grass)[0]?.point.y).toBeCloseTo(UPPER_DISTRICT_GRADE.arrivalY, 4);
+  down.ray.origin.copy(atPlan(400, 325)); // wooded side of the public road
+  expect(down.intersectObject(grass)[0]?.point.y).toBeCloseTo(3, 2);
   for (const id of ['Main', 'Open']) {
     const group = site.getObjectByName(`SM_Rebuilt_Upper_${id}_Entry`)!;
     const asphalt = group.getObjectByName(`${group.name}_asphalt`)!;

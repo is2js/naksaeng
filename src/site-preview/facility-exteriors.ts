@@ -13,6 +13,8 @@ import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } 
 import { refineBrochureGround } from './facility-brochure-ground';
 import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
+import { gradeUpperTerraces } from './site-upper-terraces';
+import { raiseUpperTerraceAmenities } from './upper-terrace-amenities';
 
 type XZ = readonly [number, number];
 type XYZ = readonly [number, number, number];
@@ -1388,79 +1390,14 @@ function cutUpperBasementApproach(model: Object3D, frame: EntryFrame, extendToRo
   }
 }
 
-/** One deck for the garage roof, play garden, and its park-side lift landing. */
+/** Close the structural garage roof without overlaying the surrounding park. */
 function upperMainPlayDeck(batch: SurfaceBatch, model: Object3D): void {
-  const { roofY, arrivalEdgePx, parkEdgePx, elevator, kids } = UPPER_MAIN_DECK;
+  const { roofY, arrivalEdgePx, capBackPx, elevator, kids } = UPPER_MAIN_DECK;
   const frame = upperMainFrame;
-  const blendWidth = 6.3;
   const arrival = arrivalEdgePx.map(([x, z]) => plan(x, z));
   const fascia = (d: number, side: number) => entryAt(frame, d, 1.43 + side * 4.81);
-  const roofEdge = [fascia(27.4, -1), fascia(27.4, 1), fascia(31.72, 1)];
-  const hard = [...arrival, ...roofEdge];
-  const outline = [...hard, ...parkEdgePx.map(([x, z]) => plan(x, z))];
-  const terrain = model.getObjectByName('SM_Parcels_Roads_And_Stream');
-  const sample = siteTerrainSampler(terrain ? [terrain] : [], plan(230, 92), plan(383, 265));
-  const clamp = (t: number) => Math.max(0, Math.min(1, t));
-  const distanceTo = (p: XZ, a: XZ, b: XZ) => {
-    const dx = b[0] - a[0], dz = b[1] - a[1];
-    const t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz));
-    return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t);
-  };
-  const lo = plan(233, 92), hi = plan(383, 265);
-  const inArea = ([x, z]: XZ) => x >= lo[0] && x <= hi[0] && z >= lo[1] && z <= hi[1];
-  const soft = [hard.at(-1)!, ...outline.slice(hard.length), hard[0]];
-  const elevationWeight = (p: XZ) => {
-    if (!inArea(p)) return 0;
-    if (polygonContains(p, outline)) return 1;
-    const dist = Math.min(...soft.slice(1).map((b, i) => distanceTo(p, soft[i], b)));
-    return 1 - smoothStep(dist / blendWidth);
-  };
-  const hardClearance = (p: XZ) => Math.min(...hard.slice(1).map((b, i) => distanceTo(p, hard[i], b)));
-  const bent = new Vector3(), local = new Matrix4();
-
-  // Seat the archived paths on the deck and ease their three inland joins.
-  // Keep the garage edge vertical; never lift the arterial or approach lanes.
-  model.getObjectByName('SM_Graded_Pedestrian_Routes')?.traverse(object => {
-    if (!isMesh(object)) return;
-    const position = object.geometry.getAttribute('position');
-    local.copy(object.matrixWorld).invert();
-    let changed = false;
-    for (let i = 0; i < position.count; i++) {
-      bent.fromBufferAttribute(position, i).applyMatrix4(object.matrixWorld);
-      const p = [bent.x, bent.z] as const, weight = elevationWeight(p);
-      if (weight <= EPSILON || hardClearance(p) < 2.6) continue;
-      bent.y += (roofY + .044 - bent.y) * weight;
-      bent.applyMatrix4(local);
-      position.setXYZ(i, bent.x, bent.y, bent.z);
-      changed = true;
-    }
-    if (changed) {
-      position.needsUpdate = true;
-      object.geometry.computeBoundingBox();
-      object.geometry.computeBoundingSphere();
-      object.geometry.computeVertexNormals();
-    }
-  });
-  const objectMatrix = new Matrix4();
-  model.traverse(object => {
-    if (!(object instanceof InstancedMesh) || !object.parent?.name.startsWith('Courtyard_Grove_Instances')) return;
-    local.copy(object.matrixWorld).invert();
-    let changed = false;
-    for (let i = 0; i < object.count; i++) {
-      object.getMatrixAt(i, objectMatrix);
-      bent.setFromMatrixPosition(objectMatrix).applyMatrix4(object.matrixWorld);
-      const p = [bent.x, bent.z] as const;
-      if (!polygonContains(p, outline) || hardClearance(p) < .75) continue;
-      bent.y += Math.max(0, roofY - sample(p, bent.y));
-      object.setMatrixAt(i, objectMatrix.setPosition(bent.applyMatrix4(local)));
-      changed = true;
-    }
-    if (changed) {
-      object.instanceMatrix.needsUpdate = true;
-      object.computeBoundingBox();
-      object.computeBoundingSphere();
-    }
-  });
+  const roofEdge = [fascia(27.4, -1), fascia(27.4, 1), fascia(34.68, 1), fascia(34.68, -1)];
+  const outline = [...arrival, ...roofEdge, ...capBackPx.map(([x, z]) => plan(x, z))];
 
   const laneHeight = (d: number) => entryProfile(frame, d)[1];
   const arrivalStations = arrival.map(p => {
@@ -1478,7 +1415,9 @@ function upperMainPlayDeck(batch: SurfaceBatch, model: Object3D): void {
     [s.depth, s.floor, (s.edge + s.clipRight) / 2, (s.clipRight - s.edge) / 2, (s.clipRight - s.edge) / 2]
   )) }, false);
 
-  batch.plate('siteGrass', outline, roofY);
+  // The broad parcel already has this grade. Infill only closes the garage
+  // cut and retaining frontage, slightly inset beneath the inland lawn.
+  batch.plate('siteGrass', outline, roofY - .018);
   const lowY = (d: number, side: number) => laneHeight(d) + .045 + side * .12;
   for (let i = 1; i < arrivalStations.length; i++) {
     const a = arrivalStations[i - 1], b = arrivalStations[i];
@@ -1508,29 +1447,6 @@ function upperMainPlayDeck(batch: SurfaceBatch, model: Object3D): void {
   const approachEdgeY = UPPER_DISTRICT_GRADE.arrivalY - .14;
   batch.quad('courtPaver', groundPoint(firstGutter, approachEdgeY), groundPoint(first.p, approachEdgeY),
     groundPoint(first.p, lowY(first.depth, 1)), groundPoint(firstGutter, lowY(first.depth, 0)));
-  // On the inboard sides alone, blend the deck edge into the enclosing
-  // landscape. A narrow planted transition avoids an invented retaining wall
-  // on the opposite side of the play court or a hard seam in the loop walk.
-  const inboard = soft.map((p, i) => {
-    const previous = soft[Math.max(0, i - 1)], next = soft[Math.min(soft.length - 1, i + 1)];
-    const [dx, dz] = unit(previous, next);
-    const n: XZ = [dz, -dx];
-    const outside = polygonContains(add(p, n, .5), outline) ? add(p, n, -blendWidth) : add(p, n, blendWidth);
-    return [p, i === 0 || i === soft.length - 1 ? p : outside] as const;
-  });
-  for (let i = 1; i < inboard.length; i++) {
-    const [a, outerA] = inboard[i - 1], [b, outerB] = inboard[i];
-    const segments = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 1.8);
-    const layers = [.0, .36, .70, 1];
-    const rings = layers.map(layer => Array.from({ length: segments + 1 }, (_, j) => {
-      const point = mix(mix(a, b, j / segments), mix(outerA, outerB, j / segments), layer);
-      const h = sample(point, roofY - .2) + .016;
-      return groundPoint(point, h + (Math.max(roofY - .014, h) - h) * (1 - smoothStep(layer)));
-    }));
-    for (let k = 1; k < layers.length; k++) for (let j = 1; j <= segments; j++) {
-      batch.quad('siteGrass', rings[k - 1][j - 1], rings[k - 1][j], rings[k][j], rings[k][j - 1]);
-    }
-  }
 
   const origin = plan(...elevator.planPx), axis = elevator.axis;
   const liftAt = (x: number, z: number): XZ => add(add(origin, [-axis[1], axis[0]], x), axis, z);
@@ -2024,21 +1940,19 @@ function rebuildGuardhouses(model: Object3D): void {
 }
 
 function rebuildSeamPark(model: Object3D): void {
-  // The boundary reserve is a sloping park, not a low platform between two
-  // retaining walls. Interpolate between the existing parcel surfaces and
-  // let their slightly raised pedestrian edges continue to define each site.
-  const outline = [[467.9,446.5],[494,463],[498.5,465.2],[504,471.7],[507,475.2],[489,483],[482,489],
-    [451,515],[404,556],[376,583],[372,602],
-    // Join the 104 and 109 banks just inboard of their shared outer line.
-    // Middle stations are deliberately landward, never a bulge into the river.
-    [371,590],[367,575],[360,557],[348,539],[365,545],[377,535],
-    [408,506],[439,478]].map(([x,z]) => plan(x,z));
+  // Stitch the 109 and 104 parcel rims. The upper walk, not a detached
+  // green retaining face or a second path, marks this boundary.
+  const upper = [[466,446],[439,478],[408,506],[377,535],[365,545],[348,539]].map(([x,z]) => plan(x,z));
+  const lower = [[507,475.2],[489,483],[482,489],[451,515],[404,556],[376,583],[372,602]].map(([x,z]) => plan(x,z));
+  const river = [[371,590],[367,575],[360,557]].map(([x,z]) => plan(x,z));
+  const roadside = [[494,463],[498.5,465.2],[504,471.7]].map(([x,z]) => plan(x,z));
+  const outline = [upper[0], ...roadside, ...lower, ...river, ...upper.slice(1).reverse()];
   const group = new Group();
   group.name = SEAM_PARK;
   const batch = new SurfaceBatch();
-  const polygon = outline.map(([x,z]) => new Vector2(x,z));
   const origin = plan(478, 463), along = unit(origin, plan(464, 475));
-  const across: XZ = [along[1], -along[0]], step = Math.hypot(14, 12) * .52;
+  const across: XZ = [along[1], -along[0]];
+  const frame = (p: XZ, dir: XZ): number => (p[0] - origin[0]) * dir[0] + (p[1] - origin[1]) * dir[1];
   const parcel = model.getObjectByName('SM_Parcels_Roads_And_Stream');
   const grass = parcel?.children.find((node): node is Mesh => isMesh(node) && finishName(node) === 'MAT_Site_Grass');
   // The original v9 green spine is a separate flat slab. Leaving it visible
@@ -2051,56 +1965,80 @@ function rebuildSeamPark(model: Object3D): void {
       && p.x >= plan(334, 0)[0] && p.x <= plan(499, 0)[0] && p.z >= plan(0, 445)[1] && p.z <= plan(0, 601)[1])
       && points.some(p => Math.abs(p.y + 1.45) < .020)));
   });
-  const findGrade = (station: number, offset: number, fallback: number): number => {
-    const at = add(add(origin, along, step * station), across, offset * .52);
-    const down = new Raycaster(new Vector3(at[0], 18, at[1]), new Vector3(0, -1, 0));
-    return grass ? down.intersectObject(grass)[0]?.point.y ?? fallback : fallback;
+  const sample = siteTerrainSampler(grass ? [grass] : [], plan(340,432), plan(523,613));
+  const stationAt = (edge: readonly XZ[], station: number): XZ => {
+    const i = edge.findIndex(p => frame(p, along) >= station);
+    if (i < 0) return edge[edge.length - 1];
+    if (i === 0) return edge[0];
+    const a = edge[i - 1], b = edge[i], s0 = frame(a, along);
+    return mix(a, b, (station - s0) / (frame(b, along) - s0));
   };
-  // [northwest/southeast offset in plan pixels, fallback when a retaining
-  // mesh has no upward-facing ground here]. Road and creek caps stay low.
-  const rims = [
-    [-24, 24, .54, .54], [-19, 24, 1.65, 1.57], [-18, 24, 5.65, 1.69],
-    [-18, 24, 7.15, 1.78], [-18, 24, 6.97, 1.83], [-18, 24, 6.66, 1.82],
-    [-16, 24, 6.20, 1.88], [-14, 24, 6.04, 1.93], [-17, 24, 5.25, 1.96],
-    [-14, 23, 2.20, 1.90], [-12, 23, .57, 1.60], [-12, 22, .53, .62],
-  ].map(([left, right, low, high], station) => ({
-    left, right,
-    // The northwest edge coincides with the crest, not the depressed road.
-    low: station > 0 && station < 8 ? findGrade(station, left, low) : low,
-    high: station > 0 && station < 8 ? findGrade(station, right, high) : high,
-  }));
+  const rimHeight = (p: XZ, side: -1 | 1, fallback: number): number => {
+    // Short inboard search for clipped grass at the ramp and for centimeters
+    // of difference between the source mesh and the traced boundary.
+    for (const offset of [0, .13, .34, .66, 1.20]) {
+      const y = sample(add(p, across, offset * side), NaN);
+      if (Number.isFinite(y)) return y;
+    }
+    return fallback;
+  };
+  const first = frame(upper[0], along);
   const grade = (p: XZ): number => {
-    const dx = p[0] - origin[0], dz = p[1] - origin[1];
-    const t = Math.max(0, Math.min(rims.length - 1.001, (dx * along[0] + dz * along[1]) / step));
-    const station = Math.floor(t), q = t - station, a = rims[station], b = rims[station + 1];
-    const blend = (x: number, y: number) => x + (y - x) * q;
-    const x = (dx * across[0] + dz * across[1]) / .52;
-    const left = blend(a.left, b.left), right = blend(a.right, b.right);
-    const u = smoothStep((x - left) / (right - left));
-    return blend(a.low, b.low) * (1 - u) + blend(a.high, b.high) * u + .028;
+    const station = frame(p, along), north = stationAt(upper, station), south = stationAt(lower, station);
+    const left = frame(north, across), right = frame(south, across);
+    const runIn = smoothStep((station - first + .8) / 20);
+    const northY = rimHeight(north, -1, .55 + 5 * runIn);
+    const southY = rimHeight(south, 1, .56 + 1.37 * runIn);
+    const u = smoothStep((frame(p, across) - left) / (right - left));
+    const y = northY * (1 - u) + southY * u;
+    const roadTie = smoothStep((station - first + .2) / 2.8);
+    return y * roadTie + .54 * (1 - roadTie) + .018;
   };
-  const span = (p: XZ, q: XZ) => Math.hypot(q[0] - p[0], q[1] - p[1]);
-  const gradeTriangle = (a: XZ, b: XZ, c: XZ): void => {
-    if (Math.max(span(a, b), span(b, c), span(a, c)) <= 3.4) {
-      batch.tri('siteGrass', groundPoint(a, grade(a)), groundPoint(b, grade(b)), groundPoint(c, grade(c)));
-      return;
-    }
-    const ab = mix(a, b, .5), bc = mix(b, c, .5), ca = mix(c, a, .5);
-    gradeTriangle(a, ab, ca); gradeTriangle(ab, b, bc);
-    gradeTriangle(ca, bc, c); gradeTriangle(ab, bc, ca);
-  };
-  for (const [ia, ib, ic] of ShapeUtils.triangulateShape(polygon, [])) {
-    const a = outline[ia], b = outline[ib], c = outline[ic];
-    const upwards = (b[1] - a[1]) * (c[0] - a[0]) > (b[0] - a[0]) * (c[1] - a[1]);
-    gradeTriangle(a, upwards ? b : c, upwards ? c : b);
-  }
-  for (let i = 0; i < outline.length; i++) {
-    const a = outline[i], b = outline[(i+1)%outline.length];
-    const steps = Math.ceil(span(a, b) / 1.8);
-    for (let j = 1; j <= steps; j++) {
-      const p = mix(a,b,(j-1)/steps), q = mix(a,b,j/steps);
-      batch.quad('hedge', groundPoint(p, -.45), groundPoint(p, grade(p)), groundPoint(q, grade(q)), groundPoint(q, -.45));
-    }
+
+  // Cover the joint in the same turf, and remove the old parcel skirt that
+  // showed through it. Neither garage cut nor the creek edge is here.
+  const joins = [stationAlongPolylines(upper), stationAlongPolylines(lower)];
+  model.getObjectByName('SM_East_West_Retaining_And_Main_Gate_Break')?.traverse(object => {
+    if (!isMesh(object) || finishName(object) !== 'MAT_Retaining_Edge') return;
+    keepTriangles(object, (a,b,c) => {
+      const area = (b.x-a.x)*(c.z-a.z) - (b.z-a.z)*(c.x-a.x);
+      return Math.abs(area) > .01 || !joins.some(join => [a,b,c].every(p => {
+        const nearest = join.nearest(p.x,p.z);
+        return nearest.distance < .62 && nearest.station > 1.1 && nearest.station < join.total - .6;
+      }));
+    });
+  });
+  // Triangulate paired cross-sections, with shared vertices on the two joins.
+  // Splitting unrelated triangles separately can open cracks on a steep grade.
+  const contour = outline.map(p => [frame(p,along),frame(p,across)] as XZ);
+  const ends = [...new Set(contour.map(p => p[0]))].sort((a,b) => a-b);
+  const stations = ends.slice(1).flatMap((b,i) => {
+    const a = ends[i], n = Math.ceil((b-a)/1.15);
+    return Array.from({length:n},(_,j) => a + (b-a)*j/n);
+  }).concat(ends[ends.length-1]);
+  const rows = stations.map(s => {
+    const crossings = contour.flatMap(([s0,u0],i) => {
+      const [s1,u1] = contour[(i+1)%contour.length];
+      if (s < Math.min(s0,s1) || s > Math.max(s0,s1)) return [];
+      return Math.abs(s1-s0) < EPSILON ? [u0,u1] : [u0+(u1-u0)*(s-s0)/(s1-s0)];
+    });
+    const left = Math.min(...crossings), right = Math.max(...crossings);
+    const section = (u: number): XZ => add(add(origin,along,s),across,u);
+    const make = (u: number): XYZ => {
+      const p = section(u);
+      return groundPoint(p,grade(p));
+    };
+    const underlap = (u: number, axis: readonly XZ[], side: -1|1): XYZ => {
+      const join = frame(stationAt(axis,s),across);
+      const width = Math.abs(u-join) < .04
+        ? .32 * Math.max(0,Math.min(1,s-frame(axis[0],along),frame(axis[axis.length-1],along)-s)) : 0;
+      const p = section(u+side*width), y = grade(section(u));
+      return groundPoint(p,width ? Math.min(y,rimHeight(p,side,y))-.024 : y);
+    };
+    return [underlap(left,upper,-1), ...Array.from({length:17},(_,i) => make(left+(right-left)*i/16)), underlap(right,lower,1)];
+  });
+  for (let i = 1; i < rows.length; i++) for (let j = 1; j < rows[i].length; j++) {
+    batch.quad('siteGrass',rows[i-1][j-1],rows[i][j-1],rows[i][j],rows[i-1][j]);
   }
   // Two irregular low planting bands, set inward so no trees are scattered
   // across the entry line or extend above the separated parcel retaining walls.
@@ -2400,6 +2338,7 @@ export function refineFacilityExteriors(model: Object3D): void {
   if (model.getObjectByName(FACADE)) return;
   model.updateMatrixWorld(true);
   gradeUpperDistrictRoad(model);
+  raiseUpperTerraceAmenities(model, gradeUpperTerraces(model));
   const podiumWalk = communityExteriors(model);
   const daycareEntry = daycareEntrance(model);
   mainUpperEntry(model);

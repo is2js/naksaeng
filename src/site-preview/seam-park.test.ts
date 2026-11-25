@@ -68,7 +68,9 @@ it('keeps both source turf and the rebuilt seam low around the 109 guardhouse an
     expect(floor(x,z),`${x},${z}`).toBeGreaterThan(.48);
     expect(floor(x,z),`${x},${z}`).toBeLessThan(1.14);
   }
-  down.ray.origin.copy(xyz(448.5,469.4,20));
+  down.ray.origin.copy(xyz(445,465,20));
   expect(down.intersectObjects(surfaces)[0]?.object.name).toBe(`${root}_asphalt`);
+  down.ray.origin.copy(xyz(448.5,469.4,20));
+  expect(down.intersectObjects(surfaces)[0]?.object.name).not.toBe(`${root}_asphalt`);
   expect(floor(432,489)).toBeGreaterThan(floor(448,468)!);
 });

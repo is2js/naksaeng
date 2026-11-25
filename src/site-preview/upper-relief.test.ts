@@ -27,13 +27,27 @@ it('keeps the Community II and retail façades at one exposed storey with a walk
   refineFacilityExteriors(site);
   const community = site.getObjectByName('SM_Rebuilt_Community_Terraces_community-2')!;
   const retail = site.getObjectByName('SM_Rebuilt_Upper_Retail_Frontage')!;
-  for (const [group, roof] of [[community, 7.72], [retail, 7.58]] as const) {
+  for (const [group, roof] of [[community, 7.72], [retail, 7.72]] as const) {
     const glass = group.getObjectByName(`${group.name}_courtGlassShade`)!;
     const walls = new Box3().setFromObject(glass);
     expect(walls.min.y).toBeCloseTo(roof - 3.05 + .12, 2);
     expect(walls.max.y).toBeCloseTo(roof - .45, 2);
   }
   expect(community.getObjectByName(`${community.name}_courtPaver`)?.userData.siteSurface).toBe(true);
+
+  // Both exposed south faces use the same plane on opposing sides of a
+  // narrow joint; the retail must reach the marked eastern return too.
+  const heel = atPlan(415.8, 475.8, 3.3);
+  const facing = atPlan(415.8, 475.8).sub(atPlan(402.8, 486.2)).normalize();
+  const outside = new Vector3(-facing.z, 0, facing.x);
+  const findFace = (root: typeof retail, at: number) => {
+    const front = new Raycaster(heel.clone().addScaledVector(facing,at).addScaledVector(outside,2),outside.clone().negate(),0,2.2);
+    return front.intersectObject(root.getObjectByName(`${root.name}_courtStone`)!,false)[0]?.distance;
+  };
+  expect(findFace(community,-.12)).toBeCloseTo(2,3);
+  expect(findFace(retail,.37)).toBeCloseTo(2,3);
+  expect(findFace(retail,7.9)).toBeCloseTo(2,3);
+  expect(findFace(retail,.11)).toBeUndefined();
 });
 
 it('sets the park above the gate, lift landing and kids station without covering the descending ramp', () => {

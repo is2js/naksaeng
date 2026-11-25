@@ -39,7 +39,7 @@ it('makes the road edge a storey-high stone face and joins a flat Misty Forêt r
   expect(lowGrass - ray.intersectObject(verge)[0].point.y).toBeGreaterThan(2);
 });
 
-it('splits a nearly level apron into garage and turnout branches; the descent begins under cover', () => {
+it('holds the black road outline, including its tapered end and separate gate sidewalk', () => {
   const scene = new Group();
   refineFacilityExteriors(scene);
   const entry = scene.getObjectByName('SM_Rebuilt_Upper_Open_Entry')!;
@@ -51,22 +51,25 @@ it('splits a nearly level apron into garage and turnout branches; the descent be
     ray.ray.origin.copy(point(x,z,30));
     return ray.intersectObject(object)[0]?.point.y;
   };
-  const exposed = [[454,431],[445,441],[436,437],[425,434],[420,429],[412,423],[406,415],
-    [442,454],[444,458],[448,468]] as const;
+  const exposed = [[454,431],[447,440],[436,441],[425,437],[420,432],[412,423],[406,415],
+    [442,454],[444,458],[445,465],[441,467]] as const;
   for (const [x,z] of exposed) expect(at(asphalt,x,z),`${x},${z}`).toBeGreaterThanOrEqual(.54);
   const grades = exposed.map(([x,z])=>at(asphalt,x,z)!);
   expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.17);
-  expect(at(asphalt,429,451)).toBeUndefined();
-  expect(at(asphalt,429,477)).toBeUndefined(); // the perimeter walk is not a through road
-  expect(at(asphalt,441,467)).toBeUndefined();
-  let walked=0;
-  for (let z=424;z<=464;z+=1.5) for (let x=405;x<=452;x+=1.5) {
-    if (at(walk,x,z)===undefined) continue;
-    walked++;
-    expect(at(asphalt,x,z),`separate road and walk at ${x},${z}`).toBeUndefined();
+  const perimeter=scene.getObjectByName('SM_Rebuilt_Community_Terraces_community-2_courtPaver')!;
+  for (const [x,z] of [[432,465],[429,477],[448.5,469.4],[452,464],[434,432]]) {
+    expect(at(asphalt,x,z),`beyond the black line at ${x},${z}`).toBeUndefined();
+    expect(at(walk,x,z)).toBeUndefined();
   }
-  expect(walked).toBeGreaterThan(25);
-  expect(at(lid,429,451)).toBeGreaterThan(.52); // infills the former driveway cut, below the new junction
+  for (const [x,z] of [[446.4,451.4],[452.1,445.35],[458.1,442.9],[463.1,440],[464.5,443.9]]) {
+    expect(at(walk,x,z),`continuous gray sidewalk at ${x},${z}`).toBeGreaterThan(.62);
+  }
+  for (let z=435;z<=479;z+=1) for (let x=404;x<=466;x+=1) {
+    if (at(walk,x,z)!==undefined || at(perimeter,x,z)!==undefined) {
+      expect(at(asphalt,x,z),`separate road and walk at ${x},${z}`).toBeUndefined();
+    }
+  }
+  expect(at(lid,432,465)).toBeGreaterThan(.52);
   expect(at(lid,399,407)).toBeCloseTo(UPPER_DISTRICT_GRADE.mistyRoofY,4);
   expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);
 });

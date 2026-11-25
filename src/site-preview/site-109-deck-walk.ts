@@ -15,8 +15,8 @@ export const COMMUNITY_109_DECK = {
   spine: [[395.8,473.3],[397.1,467.85],[395.85,466.35],[392.9,464.2],[388.8,460.8]],
   // The shaft door currently faces the northwestern roof court.
   liftLink: [[384.64,478.12],[384.75,475.8],[386.3,473.4],[389.05,473.45],[392.3,474.5],[395.8,473.3]],
-  outerTie: [404.6,490.3],
-  approach: [[404.6,490.3],[401.65,488.65],[398.45,486.85],[395.1,486.05],[392.2,484.75]],
+  outerTie: [408.7,485],
+  approach: [[408.7,485],[403.2,486.2],[400,487.2],[396.6,486],[393.3,482.8],[391.1,482.45]],
 } as const satisfies {
   line2: readonly Point[]; line3: readonly Point[]; spine: readonly Point[];
   liftLink: readonly Point[]; outerTie: Point; approach: readonly Point[];
@@ -155,7 +155,7 @@ export function rebuild109DeckWalks(model: Object3D, roofY: number): void {
   const outer=terrace.getObjectByName(`${terrace.name}_courtPaver`);
   const sample=siteTerrainSampler(outer ? [outer] : [],world([390,477]),world([414,504]));
   const tie=world(COMMUNITY_109_DECK.outerTie);
-  const fallbackTie=world([406,493]);
+  const fallbackTie=world([403.5,488.7]);
   const directTieY=sample(tie,NaN);
   const approachY=(Number.isFinite(directTieY) ? directTieY : sample(fallbackTie,2.72))+.015;
   const approach=[...(Number.isFinite(directTieY)?[]:[fallbackTie]),...COMMUNITY_109_DECK.approach.map(world),threshold(0,.06)];

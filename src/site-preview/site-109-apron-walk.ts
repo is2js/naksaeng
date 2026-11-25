@@ -1,14 +1,13 @@
-// Latest marked overhead view, registered in the model's north-up plan pixels.
-// The black edges stop at the garage and the tapered guard forecourt.
+import { podiumAxis } from './site-109-podium-layout';
+
+const [uX,uZ]=podiumAxis;
+export const retailAt=([u,v]: readonly [number,number]) =>
+  [415.8+u*uX-v*uZ,475.8+u*uZ+v*uX] as const;
+
+// The two legs are parallel to the rectangular retail walls, with one square
+// corner and space for the kerb between the paving and the façades.
+export const RETAIL_WALK_LINES = ([[-3.8,3.5],[18.8,3.5],[18.8,-36.2]] as const).map(retailAt);
+
 export const AUX_109 = {
-  garageSide: [[412.4,415.3],[417,419.2],[422.9,424.7],[426.9,429.7],[430.3,434.2],
-    [434.1,437.1],[437.6,437.2],[440.6,436.4],[442,434.7],[444.5,431.1]],
-  turnEnd: [[446.8,457.8],[449.5,461.6],[448.1,465.9],[442.8,469.5],[440.3,470.4],[437.4,470]],
-  garageReturn: [[407.45,429.4],[403,422.5]],
-  // Gray only: the gate-side sidewalk and the retail perimeter, not a curb ring.
-  guardWalk: [[445.8,451.7],[448.4,448.3],[451.6,445.7],[455.1,443.6],
-    [458.2,442.8],[461,440.7],[463.3,439.1],[464.8,444.4]],
-  retailWalk: [[386.4,504],[393.3,498.3],[398.3,493.4],[403.5,488.7],[408.7,485],[416.3,480.5],[421.8,476.4],
-    [426.7,472],[430.8,467.8],[431.3,464.5],[429.5,460.8],[426.5,456.8],[423.3,453.6],
-    [418.8,449.4],[414.9,445.2],[410.4,440],[407.9,435.8]],
+  retailWalk: [[386.4,504],[393.3,498.3],[398.3,493.4],[403.5,488.7],[408.7,485],...RETAIL_WALK_LINES],
 } as const;

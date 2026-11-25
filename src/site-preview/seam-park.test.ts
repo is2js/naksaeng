@@ -1,6 +1,7 @@
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { refineFacilityExteriors } from './facility-exteriors';
+import { retailAt } from './site-109-apron-walk';
 
 const xyz = (x: number, z: number, height: number) => new Vector3((x-490)*.52,height,(z-540)*.52);
 const quad = (name: string, a: Vector3, b: Vector3, c: Vector3, d: Vector3) => {
@@ -68,7 +69,7 @@ it('keeps both source turf and the rebuilt seam low around the 109 guardhouse an
     expect(floor(x,z),`${x},${z}`).toBeGreaterThan(.48);
     expect(floor(x,z),`${x},${z}`).toBeLessThan(1.14);
   }
-  down.ray.origin.copy(xyz(445,465,20));
+  down.ray.origin.copy(xyz(...retailAt([29.5,8]),20));
   expect(down.intersectObjects(surfaces)[0]?.object.name).toBe(`${root}_asphalt`);
   down.ray.origin.copy(xyz(448.5,469.4,20));
   expect(down.intersectObjects(surfaces)[0]?.object.name).not.toBe(`${root}_asphalt`);

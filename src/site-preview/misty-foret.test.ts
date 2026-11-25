@@ -1,6 +1,7 @@
 import { Box3, Group, Mesh, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { refineFacilityExteriors } from './facility-exteriors';
+import { retailAt } from './site-109-apron-walk';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
 import { UPPER_DISTRICT_GRADE, upperDistrictStreetRise } from './site-upper-main-layout';
 
@@ -39,7 +40,7 @@ it('makes the road edge a storey-high stone face and joins a flat Misty Forêt r
   expect(lowGrass - ray.intersectObject(verge)[0].point.y).toBeGreaterThan(2);
 });
 
-it('holds the black road outline, including its tapered end and separate gate sidewalk', () => {
+it('keeps the retail-side driveway straight and constant-width, with a square end', () => {
   const scene = new Group();
   refineFacilityExteriors(scene);
   const entry = scene.getObjectByName('SM_Rebuilt_Upper_Open_Entry')!;
@@ -51,19 +52,22 @@ it('holds the black road outline, including its tapered end and separate gate si
     ray.ray.origin.copy(point(x,z,30));
     return ray.intersectObject(object)[0]?.point.y;
   };
-  const exposed = [[454,431],[447,440],[436,441],[425,437],[420,432],[412,423],[406,415],
-    [442,454],[444,458],[445,465],[441,467]] as const;
+  const local = (object: typeof asphalt, u:number,v:number) => at(object,...retailAt([u,v]));
+  const exposed = [[29.5,-43],[29.5,-30],[29.5,-10],[29.5,7],[46,-9],[52,-10],[56,-12]].map(
+    ([u,v])=>retailAt([u,v]));
   for (const [x,z] of exposed) expect(at(asphalt,x,z),`${x},${z}`).toBeGreaterThanOrEqual(.54);
   const grades = exposed.map(([x,z])=>at(asphalt,x,z)!);
   expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.17);
   const perimeter=scene.getObjectByName('SM_Rebuilt_Community_Terraces_community-2_courtPaver')!;
-  for (const [x,z] of [[432,465],[429,477],[448.5,469.4],[452,464],[434,432]]) {
+  for (const [x,z] of [[429,477],[448.5,469.4],[452,464],[434,432]]) {
     expect(at(asphalt,x,z),`beyond the black line at ${x},${z}`).toBeUndefined();
     expect(at(walk,x,z)).toBeUndefined();
   }
-  for (const [x,z] of [[446.4,451.4],[452.1,445.35],[458.1,442.9],[463.1,440],[464.5,443.9]]) {
-    expect(at(walk,x,z),`continuous gray sidewalk at ${x},${z}`).toBeGreaterThan(.62);
+  for (const v of [-43,-33,-25,3,8]) {
+    for (const u of [23.45,35.67]) expect(local(asphalt,u,v)).toBeGreaterThan(.54);
+    for (const u of [23.25,35.87]) expect(local(asphalt,u,v)).toBeUndefined();
   }
+  for (const u of [24,29.5,35]) expect(local(asphalt,u,9.65)).toBeUndefined();
   for (let z=435;z<=479;z+=1) for (let x=404;x<=466;x+=1) {
     if (at(walk,x,z)!==undefined || at(perimeter,x,z)!==undefined) {
       expect(at(asphalt,x,z),`separate road and walk at ${x},${z}`).toBeUndefined();
@@ -74,7 +78,7 @@ it('holds the black road outline, including its tapered end and separate gate si
   expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);
 });
 
-it('uses one joint line for the road and each of the two sidewalks', () => {
+it('uses one joint curve for the branch road and guardhouse sidewalk', () => {
   const scene = new Group();
   refineFacilityExteriors(scene);
   const vertices = (name: string) => {
@@ -87,11 +91,8 @@ it('uses one joint line for the road and each of the two sidewalks', () => {
     return keys;
   };
   const asphalt=vertices('SM_Rebuilt_Upper_Open_Entry_asphalt');
-  for (const name of ['SM_Rebuilt_Upper_Open_Entry_coping',
-    'SM_Rebuilt_Community_Terraces_community-2_coping']) {
-    const exactJoins=[...vertices(name)].filter(p=>asphalt.has(p));
-    expect(exactJoins.length,`curb vertices shared with ${name}`).toBeGreaterThan(5);
-  }
+  const curb=vertices('SM_Rebuilt_Upper_Open_Entry_coping');
+  expect([...curb].filter(p=>asphalt.has(p)).length).toBeGreaterThan(5);
 });
 
 it('models the plan’s interior spine and both paved pockets separately from its planting beds', () => {

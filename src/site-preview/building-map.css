@@ -17,6 +17,7 @@
   position: absolute; inset: 0; width: 100%; height: 100%;
 }
 .building-map-viewport { touch-action: none; }
+.building-map-viewport:focus-visible { z-index: 1; outline: 2px solid #b1f3d7; outline-offset: -3px; }
 .building-map-viewport[data-site-facility-view] :is(.building-map-markers, .site-facility-annotations, .site-facility-controls),
 .household-building-map-list[data-facility-mode] { visibility: hidden; }
 .building-map:not([data-building-map-state="ready"]) .building-map-viewport { pointer-events: none; }
@@ -64,12 +65,37 @@
 .building-map-reset span { color: #afe9ca; font-size: 14px; margin-inline-end: 2px; }
 .building-map-zoom { position: absolute; bottom: 9px; right: 9px; display: grid; gap: 4px; }
 .building-map-zoom .building-map-button { padding: 0; font-size: 18px; }
+.building-map-pan {
+  --pan-key-size: 30px;
+  position: absolute; bottom: 9px; right: 50px; display: grid; gap: 3px;
+  grid-template-columns: repeat(3, var(--pan-key-size));
+}
+.building-map .building-map-pan .building-map-button {
+  min-width: var(--pan-key-size); min-height: var(--pan-key-size); padding: 0; font-size: 15px;
+  touch-action: none; user-select: none;
+}
+.building-map-pan [data-site-pan="up"] { grid-column: 2; }
+.building-map-pan [data-site-pan="left"] { grid-column: 1; }
+.building-map .building-map-pan .building-map-button:active { background: #426c5e; }
 .building-map-selection { position: absolute; z-index: 3; left: 9px; bottom: 9px; max-width: calc(100% - 66px); }
 .building-map .building-map-confirm {
+  position: relative; isolation: isolate; overflow: hidden;
   min-height: 43px; display: flex; align-items: center; justify-content: space-between; gap: 15px;
   padding: 0 11px; border: 1px solid #e6fff2; border-radius: 8px; background: #abeacf; color: #123529;
   box-shadow: 0 3px 13px #0a1b18a3; font-size: 13px; font-family: inherit; font-weight: 800;
   appearance: none; cursor: pointer;
+}
+.building-map-confirm span { position: relative; z-index: 1; }
+.building-map-confirm::before {
+  content: ""; position: absolute; inset: -35% auto -35% -48%; width: 42%; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg, transparent 0%, #f5fff986 50%, transparent 100%);
+  transform: skewX(-17deg);
+  animation: building-map-confirm-shimmer 4.2s cubic-bezier(.2, .72, .24, 1) infinite;
+}
+@keyframes building-map-confirm-shimmer {
+  0%, 13% { left: -48%; opacity: 0; }
+  22% { opacity: .75; }
+  34%, 100% { left: 117%; opacity: 0; }
 }
 .building-map .building-map-confirm:hover { background: #cef8e4; }
 .building-map-status {
@@ -93,8 +119,10 @@
 @media (max-width: 640px) {
   .building-map { height: var(--building-map-height, clamp(380px, 64svh, 535px)); }
   .building-map .building-map-button { min-height: 34px; }
+  .building-map-pan { --pan-key-size: 28px; right: 48px; }
   .building-map .building-map-confirm { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .building-map[data-building-map-state="loading"] .building-map-status::before { animation: none; }
+  .building-map[data-building-map-state="loading"] .building-map-status::before,
+  .building-map-confirm::before { animation: none; }
 }

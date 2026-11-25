@@ -1,6 +1,8 @@
 import { Box3, Group, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { refineFacilityExteriors } from './facility-exteriors';
+import { MISTY_GARDEN } from './site-misty-foret-layout';
+import { UPPER_DISTRICT_GRADE, upperDistrictStreetRise } from './site-upper-main-layout';
 
 const name = 'SM_Rebuilt_Misty_Foret';
 const point = (px: number, pz: number, y: number) => new Vector3((px-490)*.52,y,(pz-540)*.52);
@@ -30,6 +32,27 @@ it('makes the road edge a storey-high stone face and joins a flat Misty Forêt r
   const highGrass = ray.intersectObject(verge)[0].point.y;
   ray.ray.origin.copy(point(354,320,30));
   const lowGrass = ray.intersectObject(verge)[0].point.y;
-  expect(highGrass).toBeLessThan(first-3);
-  expect(highGrass-lowGrass).toBeGreaterThan(1);
+  expect(highGrass).toBeLessThan(first-.2);
+  expect(highGrass).toBeGreaterThan(lowGrass);
+  expect(Math.abs(lowGrass-(UPPER_DISTRICT_GRADE.lowerRoadY+upperDistrictStreetRise(ray.ray.origin.z)))).toBeLessThan(.24);
+  ray.ray.origin.copy(point(385.5,380,30));
+  expect(lowGrass - ray.intersectObject(verge)[0].point.y).toBeGreaterThan(2);
+});
+
+it('models the plan’s interior spine and both paved pockets separately from its planting beds', () => {
+  const scene = new Group();
+  refineFacilityExteriors(scene);
+  const park = scene.getObjectByName(name)!;
+  const roof = park.getObjectByName(`${name}_roofLawn`)!;
+  const pockets = park.getObjectByName(`${name}_courtPaver`)!;
+  const path = park.getObjectByName(`${name}_path`)!;
+  const beds = park.getObjectByName(`${name}_gardenBed`)!;
+  const ray = new Raycaster(point(346,349,30),new Vector3(0,-1,0));
+  const first = ray.intersectObject(roof)[0].point.y;
+  expect(ray.intersectObject(path)[0].point.y).toBeCloseTo(first+.055,4);
+  for (const {center: [x,z]} of MISTY_GARDEN.pockets) {
+    ray.ray.origin.copy(point(x,z,30));
+    expect(ray.intersectObject(pockets)[0].point.y).toBeCloseTo(first+.073,4);
+    expect(ray.intersectObject(beds)).toHaveLength(0);
+  }
 });

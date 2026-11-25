@@ -308,6 +308,50 @@ test('desktop site right click keeps the selection, right drag pans, and the res
   await expectOverview(page);
 });
 
+test('site arrows and WASD pan without changing the selection and the confirm sheen respects reduced motion', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto('./');
+  await expectOverview(page);
+  await page.locator('[data-map-building="105"]').click();
+  await expectFocusedBuilding(page, '105');
+  const target = () => canvas(page).getAttribute('data-camera-target');
+  const viewport = map(page).locator('.building-map-viewport');
+  const right = map(page).getByRole('button', { name: '지도 오른쪽으로 이동' });
+  const sheen = () => action(page).evaluate(node => getComputedStyle(node, '::before').animationName);
+  await expect.poll(sheen).toBe('building-map-confirm-shimmer');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(sheen).toBe('none');
+
+  const initial = await target();
+  await viewport.focus();
+  await page.keyboard.press('KeyD');
+  await expect(canvas(page)).not.toHaveAttribute('data-camera-target', initial!);
+  await expect(canvas(page)).toHaveAttribute('data-camera-phase', 'manual');
+  const afterKey = await target();
+  await page.keyboard.press('ArrowLeft');
+  await expect(canvas(page)).toHaveAttribute('data-camera-target', initial!);
+
+  const title = page.getByRole('heading', { name: '분당퍼스트빌리지 동 선택' });
+  await title.evaluate(node => { node.tabIndex = -1; node.focus(); });
+  await page.keyboard.press('KeyD');
+  await expect(canvas(page)).toHaveAttribute('data-camera-target', initial!);
+  await right.click();
+  await expect(canvas(page)).toHaveAttribute('data-camera-target', afterKey!);
+
+  const bounds = (await right.boundingBox())!;
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 44, y - 22, { steps: 4 });
+  await page.mouse.up();
+  await expect(canvas(page)).not.toHaveAttribute('data-camera-target', afterKey!);
+  await expect(canvas(page)).toHaveAttribute('data-outline-building', '105');
+  await expect(action(page)).toBeVisible();
+  await reset(page).click();
+  await expectOverview(page);
+});
+
 test('all three facilities open in the same map; daycare stairs change floors and returning keeps the facility zoom', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto('./');

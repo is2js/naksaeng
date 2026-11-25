@@ -25,6 +25,7 @@ export interface SiteViewer {
   select(id: string | null, animate?: boolean, focus?: boolean): void;
   reset(): void;
   zoom(by: number): void;
+  pan(dx: number, dy: number): void;
   pause(): void;
   resume(): void;
   dispose(): void;
@@ -235,6 +236,7 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
     let h = 1;
     let outline: ReturnType<typeof createBuildingOutline> | null = null;
     const vector = new Vector3();
+    const panOffset = new Vector3();
     const ray = new Raycaster();
     const pointer = new Vector2();
     const motionOffset = new Vector3();
@@ -716,6 +718,19 @@ export async function mountSiteViewer(options: Options): Promise<SiteViewer> {
         camera.zoom = Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * by));
         camera.updateProjectionMatrix();
         queueRender();
+      },
+      pan(dx, dy) {
+        const { clientWidth, clientHeight } = options.viewport;
+        if (disposed || paused || facilityVisit || !clientWidth || !clientHeight || (!dx && !dy)) return;
+        stopCameraMove();
+        // Match OrbitControls' screen-space right drag for the orthographic map.
+        panOffset.setFromMatrixColumn(camera.matrix, 0)
+          .multiplyScalar(-dx * controls.panSpeed * (camera.right - camera.left) / camera.zoom / clientWidth)
+          .addScaledVector(vector.setFromMatrixColumn(camera.matrix, 1),
+            dy * controls.panSpeed * (camera.top - camera.bottom) / camera.zoom / clientHeight);
+        camera.position.add(panOffset);
+        controls.target.add(panOffset);
+        controls.update();
       },
       pause,
       resume,

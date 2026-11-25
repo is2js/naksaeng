@@ -19,6 +19,16 @@ export interface BuildingMapOptions {
   signal?: AbortSignal;
 }
 
+const panDirections = {
+  up: [0, 1], left: [1, 0], down: [0, -1], right: [-1, 0],
+} as const;
+type PanDirection = keyof typeof panDirections;
+const panKeys: Partial<Record<string, PanDirection>> = {
+  ArrowUp: 'up', KeyW: 'up', ArrowLeft: 'left', KeyA: 'left',
+  ArrowDown: 'down', KeyS: 'down', ArrowRight: 'right', KeyD: 'right',
+};
+const PAN_STEP = 28;
+
 /** Synchronous viewport shell; Three.js and the model load only after mounting. */
 export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions): BuildingMap {
   const shell = document.createElement('section');
@@ -26,7 +36,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   shell.dataset.buildingMapState = 'loading';
   shell.setAttribute('aria-label', '3D 단지에서 동 선택');
   shell.innerHTML = `
-    <div class="building-map-viewport" aria-label="3D 단지 모형">
+    <div class="building-map-viewport" role="group" tabindex="-1" aria-label="3D 단지 모형"
+      aria-keyshortcuts="W A S D ArrowUp ArrowLeft ArrowDown ArrowRight">
       <div class="building-map-markers" role="group" aria-label="3D 모형의 동 번호"></div>
     </div>
     <div class="building-map-controls" hidden>
@@ -40,6 +51,12 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
       <button type="button" class="building-map-button building-map-reset" data-site-reset title="선택을 지우고 북쪽에서 단지 전체 보기" hidden>
         <span aria-hidden="true">↺</span> 다시 한눈에
       </button>
+      <div class="building-map-pan" role="group" aria-label="단지 모형 이동 (WASD 또는 방향키)" title="지도 이동 · WASD / 방향키">
+        <button type="button" class="building-map-button" data-site-pan="up" aria-label="지도 위로 이동"><span aria-hidden="true">↑</span></button>
+        <button type="button" class="building-map-button" data-site-pan="left" aria-label="지도 왼쪽으로 이동"><span aria-hidden="true">←</span></button>
+        <button type="button" class="building-map-button" data-site-pan="down" aria-label="지도 아래로 이동"><span aria-hidden="true">↓</span></button>
+        <button type="button" class="building-map-button" data-site-pan="right" aria-label="지도 오른쪽으로 이동"><span aria-hidden="true">→</span></button>
+      </div>
       <div class="building-map-zoom" role="group" aria-label="단지 모형 배율">
         <button type="button" class="building-map-button" data-site-zoom="in" aria-label="확대">+</button>
         <button type="button" class="building-map-button" data-site-zoom="out" aria-label="축소">−</button>
@@ -80,6 +97,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   let disposed = false;
   let pagePaused = false;
   let retryRequiresReload = false;
+  let panPointer: { id: number; x: number; y: number; dragging: boolean; repeating: boolean } | null = null;
+  let panTimer = 0;
   const mapList = host.parentElement?.querySelector<HTMLElement>('.household-building-map-list');
   const capture = { ...listeners, capture: true };
   let rightMapPointer: number | null = null;
@@ -104,7 +123,11 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
       event.preventDefault();
     }
   }, capture);
-  window.addEventListener('blur', () => { rightMapPointer = null; suppressRightMenuUntil = 0; }, listeners);
+  window.addEventListener('blur', () => {
+    rightMapPointer = null;
+    suppressRightMenuUntil = 0;
+    stopPadPan();
+  }, listeners);
 
   for (const id of options.buildingIds) {
     const marker = document.createElement('button');
@@ -131,6 +154,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
       mapList.toggleAttribute('data-facility-mode', active);
     }
     controls.hidden = active || shell.dataset.buildingMapState !== 'ready';
+    viewport.tabIndex = controls.hidden ? -1 : 0;
+    if (active) stopPadPan();
     syncSelection();
   }
 
@@ -141,6 +166,7 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   }
 
   function reset(): void {
+    stopPadPan();
     select(null);
     viewer?.reset();
   }
@@ -158,6 +184,8 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
     retryRequiresReload = importFailed;
     shell.dataset.buildingMapState = 'error';
     controls.hidden = true;
+    viewport.tabIndex = -1;
+    stopPadPan();
     resetButton.hidden = true;
     for (const marker of markers.values()) marker.hidden = true;
     syncSelection();
@@ -213,6 +241,7 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
       shell.dataset.buildingMapState = 'ready';
       status.hidden = true;
       controls.hidden = false;
+      viewport.tabIndex = 0;
       // Restored wizard selection is not a new pick: keep the initial north view.
       syncSelection();
       viewer.select(selected, false, false);
@@ -226,6 +255,7 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   function dispose(): void {
     if (disposed) return;
     disposed = true;
+    stopPadPan();
     loading?.abort();
     events.abort();
     viewer?.dispose();
@@ -244,7 +274,74 @@ export function mountBuildingMap(host: HTMLElement, options: BuildingMapOptions)
   for (const zoom of shell.querySelectorAll<HTMLButtonElement>('[data-site-zoom]')) {
     zoom.addEventListener('click', () => viewer?.zoom(zoom.dataset.siteZoom === 'in' ? 1.24 : 1 / 1.24), listeners);
   }
+
+  function stopPadPan(): void {
+    window.clearTimeout(panTimer);
+    panPointer = null;
+  }
+
+  function panStep(direction: PanDirection, step = PAN_STEP): void {
+    if (facilityMode || controls.hidden) return;
+    const [x, y] = panDirections[direction];
+    viewer?.pan(x * step, y * step);
+  }
+
+  viewport.addEventListener('pointerdown', (event) => {
+    if (!facilityMode && event.pointerType === 'mouse' && (event.button === 0 || event.button === 2)
+        && (event.target === viewport || event.target instanceof HTMLCanvasElement)) {
+      viewport.focus({ preventScroll: true });
+    }
+  }, listeners);
+  shell.addEventListener('keydown', (event) => {
+    if (!viewer || facilityMode || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
+    const key = event.code || (event.key.length === 1 ? `Key${event.key.toUpperCase()}` : event.key);
+    const direction = panKeys[key];
+    if (!direction) return;
+    event.preventDefault();
+    panStep(direction, event.repeat ? 15 : PAN_STEP);
+  }, listeners);
+  for (const button of shell.querySelectorAll<HTMLButtonElement>('[data-site-pan]')) {
+    const direction = button.dataset.sitePan as PanDirection;
+    const repeat = () => {
+      if (!panPointer || panPointer.dragging || controls.hidden) return;
+      panStep(direction, panPointer.repeating ? 13 : PAN_STEP);
+      panPointer.repeating = true;
+      panTimer = window.setTimeout(repeat, 65);
+    };
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || panPointer) return;
+      button.setPointerCapture(event.pointerId);
+      panPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false, repeating: false };
+      panTimer = window.setTimeout(repeat, 270);
+    }, listeners);
+    button.addEventListener('pointermove', (event) => {
+      if (!panPointer || panPointer.id !== event.pointerId) return;
+      const dx = event.clientX - panPointer.x;
+      const dy = event.clientY - panPointer.y;
+      if (!panPointer.dragging && Math.hypot(dx, dy) < 5) return;
+      panPointer.dragging = true;
+      panPointer.x = event.clientX;
+      panPointer.y = event.clientY;
+      window.clearTimeout(panTimer);
+      viewer?.pan(dx, dy);
+    }, listeners);
+    const stop = (event: PointerEvent) => {
+      if (panPointer?.id === event.pointerId) stopPadPan();
+    };
+    button.addEventListener('pointerup', (event) => {
+      if (panPointer?.id !== event.pointerId) return;
+      if (!panPointer.dragging && !panPointer.repeating) panStep(direction);
+      stopPadPan();
+    }, listeners);
+    button.addEventListener('pointercancel', stop, listeners);
+    button.addEventListener('lostpointercapture', stop, listeners);
+    button.addEventListener('click', (event) => {
+      if (event.detail === 0) panStep(direction);
+    }, listeners);
+  }
   window.addEventListener('pagehide', (event) => {
+    stopPadPan();
     if (event.persisted) {
       pagePaused = true;
       viewer?.pause();

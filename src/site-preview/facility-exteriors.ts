@@ -11,7 +11,8 @@ import { siteTerrainSampler } from './site-terrain-sampler';
 import { rebuildRiversideGrade } from './site-riverside-grade';
 import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } from './site-promenade-layout';
 import { refineBrochureGround } from './facility-brochure-ground';
-import { UPPER_MAIN_DECK } from './site-upper-main-layout';
+import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
+import { MISTY_GARDEN } from './site-misty-foret-layout';
 
 type XZ = readonly [number, number];
 type XYZ = readonly [number, number, number];
@@ -24,6 +25,7 @@ const COLORS = {
   asphalt: '#494d4e', roadPaint: '#e6e0c9', roadAmber: '#bca464',
   courtStone: '#cec3af', courtGlass: '#3a3e39', courtGlassShade: '#2c302f',
   courtFrame: '#676259', courtDeck: '#aa805f', courtDeckJoint: '#8a684f', courtPaver: '#b69f87',
+  portalIvory: '#ded9cb', portalReveal: '#bbb4a5', portalCharcoal: '#383d43', portalInset: '#232a2b',
   promenadeStone: '#bdb2a0', promenadeBand: '#716d64', promenadeTrim: '#e0d7c4',
   cafeGlass: '#62746f', cafeGlassLow: '#435651',
   daycareRubber: '#88a76b', daycareSage: '#a8be74', daycareMark: '#e1d4aa', daycareSky: '#9dbdba',
@@ -179,7 +181,7 @@ const upperMainFrame: EntryFrame = {
     [4.25, .59, 0, 5.55, 5.55], [7.25, .61, -.10, 4.60, 4.60], [11.4, .58, -.30, 4.45, 4.45],
     [14.8, .54, -.40, 4.35, 4.65], [17.5, .38, 0, 4.64, 4.70], [22.6, -.23, .30, 4.36, 4.60],
     [27.1, -.85, .94, 4.28, 4.42], [31.6, -1.41, 1.43, 4.24, 4.28],
-  ],
+  ].map(([d, y, c, l, r]): EntryStation => [d, y + UPPER_DISTRICT_GRADE.rise, c, l, r]),
 };
 const upperAuxFrame: EntryFrame = {
   origin: plan(454.8202, 421.2464), inward: [-.588649, .808389], across: [.808389, .588649],
@@ -203,6 +205,54 @@ function entryProfile(frame: EntryFrame, depth: number): EntryStation {
       a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t];
   }
   return stations[stations.length - 1];
+}
+
+/** Deform every lane, marking and curb in the same grade; leave the original trace in plan unchanged. */
+function gradeUpperDistrictRoad(model: Object3D): void {
+  const street = model.getObjectByName('SM_District_Arterial_Road_And_Sidewalk');
+  const moved = new Vector3(), inverse = new Matrix4();
+  const reshape = (root: Object3D | undefined, mode: 'street' | 'terrain' | 'edge') => root?.traverseVisible(object => {
+    if (!isMesh(object) || (mode === 'terrain' && finishName(object) !== 'MAT_Site_Grass')) return;
+    const geometry = object.geometry, pos = geometry.getAttribute('position');
+    const verge = finishName(object) === 'MAT_District_Graded_Verge';
+    inverse.copy(object.matrixWorld).invert();
+    let changed = false;
+    for (let i = 0; i < pos.count; i++) {
+      moved.fromBufferAttribute(pos,i).applyMatrix4(object.matrixWorld);
+      const rise = upperDistrictStreetRise(moved.z);
+      if (rise < EPSILON) continue;
+      const offset = moved.x - upperDistrictRoadX(moved.z);
+      if (mode !== 'street') {
+        if (Math.abs(offset) > 15.4) continue;
+        const lift = rise * (1 - smoothStep((Math.abs(offset) - 6.3) / 9.1));
+        // Raise only the low shoulder. Leave inboard tower pads and real
+        // retaining faces at their authored elevation.
+        const target = Math.max(moved.y, UPPER_DISTRICT_GRADE.lowerRoadY + lift - .29);
+        if (target - moved.y < EPSILON) continue;
+        moved.y = target;
+      } else if (verge && moved.y < -.1) {
+        // Keep the outer roadbed seated in the original woodland and fan the
+        // embankment out rather than lifting its buried bottom into the air.
+        if (offset <= 0) continue;
+        moved.x += rise * 1.65;
+      } else {
+        // The roadbed and asphalt are triangulated separately. Recess the
+        // bed on the slope so the two meshes cannot cross between samples.
+        moved.y += rise - (verge ? .16 * smoothStep(rise / .14) : 0);
+      }
+      moved.applyMatrix4(inverse);
+      pos.setXYZ(i,moved.x,moved.y,moved.z);
+      changed = true;
+    }
+    if (!changed) return;
+    pos.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  });
+  reshape(street,'street');
+  reshape(model.getObjectByName('SM_Parcels_Roads_And_Stream'),'terrain');
+  reshape(model.getObjectByName('SM_East_West_Retaining_And_Main_Gate_Break'),'edge');
 }
 
 function cutForEntry(model: Object3D, frame: EntryFrame): void {
@@ -274,20 +324,81 @@ function paveEntry(batch: SurfaceBatch, model: Object3D, frame: EntryFrame, drap
     a[2] + i * .79 - .22, a[2] + i * .79 + .22, b[2] + i * .79 - .22, b[2] + i * .79 + .22, .025);
 }
 
-function entryPortal(batch: SurfaceBatch, frame: EntryFrame, station: number, width: number, major: boolean): void {
+function entryPortal(batch: SurfaceBatch, frame: EntryFrame, station: number, width: number): void {
   const [, base, center] = entryProfile(frame, station);
   const at = (x: number, z: number): XZ => entryAt(frame, station + z, center + x);
   const post = width / 2;
-  const roof = base + (major ? 4.45 : 3.87);
+  const roof = base + 3.87;
   for (const side of [-1, 1]) {
-    const h = side > 0 && major ? roof + 1.48 : roof + .14;
     const x = side * post;
-    batch.prism('door', 'zinc', rectangular(at, x - .43, -.62, x + .43, .77), .47, h);
-    if (side > 0 && major) batch.prism('zinc', 'door', rectangular(at, x - .28, -.67, x + .10, -.59), base + .29, h - .18);
+    batch.prism('door', 'zinc', rectangular(at, x - .43, -.62, x + .43, .77), .47, roof + .14);
   }
   batch.prism('coping', 'coping', rectangular(at, -post - .72, -.80, post + .84, .83), roof -.39, roof + .12);
-  if (major) batch.prism('limestone', 'coping', rectangular(at, -post + .8, -.88, post - .66, .78), roof + .11, roof + .22);
   batch.wall('stoneInset', at(-1.02, -.809), at(1.02, -.809), roof -.24, roof -.14);
+}
+
+const LOWER_PORTAL_ORIGIN = plan(711.847648526, 924.605104167);
+const LOWER_PORTAL_INWARD: XZ = [-.953927569, -.300036987];
+const LOWER_PORTAL_RIGHT: XZ = [.300036987, -.953927569];
+const LOWER_PORTAL_GRADE = .48;
+
+function lowerPortalAt(right: number, inward: number): XZ {
+  return add(add(LOWER_PORTAL_ORIGIN, LOWER_PORTAL_INWARD, inward), LOWER_PORTAL_RIGHT, right);
+}
+
+/** Flyover proportions: thin ivory lintel, recessed supports, tall right blade, open walk bays. */
+function mainPortal(model: Object3D, parent: Object3D, id: '101' | '110', frame?: EntryFrame, station = 0): void {
+  const [, grade, center] = frame ? entryProfile(frame, station) : [0, LOWER_PORTAL_GRADE + .132, 0];
+  // EntryFrame lateral coordinates face the driver's left; portal coordinates face right.
+  const at = frame ? (right: number, inward: number): XZ => entryAt(frame, station + inward, center - right) : lowerPortalAt;
+  const ground = (depth: number): number => frame ? entryProfile(frame, station + depth)[1] : grade;
+  const lower = id === '101';
+  const [leftBlade, rightBlade, walkwayPosts, edgeLeft, edgeRight] = lower
+    ? [-6.82, 7.73, 4.43, -9.35, 9.34]
+    : [-6.68, 7.38, 5.03, -8.65, 8.74];
+  const finish = grade + (lower ? 4.94 : 4.70), cap = finish + (lower ? 1.84 : 1.74);
+  const footing = Math.min(ground(-1.2), ground(1.2)) - .22;
+  const group = new Group();
+  group.name = `SM_Rebuilt_Main_Portal_${id}`;
+  group.userData.castsSiteShadow = true;
+  const batch = new SurfaceBatch();
+  const rect = (x0: number, z0: number, x1: number, z1: number): XZ[] => rectangular(at, x0, z0, x1, z1);
+  for (const x of [-walkwayPosts, walkwayPosts]) {
+    batch.prism('portalCharcoal', 'portalInset', rect(x - .24, .05, x + .24, 1.19), footing, finish - .43);
+    batch.prism('portalReveal', 'portalReveal', rect(x - .26, .02, x + .26, 1.22), footing, grade + .21);
+  }
+  batch.prism('portalCharcoal', 'portalCharcoal', rect(leftBlade - .56, -.85, leftBlade + .56, 1.05), footing, finish - .34);
+  batch.prism('portalCharcoal', 'portalCharcoal', rect(rightBlade - .76, -.92, rightBlade + .76, 1.07), footing, cap - .12);
+  batch.prism('portalReveal', 'portalIvory', rect(rightBlade - .80, -.97, rightBlade + .80, 1.12), cap - .13, cap);
+  batch.wall('portalInset', at(rightBlade - .43, -.931), at(rightBlade + .38, -.931), grade + .31, cap - .33);
+  batch.prism('portalReveal', 'portalIvory', rect(rightBlade - .39, -1.025, rightBlade - .29, -.927), grade + .57, cap - .38);
+
+  batch.prism('portalCharcoal', 'portalCharcoal', rect(edgeLeft + .42, -1.14, edgeRight - .48, 1.17), finish - .54, finish - .42);
+  batch.prism('portalReveal', 'portalReveal', rect(edgeLeft + .16, -1.33, edgeRight - .16, 1.32), finish - .43, finish - .31);
+  batch.prism('portalIvory', 'portalIvory', rect(edgeLeft, -1.49, edgeRight, 1.48), finish - .33, finish);
+  batch.prism('portalReveal', 'portalIvory', rect(edgeLeft + .16, 1.37, edgeRight - .16, 1.44), finish - .04, finish + .028);
+  batch.prism('portalIvory', 'portalIvory', rect(-2.88, -1.55, 1.77, -1.46), finish - .34, finish - .062);
+  // A real soffit keeps the shadow underside legible from the street, not just in the top view.
+  batch.plate('portalInset', rect(edgeLeft + .42, -1.14, edgeRight - .48, 1.17), finish - .54);
+  batch.attachTo(group);
+  const lettering = model.getObjectByName('SM_Entry_Portals_And_Parking_Ramp')?.children.find(
+    (node): node is Mesh<BufferGeometry> => isMesh(node) && finishName(node) === 'MAT_Entry_Original_Lettering',
+  )?.material;
+  if (lettering instanceof MeshStandardMaterial && lettering.map) {
+    const xy = [groundPoint(at(-2.40, -1.553), finish - .288), groundPoint(at(1.29, -1.553), finish - .288),
+      groundPoint(at(1.29, -1.553), finish - .116), groundPoint(at(-2.40, -1.553), finish - .116)];
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(xy.flat(), 3));
+    geometry.setAttribute('uv', new Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    geometry.computeVertexNormals();
+    const material = lettering.clone();
+    material.side = DoubleSide;
+    const sign = new Mesh(geometry, material);
+    sign.name = `${group.name}_lettering`;
+    group.add(sign);
+  }
+  parent.add(group);
 }
 
 function isMesh(object: Object3D): object is Mesh<BufferGeometry> {
@@ -315,6 +426,28 @@ function keepTriangles(mesh: Mesh<BufferGeometry>, keep: (a: Vector3, b: Vector3
 
 function finishName(mesh: Mesh): string {
   return Array.isArray(mesh.material) ? '' : mesh.material.name;
+}
+
+function rebuildLowerMainPortal(model: Object3D): void {
+  const bakedGate = model.getObjectByName('SM_Entry_Portals_And_Parking_Ramp');
+  bakedGate?.traverse(node => {
+    if (!isMesh(node) || !/^MAT_Entry_(?:Pale_Limestone|Ramp_Charcoal_Lattice|Recess_Shade|Light_Trim|Clad_Guardhouse_Stone|Original_Lettering)$/.test(finishName(node))) return;
+    keepTriangles(node, (...verts) => {
+      const points = verts.map(p => {
+        const x = p.x - LOWER_PORTAL_ORIGIN[0], z = p.z - LOWER_PORTAL_ORIGIN[1];
+        return { right: x * LOWER_PORTAL_RIGHT[0] + z * LOWER_PORTAL_RIGHT[1],
+          inward: x * LOWER_PORTAL_INWARD[0] + z * LOWER_PORTAL_INWARD[1], h: p.y - LOWER_PORTAL_GRADE };
+      });
+      // The archived booths, planter, sidewalk and 105 ramp share this batch.
+      // Crop the gateway by its measured bounds and target only its small low plinths.
+      if (!points.every(p => p.inward >= -1.55 && p.inward <= 1.49 && Math.abs(p.right) <= 7.88 && p.h >= .055)) return true;
+      if (points.some(p => p.h >= 3.55)) return false;
+      if (points.every(p => Math.abs(Math.abs(p.right) - 4.49) <= .33 && p.inward >= -.25 && p.h <= .265)) return false;
+      if (points.every(p => p.right >= 6.0 && p.right <= 7.49 && p.h <= .305) && points.some(p => p.right < 7.25)) return false;
+      return true;
+    });
+  });
+  mainPortal(model, model, '101');
 }
 
 function removeLegacy109Podium(model: Object3D): void {
@@ -1167,7 +1300,9 @@ function upperBasementPortal(batch: SurfaceBatch, model: Object3D, frame: EntryF
 
 /** Cut coarse archived triangles at the drive edges; moving only their vertices would leave grass over the ramp. */
 function cutUpperBasementApproach(model: Object3D, frame: EntryFrame, extendToRoof = true): void {
-  const stations = extendToRoof ? [...frame.stations, [34.66, -1.41, 1.43, 4.24, 4.28] as const] : frame.stations;
+  const [, y, center, left, right] = frame.stations.at(-1)!;
+  const stations: readonly EntryStation[] = extendToRoof
+    ? [...frame.stations, [34.66, y, center, left, right]] : frame.stations;
   const sections = stations.slice(1).map((b, i) => {
     const a = stations[i], incline = (y0: number, y1: number) => (d: number) => y0 + (y1 - y0) * (d - a[0]) / (b[0] - a[0]);
     return { start: a[0], end: b[0], left: incline(a[2] - a[3] - .06, b[2] - b[3] - .06),
@@ -1370,7 +1505,8 @@ function upperMainPlayDeck(batch: SurfaceBatch, model: Object3D): void {
   // show through where the new lower court meets the archived shoulder.
   const first = arrivalStations[0];
   const firstGutter = entryAt(frame, first.depth, first.gutter);
-  batch.quad('courtPaver', groundPoint(firstGutter, .45), groundPoint(first.p, .45),
+  const approachEdgeY = UPPER_DISTRICT_GRADE.arrivalY - .14;
+  batch.quad('courtPaver', groundPoint(firstGutter, approachEdgeY), groundPoint(first.p, approachEdgeY),
     groundPoint(first.p, lowY(first.depth, 1)), groundPoint(firstGutter, lowY(first.depth, 0)));
   // On the inboard sides alone, blend the deck edge into the enclosing
   // landscape. A narrow planted transition avoids an invented retaining wall
@@ -1399,33 +1535,31 @@ function upperMainPlayDeck(batch: SurfaceBatch, model: Object3D): void {
   const origin = plan(...elevator.planPx), axis = elevator.axis;
   const liftAt = (x: number, z: number): XZ => add(add(origin, [-axis[1], axis[0]], x), axis, z);
   const w = elevator.halfWidth;
-  batch.prism('courtStone', 'courtStone', rectangular(liftAt, -w, -1.19, w, 1.19), roofY, elevator.roofY - .14);
+  const liftBaseY = UPPER_DISTRICT_GRADE.arrivalY + .12;
+  // A single glazed shaft straddles the east retaining edge. Its lower
+  // doors and the upper park landing are not two disconnected structures.
+  batch.prism('courtStone', 'courtStone', rectangular(liftAt, -w, -1.19, w, 1.19), liftBaseY - .22, elevator.roofY - .14);
   batch.prism('stoneInset', 'coping', rectangular(liftAt, -w - .09, -1.27, w + .09, 1.27), elevator.roofY - .15, elevator.roofY);
   batch.wall('door', liftAt(-.76, -1.204), liftAt(.76, -1.204), roofY + .05, roofY + 2.16);
   batch.wall('facadeGlass', liftAt(-.64, -1.222), liftAt(.64, -1.222), roofY + .13, roofY + 2.07);
   batch.wall('windowGlint', liftAt(-.025, -1.227), liftAt(.025, -1.227), roofY + .14, roofY + 2.06);
-  // Ground-level landing recessed into the same retaining façade, not a
-  // free-standing lift in the middle of the vehicular approach.
-  const sillA = arrivalStations[4], sillB = arrivalStations[5];
-  const sillAxis = unit(sillA.p, sillB.p), out: XZ = [sillAxis[1], -sillAxis[0]];
-  const door = mix(sillA.p, sillB.p, .41), y = lowY(sillA.depth + (sillB.depth - sillA.depth) * .41, 1);
-  const jamb = (x: number, d: number): XZ => add(add(door, sillAxis, x), out, d);
-  batch.prism('courtStone', 'coping', rectangular(jamb, -1.15, .013, 1.15, .29), y - .055, y + 2.41);
-  batch.wall('door', jamb(-.72, .297), jamb(.72, .297), y + .016, y + 2.17);
-  batch.wall('facadeGlass', jamb(-.64, .31), jamb(.64, .31), y + .14, y + 2.08);
-  batch.wall('windowGlint', jamb(-.02, .316), jamb(.02, .316), y + .18, y + 2.02);
+  batch.wall('door', liftAt(-.98, 1.202), liftAt(.98, 1.202), liftBaseY + .04, elevator.roofY - .38);
+  batch.wall('entranceGlass', liftAt(-.85, 1.217), liftAt(.85, 1.217), liftBaseY + .16, elevator.roofY - .54);
+  batch.wall('windowGlint', liftAt(-.027, 1.231), liftAt(.027, 1.231), liftBaseY + .17, elevator.roofY - .55);
+  batch.wall('facadeSash', liftAt(-.86, 1.232), liftAt(.86, 1.232), roofY + .07, roofY + .15);
+  batch.plate('courtPaver', rectangular(liftAt, -1.26, 1.21, 1.26, 2.53), liftBaseY + .027);
 
   const pad = plan(...kids.planPx), [dx, dz] = kids.axis;
   const padAt = (x: number, z: number): XZ => add(add(pad, [dx, dz], x), [-dz, dx], z);
   batch.prism('stoneInset', 'courtPaver', rectangular(padAt, -kids.halfWidth, -kids.halfDepth, kids.halfWidth, kids.halfDepth),
-    roofY - .04, kids.surfaceY);
-  batch.prism('courtFrame', 'courtDeck', rectangular(padAt, -.93, .88, .93, 1.19), roofY + .31, roofY + .43);
+    liftBaseY - .18, kids.surfaceY);
+  batch.prism('courtFrame', 'courtDeck', rectangular(padAt, -.93, .88, .93, 1.19), kids.surfaceY + .31, kids.surfaceY + .43);
   for (const x of [-.72, .72]) batch.prism('courtFrame', 'courtFrame',
-    rectangular(padAt, x - .045, .91, x + .045, 1.16), roofY, roofY + .315);
-  upperParkPavers(batch, model, [[312.4, 193.5], [310.9, 197.5], [313.8, 202.7], [315.7, 205.7]],
-    1.56, () => roofY + .075);
-  upperParkPavers(batch, model, [[313.8, 202.7], [319.6, 202.4], [323.5, 206.3], [326.4, 209.1]],
-    1.43, () => roofY + .072);
+    rectangular(padAt, x - .045, .91, x + .045, 1.16), liftBaseY, kids.surfaceY + .315);
+  upperParkPavers(batch, model, [[340, 194.9], [339.6, 199.2], [342.2, 203.5], [345.8, 207.55]],
+    1.64, () => roofY + .078);
+  upperParkPavers(batch, model, [[353.4, 215.6], [354, 213.8], [352.7, 212.4], [351.9, 211.65]],
+    .98, () => liftBaseY + .047);
 }
 
 function mainUpperEntry(model: Object3D): void {
@@ -1450,12 +1584,17 @@ function mainUpperEntry(model: Object3D): void {
     ([depth, y, center, left, right]) => [depth, y, center, left + .84, right + .84],
   ) });
   paveEntry(batch, model, upperMainFrame, false);
-  entryPortal(batch, upperMainFrame, 14.15, 8.45, true);
+  mainPortal(model, group, '110', upperMainFrame, 14.15);
   // The old cut left a hole in the street's raised sidewalk. A short strip
   // restores continuity south of the relocated throat without touching the lanes.
   const a = plan(355.4, 260.0), b = plan(354.8, 279.2);
-  batch.strip('path', a, b, 1.28, .584);
-  batch.strip('coping', add(a, [1, 0], .70), add(b, [1, 0], .70), .16, .619);
+  const skirtHeight = (point: XZ) => UPPER_DISTRICT_GRADE.lowerRoadY + upperDistrictStreetRise(point[1]);
+  const patch = (finish: Finish, offset: number, half: number, raise: number) => {
+    const edge = (p: XZ, side: number) => groundPoint(add(p,[1,0],offset+half*side),skirtHeight(p)+raise);
+    batch.quad(finish,edge(a,-1),edge(a,1),edge(b,1),edge(b,-1));
+  };
+  patch('path',0,.64,.012);
+  patch('coping',.7,.08,.047);
   upperBasementPortal(batch, model, upperMainFrame, UPPER_MAIN_DECK.roofY);
   // Retain the wide park loop. Short links shown behind 111/112 meet its
   // pale pedestrian pavement rather than extending the vehicular entrance.
@@ -1466,7 +1605,7 @@ function mainUpperEntry(model: Object3D): void {
   model.add(group);
 }
 
-const MISTY_ROOF = 8.08;
+const MISTY_ROOF = UPPER_DISTRICT_GRADE.mistyRoofY;
 const MISTY_FLOOR = MISTY_ROOF - PODIUM_VISIBLE_FLOOR;
 
 function shareMistyPavers(model: Object3D, group: Group): void {
@@ -1493,6 +1632,8 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
     const a = streetEdge[i], tangent = unit(a, b), outward: XZ = [tangent[1], -tangent[0]];
     return { a, b, tangent, outward, length: Math.hypot(b[0] - a[0], b[1] - a[1]) };
   });
+  const streetGrade = (p: XZ) => UPPER_DISTRICT_GRADE.lowerRoadY + upperDistrictStreetRise(p[1]);
+  const bankEdge = (p: XZ) => Math.min(MISTY_ROOF-.28, Math.max(MISTY_FLOOR-.12, streetGrade(p)+.36));
   // Lower the coarse archived grassy bank outboard of the wall. Do not lift
   // the street or purge the continuing path and 109's existing tower pads.
   const inLocalSite = ([x, z]: XZ) => x > plan(291, 0)[0] && x < plan(422, 0)[0]
@@ -1506,7 +1647,7 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
       if (t < -3.8 || t > length + 3.8 || d < -2.6 || d > 14) continue;
       const fade = Math.max(smoothStep(Math.max(0,-t,t-length) / 3.8), smoothStep((-d - .38) / 2.22),
         smoothStep((d - 10.25) / 3.75));
-      ceiling = Math.min(ceiling, MISTY_FLOOR - .5 + 4.9 * fade);
+      ceiling = Math.min(ceiling, bankEdge(p)-.33 + 4.9 * fade);
     }
     return Number.isFinite(ceiling) ? ceiling : null;
   };
@@ -1549,8 +1690,8 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
     [392.5,388],[404.2,399.14]].map(([x,z]) => plan(x,z));
   const shoulder = streetEdge.map((p,i) => {
     const q=avenueEdge[i];
-    const innerY=i===0 ? Math.min(MISTY_FLOOR-.27,level(p)) : MISTY_FLOOR-.27;
-    const outerY=Math.min(1.34,sample(q,.57)) + .003;
+    const innerY = bankEdge(p);
+    const outerY = Math.min(MISTY_ROOF-.29, streetGrade(q)+.003);
     return [0,.26,.52,.78,1].map(t => groundPoint(mix(p,q,t), innerY+(outerY-innerY)*smoothStep(t)));
   });
   const cuts: (readonly [XZ, XZ, XZ, XZ])[] = [];
@@ -1566,46 +1707,83 @@ function buildMistyForet(model: Object3D, parkingRoofEdge: readonly [XZ, XZ]): (
     const a = west[i-1], end = west[i];
     b.wall('limestone',a,end,Math.min(MISTY_ROOF-.14,level(a)-.38,level(end)-.38),MISTY_ROOF);
   }
-  upperParkPavers(b, model, [[312, 302], [318, 309], [326, 319], [339, 335], [349, 348], [365, 365],
-    [375, 379], [386, 390], [395, 400]], 1.52, () => MISTY_ROOF+.053);
-  // Land on the existing promenade at either end; transitional paving follows
-  // the historic ground at the lane, then meets the flat upper garden.
-  const join = (points: readonly XZ[], from: XZ, to: XZ) => {
-    const a = plan(...from), q = plan(...to), dir = unit(a,q);
+  // Keep the broad 109/110 exterior promenade outside the garden. The
+  // shaded paths in the plan are the short internal branches and an
+  // independently traceable narrow spine, not a second promenade.
+  const pavingY = MISTY_ROOF+.055;
+  upperParkPavers(b, model, MISTY_GARDEN.spine, 1.54, () => pavingY);
+  const promenade = model.getObjectByName('SM_Graded_Pedestrian_Routes');
+  const walkHeight = siteTerrainSampler(promenade ? [promenade] : [],plan(291,276),plan(422,420));
+  const join = (points: readonly XZ[]) => {
+    const a = plan(...points[0]), q = plan(...points[points.length-1]), dir = unit(a,q);
     const length = Math.hypot(q[0]-a[0],q[1]-a[1]);
-    const outerY = level(a)+.26;
-    upperParkPavers(b, model, points, 1.52, p => {
+    const outerY = walkHeight(a,level(a)+.22)+.024;
+    // Reach the flat paving before the link crosses the lawn edge. Using the
+    // full length would hide its sloped end behind the deck or leave a step.
+    let start = 0, end = length;
+    for (let i = 0; i < 8; i++) {
+      const at = (start+end)/2;
+      if (polygonContains(add(a,dir,at),outline)) end = at;
+      else start = at;
+    }
+    const landing = Math.min(length,Math.max(.40,end-.42));
+    upperParkPavers(b, model, points, 1.36, p => {
+      if (polygonContains(p,outline)) return pavingY;
       const along = (p[0]-a[0])*dir[0]+(p[1]-a[1])*dir[1];
-      return outerY + (MISTY_ROOF+.053-outerY)*smoothStep(along/length);
+      return Math.max(sample(p,outerY-.09)+.024,outerY + (pavingY-outerY)*smoothStep(along/landing));
     });
   };
-  join([[310, 291], [311, 297], [312, 302]], [310,291], [312,302]);
-  join([[357, 394], [365, 387], [372, 381], [375, 379]], [357,394], [375,379]);
-  const flora = (p: XZ, radius: number, tall: number, type: Finish, seed: number, trunk = 0) => {
+  MISTY_GARDEN.links.forEach(join);
+  for (const {center, axis, length, width} of MISTY_GARDEN.pockets) {
+    const position = plan(center[0], center[1]), side: XZ = [axis[1], -axis[0]];
+    const at = (u: number, v: number) => add(add(position, axis, u), side, v);
+    const l = length/2, w = width/2, bevel = .46;
+    const bay = [at(-l+bevel,-w),at(l-bevel,-w),at(l,-w+bevel),at(l,w-bevel),
+      at(l-bevel,w),at(-l+bevel,w),at(-l,w-bevel),at(-l,-w+bevel)];
+    b.plate('courtPaver',bay,pavingY+.018);
+    // A narrow edging line and two low seats leave the diagonal through
+    // route visibly open. Seating is diagrammatic (not a furniture claim).
+    for (const v of [-w+.12,w-.12]) b.strip('coping',at(-l+bevel,v),at(l-bevel,v),.12,pavingY+.024);
+    for (const u of [-l+.85, l-.86]) {
+      b.prism('stoneInset','deck',rectangular(at,u-.59,w-.69,u+.59,w-.29),pavingY+.018,pavingY+.47);
+    }
+  }
+  const flora = (p: XZ, radius: number, tall: number, type: Finish, seed: number, trunk = 0, surfaceY: number = MISTY_ROOF) => {
     const ring: XZ[] = Array.from({length:6},(_,i) => {
       const theta = seed + i * Math.PI / 3;
       return add(p,[Math.cos(theta),Math.sin(theta)],radius*(.84+.13*((i+seed)%3)));
     });
-    const top = groundPoint(add(p,[.16,-.17],radius),MISTY_ROOF+trunk+tall);
-    const mid = MISTY_ROOF+trunk+tall*.42;
+    const top = groundPoint(add(p,[.16,-.17],radius),surfaceY+trunk+tall);
+    const mid = surfaceY+trunk+tall*.42;
     for (let i = 0; i < ring.length; i++) {
       b.tri(type,groundPoint(ring[i],mid),groundPoint(ring[(i+1)%ring.length],mid),top);
-      b.tri(type,groundPoint(ring[(i+1)%ring.length],mid),groundPoint(ring[i],mid),groundPoint(p,MISTY_ROOF+trunk+.04));
+      b.tri(type,groundPoint(ring[(i+1)%ring.length],mid),groundPoint(ring[i],mid),groundPoint(p,surfaceY+trunk+.04));
     }
   };
-  sections.forEach(({a,b:end,outward,length},n) => {
-    const count = Math.max(2,Math.round(length/1.55));
-    for (let i=0;i<count;i++) {
-      const p = add(mix(a,end,(i+.58)/count),outward,-.92);
-      flora(p,.59 + (i%3)*.11,.62+(i%3)*.19,i%4===0?'gardenBud':'gardenLeaf',n+i);
+  const blossom = (mid: XZ, radius: number, tall: number, type: Finish, seed: number, surfaceY: number) => {
+    b.prism('gardenBark','gardenBark',[[mid[0]-.11,mid[1]-.11],[mid[0]+.11,mid[1]-.11],
+      [mid[0]+.11,mid[1]+.11],[mid[0]-.11,mid[1]+.11]],surfaceY-.12,surfaceY+tall);
+    flora(mid,radius,tall,type,seed,tall-.35,surfaceY);
+  };
+  for (const [i, bed] of MISTY_GARDEN.beds.entries()) {
+    const ring = bed.map(([x,z]) => plan(x,z));
+    const mid = ring.reduce<XZ>((sum,p) => add(sum,p,1/ring.length),[0,0]);
+    const softBand = ring.map(p => mix(p,mid,.23));
+    b.plate('gardenBed',ring,MISTY_ROOF+.017);
+    const radius = 1.05+(i%4)*.16;
+    const tall = 1.9+(i%3)*.29;
+    blossom(mid,radius,tall,i%3===0?'gardenFlower':'gardenLeaf',i,MISTY_ROOF+.018);
+    // Low, laid-out understory in clustered beds, not an equally spaced
+    // single line of the same tree along the whole street frontage.
+    for (let j = 0; j < softBand.length; j++) {
+      const p = mix(softBand[j],softBand[(j+1)%softBand.length],.18+(j%3)*.14);
+      flora(p,.42+(j%4)*.11,.48+(j%3)*.23,j%3===0?'gardenBud':'hedge',i+j);
     }
-  });
-  for (const [i, point] of ([[324, 309],[338, 321],[350, 338],[359, 351],[365, 374],
-    [377, 382],[389, 394],[330, 332],[349, 357],[356, 369]] as const).entries()) {
-    const p=plan(point[0],point[1]), radius=1.22+(i%3)*.19;
-    b.prism('gardenBark','gardenBark',[[p[0]-.10,p[1]-.10],[p[0]+.10,p[1]-.10],
-      [p[0]+.10,p[1]+.10],[p[0]-.10,p[1]+.10]],MISTY_ROOF,MISTY_ROOF+1.74);
-    flora(p, radius, 1.74+(i%4)*.16,i%3===0?'gardenFlower':'gardenLeaf',i,1.51);
+  }
+  for (const [i,[x,z]] of MISTY_GARDEN.promenadeBlooms.entries()) {
+    const p = plan(x,z), y = polygonContains(p,outline) ? MISTY_ROOF : level(p);
+    blossom(p,1.12+(i%3)*.21,1.47+(i%4)*.14,'gardenFlower',i+2,y);
+    flora(add(p,[-.68,.36]),.48,.62,'gardenBud',i,0,y);
   }
   b.attachTo(group);
   shareMistyPavers(model,group);
@@ -1623,7 +1801,7 @@ function upperOpenEntry(model: Object3D): void {
   group.userData.castsSiteShadow = true;
   const batch = new SurfaceBatch();
   paveEntry(batch, model, upperAuxFrame, false);
-  entryPortal(batch, upperAuxFrame, 10.25, 7.65, false);
+  entryPortal(batch, upperAuxFrame, 10.25, 7.65);
   // Crescent-shaped planted shoulder, following the gray turnout around it.
   const island = [[439.2,424.2],[435.7,426.2],[430.0,429.2],[428.0,432.7],[429.5,434.5],
     [435.4,436.0],[439.0,436.0],[441.0,431.4]].map(([x, z]) => plan(x, z));
@@ -1807,7 +1985,7 @@ function rebuildGuardhouses(model: Object3D): void {
   group.name = GUARD;
   group.userData.castsSiteShadow = true;
   for (const [id, preferred] of [
-    ['security-105', null], ['security-109', 1.23], ['security-110', null],
+    ['security-105', null], ['security-109', 1.23], ['security-110', UPPER_DISTRICT_GRADE.arrivalY],
   ] as const) {
     const security = SITE_FACILITIES.find(item => item.id === id);
     if (!security) continue;
@@ -1826,7 +2004,7 @@ function rebuildGuardhouses(model: Object3D): void {
     const body = rectangular(at, -halfWidth, -halfDepth, halfWidth, halfDepth);
     const batch = new SurfaceBatch();
     batch.prism('stoneInset', 'path', rectangular(at, -halfWidth - .62, -halfDepth - .61, halfWidth + .62, halfDepth + .61),
-      Math.min(.52, base - .40), base + .08);
+      id === 'security-110' ? base - .94 : Math.min(.52, base - .40), base + .08);
     batch.prism('limestone', 'limestone', body, base + .08, base + 2.23);
     const glassX = halfWidth + .01, glassZ = halfDepth + .01;
     for (const [a, b] of [
@@ -2221,11 +2399,13 @@ function mainGate101Landings(model: Object3D): void {
 export function refineFacilityExteriors(model: Object3D): void {
   if (model.getObjectByName(FACADE)) return;
   model.updateMatrixWorld(true);
+  gradeUpperDistrictRoad(model);
   const podiumWalk = communityExteriors(model);
   const daycareEntry = daycareEntrance(model);
   mainUpperEntry(model);
   upperOpenEntry(model);
   rebuildGuardhouses(model);
+  rebuildLowerMainPortal(model);
   mainGate101Landings(model);
   rebuildSeamPark(model);
   rebuildUpperRetail(model);

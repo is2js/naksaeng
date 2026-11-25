@@ -45,18 +45,27 @@ it('splits a nearly level apron into garage and turnout branches; the descent be
   const entry = scene.getObjectByName('SM_Rebuilt_Upper_Open_Entry')!;
   const asphalt = entry.getObjectByName(`${entry.name}_asphalt`)!;
   const lid = entry.getObjectByName(`${entry.name}_siteGrass`)!;
+  const walk = entry.getObjectByName(`${entry.name}_path`)!;
   const ray = new Raycaster(point(451,429,30),new Vector3(0,-1,0));
   const at = (object: typeof asphalt, x: number, z: number) => {
     ray.ray.origin.copy(point(x,z,30));
     return ray.intersectObject(object)[0]?.point.y;
   };
-  const exposed = [[451,429],[444,440],[439,443],[432,438],[420,435],[412,423],[406,415],
-    [441,454],[440,458],[441,466],[440,468]] as const;
-  for (const [x,z] of exposed) expect(at(asphalt,x,z)).toBeGreaterThanOrEqual(.54);
+  const exposed = [[454,431],[445,441],[436,437],[425,434],[420,429],[412,423],[406,415],
+    [442,454],[444,458],[448,468]] as const;
+  for (const [x,z] of exposed) expect(at(asphalt,x,z),`${x},${z}`).toBeGreaterThanOrEqual(.54);
   const grades = exposed.map(([x,z])=>at(asphalt,x,z)!);
-  expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.16);
+  expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.17);
   expect(at(asphalt,429,451)).toBeUndefined();
   expect(at(asphalt,429,477)).toBeUndefined(); // the perimeter walk is not a through road
+  expect(at(asphalt,441,467)).toBeUndefined();
+  let walked=0;
+  for (let z=424;z<=464;z+=1.5) for (let x=405;x<=452;x+=1.5) {
+    if (at(walk,x,z)===undefined) continue;
+    walked++;
+    expect(at(asphalt,x,z),`separate road and walk at ${x},${z}`).toBeUndefined();
+  }
+  expect(walked).toBeGreaterThan(25);
   expect(at(lid,429,451)).toBeGreaterThan(.52); // infills the former driveway cut, below the new junction
   expect(at(lid,399,407)).toBeCloseTo(UPPER_DISTRICT_GRADE.mistyRoofY,4);
   expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);

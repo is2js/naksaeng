@@ -30,7 +30,8 @@ it('replaces the two archived paving layers with one continuous Community II ext
     ray.ray.origin.set(...point(x,z,16));
     return ray.intersectObject(mesh).map(hit => hit.point.y.toFixed(4));
   };
-  for (const [x,z] of [[279.7,414.8],[307.6,456],[335.4,503],[363.3,521.5],[401.8,501],[428.2,478.0]]) {
+  for (const [x,z] of [[279.7,414.8],[307.6,456],[335.4,503],[363.3,521.5],[397.5,499],
+    [410.5,481.5],[416.85,471.25],[423.2,463.4],[428.1,454.3],[417.6,441.7]]) {
     expect(new Set(surfacesAt(paving,x,z)).size, `one floor at ${x}, ${z}`).toBe(1);
   }
   for (const [x,z] of [[310,430],[336,467],[365,489]]) {
@@ -63,7 +64,7 @@ it('levels the long west frontage and blends one supported walk down to the auxi
   };
   const west = [[271.5,394],[279.9,415],[285.1,423],[297.4,441],[307.6,456],[316,470],[327.9,489],[335.4,503]];
   const returnWalk = [[344,515],[352.3,520.4],[363.3,522],[373.5,520.1],[385,514],
-    [401.8,501],[417.5,487],[430.2,476.3],[435.1,471.6],[437.2,469.45]];
+    [397.5,499],[404.9,490.3],[410.5,481.5],[416.85,471.25],[423.2,463.4],[428.1,454.3]];
   for (const [x,z] of [...west,...returnWalk]) {
     const height = surface(paving,x,z);
     const pad = surface(apronTurf,x,z);
@@ -81,5 +82,5 @@ it('levels the long west frontage and blends one supported walk down to the auxi
     }
   }
   expect(surface(paving,327.9,489)).toBeCloseTo(4.73,2);
-  expect(surface(paving,437.2,469.45)).toBeCloseTo(.76,2);
+  expect(surface(paving,428.1,454.3)).toBeCloseTo(.76,2);
 });

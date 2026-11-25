@@ -23,8 +23,8 @@ export function upperAuxGrade([x,z]: XZ): number {
 /** The seam starts at the low entrance; its landward grade can rise only after the forecourt. */
 export function upperAuxRimGrade([x,z]: XZ, original: number): number {
   const along=((x-(478-490)*.52)*-14+(z-(463-540)*.52)*12)/Math.hypot(14,12);
-  const coast = .69+(UPPER_DISTRICT_GRADE.mistyRoofY-.69)*ease((along-15.6)/22);
-  return Math.min(original,coast);
+  const y=upperAuxGrade([x,z])-.055;
+  return Math.min(original,y+(UPPER_DISTRICT_GRADE.mistyRoofY-y)*ease((along-15.6)/22));
 }
 
 /** The public road rises from the Misty Forêt approach up to the 110 entrance. */

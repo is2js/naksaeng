@@ -11,6 +11,22 @@ export const UPPER_DISTRICT_GRADE = {
   parkY: 10.68,
 } as const;
 
+export const UPPER_AUX_GUARD = [451.7,453.6] as const;
+type XZ = readonly [number,number];
+const ease = (v: number) => { const t = Math.max(0,Math.min(1,v)); return t*t*(3-2*t); };
+
+/** Road datum at the low end, shared by the 109 apron, guards and seam. */
+export function upperAuxGrade([x,z]: XZ): number {
+  return .628 + .00625*((x-(454.8202-490)*.52)*-.588649+(z-(421.2464-540)*.52)*.808389-12.4);
+}
+
+/** The seam starts at the low entrance; its landward grade can rise only after the forecourt. */
+export function upperAuxRimGrade([x,z]: XZ, original: number): number {
+  const along=((x-(478-490)*.52)*-14+(z-(463-540)*.52)*12)/Math.hypot(14,12);
+  const coast = .69+(UPPER_DISTRICT_GRADE.mistyRoofY-.69)*ease((along-15.6)/22);
+  return Math.min(original,coast);
+}
+
 /** The public road rises from the Misty Forêt approach up to the 110 entrance. */
 export function upperDistrictStreetRise(worldZ: number): number {
   const planZ = worldZ / .52 + 540;

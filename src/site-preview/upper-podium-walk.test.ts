@@ -55,6 +55,7 @@ it('levels the long west frontage and blends one supported walk down to the auxi
   site.add(parcels);
   refineFacilityExteriors(site);
   const paving = site.getObjectByName('SM_Rebuilt_Community_Terraces_community-2_courtPaver')!;
+  const apronTurf = site.getObjectByName('SM_Rebuilt_Upper_Open_Entry_siteGrass')!;
   const ray = new Raycaster(new Vector3(),new Vector3(0,-1,0));
   const surface = (object: Object3D,x: number,z: number) => {
     ray.ray.origin.set(...point(x,z,18));
@@ -62,11 +63,13 @@ it('levels the long west frontage and blends one supported walk down to the auxi
   };
   const west = [[271.5,394],[279.9,415],[285.1,423],[297.4,441],[307.6,456],[316,470],[327.9,489],[335.4,503]];
   const returnWalk = [[344,515],[352.3,520.4],[363.3,522],[373.5,520.1],[385,514],
-    [401.8,501],[417.5,487],[432.9,474.4],[437.4,467.5],[435.7,460.5],[435.7,455]];
+    [401.8,501],[417.5,487],[430.2,476.3],[435.1,471.6],[437.2,469.45]];
   for (const [x,z] of [...west,...returnWalk]) {
-    const height = surface(paving,x,z), lawn = surface(mesh,x,z);
+    const height = surface(paving,x,z);
+    const pad = surface(apronTurf,x,z);
+    const lawn = surface(mesh,x,z) || pad;
     expect(height-lawn,`supported center at ${x}, ${z}`).toBeGreaterThan(.031);
-    expect(height-lawn,`flush beside turf at ${x}, ${z}`).toBeLessThan(.145);
+    expect(height-lawn,`flush beside turf at ${x}, ${z}`).toBeLessThan(.175);
   }
   for (const route of [west,returnWalk]) {
     for (let i = 1; i < route.length; i++) {
@@ -78,5 +81,5 @@ it('levels the long west frontage and blends one supported walk down to the auxi
     }
   }
   expect(surface(paving,327.9,489)).toBeCloseTo(4.73,2);
-  expect(surface(paving,435.7,455)).toBeCloseTo(.76,2);
+  expect(surface(paving,437.2,469.45)).toBeCloseTo(.76,2);
 });

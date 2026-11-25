@@ -11,7 +11,8 @@ import { siteTerrainSampler } from './site-terrain-sampler';
 import { rebuildRiversideGrade } from './site-riverside-grade';
 import { CAFE_PLAN, COMMUNITY_PROMENADE, PARK_PATHS, SUPERSEDED_WALK_SECTIONS } from './site-promenade-layout';
 import { refineBrochureGround } from './facility-brochure-ground';
-import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
+import { UPPER_AUX_GUARD, UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK, upperAuxGrade, upperAuxRimGrade,
+  upperDistrictRoadX, upperDistrictStreetRise } from './site-upper-main-layout';
 import { MISTY_GARDEN } from './site-misty-foret-layout';
 import { gradeUpperTerraces, subdivideSurfaceInPlan } from './site-upper-terraces';
 import { raiseUpperTerraceAmenities } from './upper-terrace-amenities';
@@ -471,7 +472,7 @@ const upperRetailOutline: readonly XZ[] = [[393.0,442.2],[405.0,429.8],[426.5,45
 const upperPodiumWalk = [[274,385], [271.5,394], [273.6,402], [279.9,415],
   [285.1,423], [297.4,441], [307.6,456], [316.0,470], [327.9,489], [335.4,503],
   [344.0,515], [352.3,520.4], [363.3,522.0], [373.5,520.1], [385,514],
-  [401.8,501], [417.5,487], [432.9,474.4], [437.4,467.5], [435.7,460.5], [435.7,454.5]]
+  [401.8,501], [417.5,487], [430.2,476.3], [435.1,471.6], [437.35,469.26]]
   .map(([x, z]) => plan(x, z));
 
 // Baked v9 route, retained here only to remove its old triangles. The source
@@ -1752,36 +1753,40 @@ function upperOpenEntry(model: Object3D): void {
     [437.6,431.6],[440.2,430.9],[442.3,427.3]].map(([x, z]) => plan(x, z));
   batch.prism('limestone', 'siteGrass', island, .54, 1.03);
   const terminal = upperAuxFrame.stations.at(-1)!;
-  const apronGrade = (p: XZ) => terminal[1] + .009 * ((p[0]-upperAuxFrame.origin[0])*upperAuxFrame.inward[0]
-    + (p[1]-upperAuxFrame.origin[1])*upperAuxFrame.inward[1] - terminal[0]);
+  const apronGrade = upperAuxGrade;
   const face = plan(405.7, 414.6), axis = unit(plan(413.8, 426.1), face);
   const cross: XZ = [axis[1], -axis[0]];
   const portalAt = (depth: number, lateral: number): XZ => add(add(face, axis, depth), cross, lateral);
   const throatY = apronGrade(face);
-  const garage: readonly [XZ, number][] = [[plan(432.5,438.8),3.10],[plan(426,435.6),3.22],
-    [plan(418.6,431.7),3.24],[plan(413.8,426.1),3.24],[face,3.23],[portalAt(2.6,0),3.23],[portalAt(7.4,0),3.23]];
-  const turnout: readonly [XZ, number][] = [[plan(442.8,449.9),2.48],[plan(441.4,454.3),2.25],[plan(440.2,458.1),1.67]];
-  const makeRibbon = (route: readonly [XZ, number][], covered = false) => route.map(([p,w],i) => {
-    const v = unit(route[Math.max(0,i-1)][0],route[Math.min(route.length-1,i+1)][0]);
-    const n: XZ = [v[1],-v[0]];
-    const base = (q: XZ) => covered && i >= route.length-2 ? throatY - (i === route.length-1 ? .31 : 0) : apronGrade(q);
-    return { p, n, w, base, sides: [add(p,n,-w),add(p,n,w)] as const };
-  });
-  const garageRows = makeRibbon(garage,true), turnoutRows = makeRibbon(turnout);
-  const [gSouth,gNorth] = [...garageRows[0].sides].reverse();
-  const [tWest,tEast] = turnoutRows[0].sides;
   const [stemLeft,stemRight] = [entryAt(upperAuxFrame,terminal[0],terminal[2]-terminal[3]),
     entryAt(upperAuxFrame,terminal[0],terminal[2]+terminal[4])];
-  const junction = [stemLeft,gNorth,gSouth,plan(437.7,444.9),tWest,tEast,stemRight];
-  for (const [a,b,c] of ShapeUtils.triangulateShape(junction.map(p=>new Vector2(...p)),[])) {
-    batch.tri('asphalt',...[a,b,c].map(i=>groundPoint(junction[i],apronGrade(junction[i]))) as [XYZ,XYZ,XYZ]);
+  // North-up registration of the attached plan. Follow the north island,
+  // the garage face, and the full strip to the walk beside the guardhouse.
+  // It is one continuous paved apron, not two ribbons split by a mound.
+  const px = (points: readonly XZ[]) => points.map(([x,z])=>plan(x,z));
+  const north = px([[432.6,434.7],[427,433.1],[422.2,430.7],[417.8,427.4],[413.8,422.3],[411.0,416.2]]);
+  const south = px([[404.3,423.9],[409.1,430.4],[415.3,436.8],[423.9,444.6],[430.7,452.9],
+    [434.2,459.3],[437.0,465.4],[438.65,468.9],[441.0,470.15],[443.4,469.25],[446.1,465.2],
+    [447.9,461.2],[448.35,457.8],[448.8,453.1],[449.2,448.4]]);
+  const road = [stemLeft,...north,portalAt(0,-3.23),portalAt(0,3.23),...south,stemRight];
+  const triangles=ShapeUtils.triangulateShape(road.map(p=>new Vector2(...p)),[]);
+  for (const [a,b,c] of triangles) {
+    const at=(i:number)=>groundPoint(road[i],apronGrade(road[i]));
+    batch.tri('asphalt',at(a),at(b),at(c));
   }
-  // Close the hole left by the archived sunken driveway. This pad stays
-  // below both asphalt and the pavers tied into the west side of the fork.
-  const pad = [[430.3,442],[437.7,444.4],[445,449.8],[446,458.3],[442.4,463.3],
-    [435.4,466.5],[426,467],[421.1,458.6],[423.6,450.6]].map(([x,z])=>plan(x,z));
-  for (const [a,b,c] of ShapeUtils.triangulateShape(pad.map(p=>new Vector2(...p)),[])) {
-    const at=(i:number)=>groundPoint(pad[i],apronGrade(pad[i])-.077);
+  const covered = [0,2.6,7.4];
+  const coverAt=(i:number,s:number): XYZ=> {
+    const p=portalAt(covered[i],s);
+    return groundPoint(p,i===0 ? apronGrade(p) : throatY-(i===2?.31:0));
+  };
+  for (let i=1;i<covered.length;i++) batch.quad('asphalt',coverAt(i-1,-3.23),coverAt(i-1,3.23),coverAt(i,3.23),coverAt(i,-3.23));
+  // Backfill the legacy excavated court at the same datum as the new
+  // surface, extending through the guardhouse rather than stopping at it.
+  const pad = px([[429.5,441],[440.5,439],[452.9,438.8],[465.2,445.5],[460.2,451.9],
+    [451.4,463.5],[442.1,474.3],[433.6,474.1],[426,467.8],[421.1,458.6],[423.6,450.6]]);
+  const padTriangles=ShapeUtils.triangulateShape(pad.map(p=>new Vector2(...p)),[]);
+  for (const [a,b,c] of padTriangles) {
+    const at=(i:number)=>groundPoint(pad[i],apronGrade(pad[i])-.064);
     batch.tri('siteGrass',at(a),at(b),at(c));
   }
   const deckHeight = MISTY_ROOF;
@@ -1813,11 +1818,8 @@ function upperOpenEntry(model: Object3D): void {
   const cutSections: (readonly XZ[])[] = [];
   const stemRows = upperAuxFrame.stations.map(([d,,c,l,r])=>[entryAt(upperAuxFrame,d,c-l-.92),entryAt(upperAuxFrame,d,c+r+.92)] as const);
   stemRows.slice(1).forEach((r,i)=>cutSections.push([stemRows[i][0],stemRows[i][1],r[1],r[0]]));
-  for (const ids of ShapeUtils.triangulateShape(junction.map(p=>new Vector2(...p)),[])) cutSections.push(ids.map(i=>junction[i]));
-  for (const rows of [garageRows,turnoutRows]) rows.slice(1).forEach((r,i)=>{
-    const a=rows[i];
-    cutSections.push([a.sides[0],a.sides[1],r.sides[1],r.sides[0]]);
-  });
+  for (const ids of triangles) cutSections.push(ids.map(i=>road[i]));
+  cutSections.push(rectangular((l,d)=>portalAt(d,l),-3.24,0,3.24,7.44));
   // Trim the decoded grass triangles on the exact corridor edges. Lowering
   // the corners of the coarse source triangles instead drapes grass across
   // the asphalt (and would also pull the upper park's path into the tunnel).
@@ -1826,7 +1828,7 @@ function upperOpenEntry(model: Object3D): void {
   if (grass) {
     // Keep an even planted shoulder around the new low apron. Trimmed road
     // cut edges and the adjacent ground use the same gently sloped datum.
-    const localLo=plan(397,409), localHi=plan(462,467), guard=plan(450.4,453.1);
+    const localLo=plan(397,409), localHi=plan(475,501);
     const shoulderDistance = (x: number, z: number) => {
       if (x<localLo[0] || x>localHi[0] || z<localLo[1] || z>localHi[1]) return Infinity;
       let result=Infinity;
@@ -1837,16 +1839,24 @@ function upperOpenEntry(model: Object3D): void {
       }
       return result;
     };
-    const guardWeight = (x: number, z: number) => (1-smoothStep((Math.hypot(x-guard[0],z-guard[1])-3.1)/3.25))
-      * (1-smoothStep((z-plan(0,459)[1])/3.6));
-    subdivideSurfaceInPlan(grass,(x,z)=>shoulderDistance(x,z)<3.9 || guardWeight(x,z)>.005,1.05);
+    const apronRim=stationAlongPolylines([...pad,pad[0]]);
+    const padWeight=(x:number,z:number) => 1-smoothStep((apronRim.nearest(x,z).distance-.42)/2.58);
+    const rimWeight=(x:number,z:number) => {
+      const px=x/.52+490, pz=z/.52+540;
+      if (px<415 || px>473 || pz<438 || pz>500) return 0;
+      const seamZ=446+(466-px)*32/27;
+      return smoothStep((px-415)/9)*smoothStep((473-px)/5)*smoothStep((pz-438)/7)*smoothStep((seamZ+17-pz)/9);
+    };
+    subdivideSurfaceInPlan(grass,(x,z)=>shoulderDistance(x,z)<3.8 || padWeight(x,z)>.005 || rimWeight(x,z)>.025,1.05);
     const lanePosition=grass.geometry.getAttribute('position'), world=new Vector3(), inverse=grass.matrixWorld.clone().invert();
     for (let i=0;i<lanePosition.count;i++) {
       world.fromBufferAttribute(lanePosition,i).applyMatrix4(grass.matrixWorld);
       const distance=shoulderDistance(world.x,world.z);
-      const weight = Math.max(1-smoothStep((distance-.66)/2.49),guardWeight(world.x,world.z));
-      if (weight < EPSILON) continue;
-      const front=apronGrade([world.x,world.z])-.042;
+      const weight = Math.max(1-smoothStep((distance-.66)/2.49),padWeight(world.x,world.z));
+      const rim = rimWeight(world.x,world.z);
+      if (Math.max(weight,rim) < EPSILON) continue;
+      const p: XZ=[world.x,world.z], front=apronGrade(p)-.045;
+      world.y+=(upperAuxRimGrade(p,world.y)-world.y)*rim;
       world.y+=(front-world.y)*weight;
       world.applyMatrix4(inverse);
       lanePosition.setXYZ(i,world.x,world.y,world.z);
@@ -1856,7 +1866,7 @@ function upperOpenEntry(model: Object3D): void {
     const source = grass.geometry, position = source.getAttribute('position');
     const attributes = Object.entries(source.attributes);
     const index = source.getIndex(), vertex = new Vector3();
-    const cut = [...cutSections, ...vergeCuts].map(polygon => {
+    const cut = [...cutSections, ...padTriangles.map(ids=>ids.map(i=>pad[i])), ...vergeCuts].map(polygon => {
       const [a,b,c] = polygon;
       const winding = Math.sign((b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]));
       return {
@@ -1919,25 +1929,16 @@ function upperOpenEntry(model: Object3D): void {
     batch.quad('coping',groundPoint(p,a+.029),groundPoint(q,b+.029),groundPoint(r,b+.024),groundPoint(s,a+.024));
     batch.quad('stoneInset',groundPoint(p,a-.13),groundPoint(q,b-.13),groundPoint(q,b+.028),groundPoint(p,a+.028));
   };
-  const connectEdge = (p: XZ, q: XZ) => { const [dx,dz]=unit(p,q); edge(p,q,[-dz,dx]); };
-  connectEdge(stemLeft,gNorth);
-  connectEdge(gSouth,junction[3]);
-  connectEdge(junction[3],tWest);
-  connectEdge(tEast,stemRight);
-  for (const [route,garage] of [[garageRows,true],[turnoutRows,false]] as const) {
-    for (let i=1;i<route.length;i++) {
-      const a=route[i-1], b=route[i];
-      const at = (r: typeof a, x: number, dy = 0): XYZ => {
-        const p=add(r.p,r.n,x);
-        return groundPoint(p,r.base(p)+dy);
-      };
-      batch.quad('asphalt',at(a,-a.w),at(a,a.w),at(b,b.w),at(b,-b.w));
-      if (garage && i < route.length-2) batch.quad('roadAmber',at(a,-.05,.022),at(a,.05,.022),at(b,.05,.022),at(b,-.05,.022));
-      if (!garage || i <= route.length-3) for (const s of [-1,1] as const) {
-        const j=s===-1?0:1, [dx,dz]=unit(a.p,b.p);
-        edge(a.sides[j],b.sides[j],[s*dz,-s*dx]);
-      }
-    }
+  for (let i=0;i+1<road.length;i++) {
+    if (i===north.length+1 || i===north.length+9) continue; // garage threshold and flush walk connection
+    const p=road[i], q=road[i+1], [dx,dz]=unit(p,q);
+    edge(p,q,[-dz,dx]);
+  }
+  const garageStripe=px([[435.6,441.8],[429.1,437.9],[421.1,433.6],[415.7,428.1],[410.6,420.5]]);
+  for (let i=1;i<garageStripe.length;i++) {
+    const p=garageStripe[i-1], q=garageStripe[i], [dx,dz]=unit(p,q);
+    const line=(v:XZ,s:number)=>groundPoint(add(v,[dz,-dx],s*.055),apronGrade(v)+.022);
+    batch.quad('roadAmber',line(p,-1),line(p,1),line(q,1),line(q,-1));
   }
   // White structural entrance face as on 105; above it the same park turf
   // carries to Misty Forêt. The dark opening ends at a normal garage
@@ -1989,7 +1990,7 @@ function rebuildGuardhouses(model: Object3D): void {
   group.name = GUARD;
   group.userData.castsSiteShadow = true;
   for (const [id, preferred] of [
-    ['security-105', null], ['security-109', .83], ['security-110', UPPER_DISTRICT_GRADE.arrivalY],
+    ['security-105', null], ['security-109', upperAuxGrade(plan(...UPPER_AUX_GUARD))], ['security-110', UPPER_DISTRICT_GRADE.arrivalY],
   ] as const) {
     const security = SITE_FACILITIES.find(item => item.id === id);
     if (!security) continue;
@@ -1999,7 +2000,7 @@ function rebuildGuardhouses(model: Object3D): void {
     const mid: XZ = [security.x, security.z];
     const cross: XZ = [-axis[1], axis[0]];
     const at = (x: number, z: number): XZ => add(add(mid, axis, x), cross, z);
-    if (preferred !== null) lowerEntryGround(model, position => {
+    if (id === 'security-110') lowerEntryGround(model, position => {
       const dx = position[0] - mid[0], dz = position[1] - mid[1];
       const distance = Math.hypot(dx, dz);
       return distance < 5.95 ? preferred - .08 + 7 * smoothStep((distance - 2.5) / 3.45) : null;
@@ -2041,6 +2042,14 @@ function rebuildSeamPark(model: Object3D): void {
   const origin = plan(478, 463), along = unit(origin, plan(464, 475));
   const across: XZ = [along[1], -along[0]];
   const frame = (p: XZ, dir: XZ): number => (p[0] - origin[0]) * dir[0] + (p[1] - origin[1]) * dir[1];
+  const joins = [stationAlongPolylines(upper), stationAlongPolylines(lower)];
+  const oldGuardSkirt = (a: Vector3,b: Vector3,c: Vector3): boolean => {
+    const area=(b.x-a.x)*(c.z-a.z)-(b.z-a.z)*(c.x-a.x);
+    return Math.abs(area)<.012 && [a,b,c].every(p=>{
+      const q=joins[0].nearest(p.x,p.z);
+      return q.distance<.55 && q.station<=joins[0].stations[1]+.45;
+    });
+  };
   const parcel = model.getObjectByName('SM_Parcels_Roads_And_Stream');
   const grass = parcel?.children.find((node): node is Mesh => isMesh(node) && finishName(node) === 'MAT_Site_Grass');
   // The original v9 green spine is a separate flat slab. Leaving it visible
@@ -2049,7 +2058,7 @@ function rebuildSeamPark(model: Object3D): void {
     if (!isMesh(object)) return;
     if (finishName(object) === 'MAT_Separation_Lawn') object.visible = false;
     if (finishName(object) !== 'MAT_Retaining_Edge') return;
-    keepTriangles(object, (...points) => !(points.every(p => p.y <= .510 && p.y >= -1.47
+    keepTriangles(object, (...points) => !oldGuardSkirt(...points) && !(points.every(p => p.y <= .510 && p.y >= -1.47
       && p.x >= plan(334, 0)[0] && p.x <= plan(499, 0)[0] && p.z >= plan(0, 445)[1] && p.z <= plan(0, 601)[1])
       && points.some(p => Math.abs(p.y + 1.45) < .020)));
   });
@@ -2075,7 +2084,7 @@ function rebuildSeamPark(model: Object3D): void {
     const station = frame(p, along), north = stationAt(upper, station), south = stationAt(lower, station);
     const left = frame(north, across), right = frame(south, across);
     const runIn = smoothStep((station - first + .8) / 20);
-    const northY = rimHeight(north, -1, .55 + 5 * runIn);
+    const northY = upperAuxRimGrade(north,rimHeight(north, -1, .55 + 5 * runIn));
     const southY = rimHeight(south, 1, .56 + 1.37 * runIn);
     const u = smoothStep((frame(p, across) - left) / (right - left));
     const y = northY * (1 - u) + southY * u;
@@ -2085,10 +2094,10 @@ function rebuildSeamPark(model: Object3D): void {
 
   // Cover the joint in the same turf, and remove the old parcel skirt that
   // showed through it. Neither garage cut nor the creek edge is here.
-  const joins = [stationAlongPolylines(upper), stationAlongPolylines(lower)];
   model.getObjectByName('SM_East_West_Retaining_And_Main_Gate_Break')?.traverse(object => {
     if (!isMesh(object) || finishName(object) !== 'MAT_Retaining_Edge') return;
     keepTriangles(object, (a,b,c) => {
+      if (oldGuardSkirt(a,b,c)) return false;
       const area = (b.x-a.x)*(c.z-a.z) - (b.z-a.z)*(c.x-a.x);
       return Math.abs(area) > .01 || !joins.some(join => [a,b,c].every(p => {
         const nearest = join.nearest(p.x,p.z);

@@ -1,6 +1,6 @@
 import { DAYCARE_ENTRY_FRONTAGE } from './facility-daycare-placement';
 import { MAIN_GATE_101 } from './facility-gate101-layout';
-import { UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK } from './site-upper-main-layout';
+import { UPPER_AUX_GUARD, UPPER_DISTRICT_GRADE, UPPER_MAIN_DECK } from './site-upper-main-layout';
 
 export type SiteFacilityKind = 'main-entrance' | 'sub-entrance' | 'recycling' | 'elevator' | 'stairs'
   | 'community' | 'guesthouse' | 'daycare' | 'kids-station' | 'senior' | 'security';
@@ -108,7 +108,7 @@ export const SITE_FACILITIES: readonly SiteFacility[] = [
   at('security-101', 'security', '경비실', 706.2, 940.2),
   { ...at('security-105', 'security', '경비실', 608, 531),
     roofMark: { axis: seamGuardAxis, halfWidth: 1.81, halfDepth: 1.44 } },
-  { ...at('security-109', 'security', '경비실', 457.1, 454.3),
+    { ...at('security-109', 'security', '경비실', ...UPPER_AUX_GUARD),
     roofMark: { axis: seamGuardAxis, halfWidth: 1.89, halfDepth: 1.48 } },
   { ...at('security-110', 'security', '경비실', 351.3, 262.9), y: UPPER_DISTRICT_GRADE.arrivalY + 2.36 },
 ];

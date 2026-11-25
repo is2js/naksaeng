@@ -50,11 +50,13 @@ it('splits a nearly level apron into garage and turnout branches; the descent be
     ray.ray.origin.copy(point(x,z,30));
     return ray.intersectObject(object)[0]?.point.y;
   };
-  const exposed = [[451,429],[444,440],[439,443],[432,438],[420,435],[412,423],[406,415],[441,454],[440,458]] as const;
+  const exposed = [[451,429],[444,440],[439,443],[432,438],[420,435],[412,423],[406,415],
+    [441,454],[440,458],[441,466],[440,468]] as const;
   for (const [x,z] of exposed) expect(at(asphalt,x,z)).toBeGreaterThanOrEqual(.54);
   const grades = exposed.map(([x,z])=>at(asphalt,x,z)!);
   expect(Math.max(...grades)-Math.min(...grades)).toBeLessThan(.16);
   expect(at(asphalt,429,451)).toBeUndefined();
+  expect(at(asphalt,429,477)).toBeUndefined(); // the perimeter walk is not a through road
   expect(at(lid,429,451)).toBeGreaterThan(.52); // infills the former driveway cut, below the new junction
   expect(at(lid,399,407)).toBeCloseTo(UPPER_DISTRICT_GRADE.mistyRoofY,4);
   expect(at(asphalt,399,407)).toBeLessThan(at(asphalt,406,415)!-.10);
